@@ -53,3 +53,17 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+/docs/
+
+# .NET build output and local operational/test data
+**/bin/
+**/obj/
+.vs/
+TestResults/
+artifacts/
+*.user
+*.sqlite*
+*.db*
+*.pfx
+*.dpapi

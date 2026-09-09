@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
+<ProjectReference Include="../IntegratedContro.Application/IntegratedContro.Application.csproj" />
+<PackageReference Include="Microsoft.Data.Sqlite" /><PackageReference Include="System.Security.Cryptography.ProtectedData" />
+</ItemGroup></Project>
