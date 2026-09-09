@@ -21,7 +21,11 @@ public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipp
 
 public sealed record Capability(DeviceOperation Operation, int Minimum, int Maximum, string Unit);
 public sealed record DeviceModel(string Id, string Name, Capability[] Capabilities, DeviceCategory Category = DeviceCategory.Other);
-public sealed record LightLayout(int Version, Guid[] DeviceIds);
+public sealed record LightGroup(Guid Id, string Name, Guid[] DeviceIds);
+public sealed record LightLayout(int Version, Guid[] DeviceIds)
+{
+    public LightGroup[] Groups { get; init; } = [];
+}
 public sealed record DeviceConfig(Guid Id, Guid PcId, string PcName, string Name, string ConnectionId,
     string ModelId, int Version, bool Enabled, VirtualFault Fault, int LatencyMs);
 public sealed record RoleBinding(string Id, Guid DeviceId, int Version);
@@ -119,6 +123,7 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
 {
     public LightLayout LightLayout { get; init; } = new(0, []);
     public bool LightCardsSupported { get; init; }
+    public bool LightGroupsSupported { get; init; }
     public Guid[] ControllableDeviceIds { get; init; } = [];
 }
 public sealed record RecoveryReview(Guid ReviewId, long Generation, DateTimeOffset ReviewedAt, Job[] Jobs, Guid[] UncertainDevices);

@@ -146,7 +146,7 @@ public sealed partial class ControlService
                 s.UncertainDevices.ToArray(), User(s, session).Role == AccountRole.Administrator
                     ? s.Accounts.Select(a => new AccountView(a.Id, a.Name, a.Role, a.Enabled, a.AllDevices, a.DeviceIds.ToArray())).ToArray() : [],
                 s.Audit.TakeLast(200).ToArray(), _driver.Models, (int)_heartbeatTimeout.TotalSeconds)
-                { LightCardsSupported = true, LightLayout = new(s.LightLayout.Version, OrderedLightIds(s)),
+                { LightCardsSupported = true, LightGroupsSupported = true, LightLayout = CurrentLightLayout(s),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(User(s, session), d.Id)).Select(d => d.Id).ToArray() });
         }
     }

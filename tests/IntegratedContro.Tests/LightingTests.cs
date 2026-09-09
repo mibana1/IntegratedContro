@@ -99,4 +99,47 @@ public sealed class LightingTests
         var generation = r.Service.Acquire(op.Token).Generation;
         Rig.Reject("target_forbidden", () => r.Service.Submit(op.Token, request with { Generation = generation, RequestId = Guid.NewGuid() }));
     }
+    [Fact]
+    public void Groups_are_shared_durable_and_legacy_order_edits_preserve_membership()
+    {
+        using var r = new Rig(); var a = r.Device(); var b = r.Device("b");
+        var groupId = Guid.NewGuid();
+        var accepted = r.Service.Submit(r.Admin.Token, r.Manual());
+        var before = System.Text.Json.JsonSerializer.Serialize(accepted.Snapshot);
+        r.Service.SaveLightOrder(r.Admin.Token, new(r.Generation, 0, [b.Id, a.Id], [new(groupId, " 무대 ", [b.Id])]));
+        var observer = r.Login();
+        var group = Assert.Single(r.Service.GetState(observer.Token).LightLayout.Groups);
+        Assert.Equal("무대", group.Name); Assert.Equal(new[] { b.Id }, group.DeviceIds);
+        r.Service.SaveLightOrder(r.Admin.Token, new(r.Generation, 1, [a.Id, b.Id]));
+        Assert.Equal(groupId, Assert.Single(r.Service.GetState(r.Admin.Token).LightLayout.Groups).Id);
+        Assert.Equal(before, System.Text.Json.JsonSerializer.Serialize(r.Job(accepted.Id).Snapshot));
+        r.Restart();
+        Assert.Equal(groupId, Assert.Single(r.Service.GetState(r.Admin.Token).LightLayout.Groups).Id);
+        Assert.Equal(2, r.Service.GetState(r.Admin.Token).LightLayout.Version);
+    }
+    [Fact]
+    public void Invalid_groups_are_rejected_atomically_and_deleting_a_group_keeps_devices()
+    {
+        using var r = new Rig(); var a = r.Device(); var b = r.Device("b"); var id = Guid.NewGuid();
+        var request = new LightOrderRequest(r.Generation, 0, [a.Id, b.Id]);
+        Rig.Reject("duplicate_light_group", () => r.Service.SaveLightOrder(r.Admin.Token, request with { Groups = [new(id, "A", []), new(id, "B", [])] }));
+        Rig.Reject("duplicate_light_group", () => r.Service.SaveLightOrder(r.Admin.Token, request with { Groups = [new(id, "A", []), new(Guid.NewGuid(), " a ", [])] }));
+        Rig.Reject("invalid_group_members", () => r.Service.SaveLightOrder(r.Admin.Token, request with { Groups = [new(id, "A", [a.Id]), new(Guid.NewGuid(), "B", [a.Id])] }));
+        Rig.Reject("invalid_group_members", () => r.Service.SaveLightOrder(r.Admin.Token, request with { Groups = [new(id, "A", [Guid.NewGuid()])] }));
+        Rig.Reject("invalid_light_groups", () => r.Service.SaveLightOrder(r.Admin.Token, request with { Groups = [new(id, " ", [])] }));
+        Assert.Equal(0, r.Service.GetState(r.Admin.Token).LightLayout.Version);
+        r.Service.SaveLightOrder(r.Admin.Token, request with { Groups = [new(id, "A", [a.Id])] });
+        r.Service.SaveLightOrder(r.Admin.Token, request with { ExpectedVersion = 1, Groups = [] });
+        var state = r.Service.GetState(r.Admin.Token);
+        Assert.Empty(state.LightLayout.Groups); Assert.Equal(2, state.Devices.Length);
+        Assert.Equal(a.Version, state.Devices.Single(d => d.Id == a.Id).Version);
+    }
+    [Fact]
+    public void Older_layout_json_without_groups_is_read_without_resetting_its_order()
+    {
+        var id = Guid.NewGuid();
+        var json = $$"""{"version":4,"deviceIds":["{{id}}"]}""";
+        var layout = System.Text.Json.JsonSerializer.Deserialize<LightLayout>(json, JsonDefaults.Options)!;
+        Assert.Equal(4, layout.Version); Assert.Equal(new[] { id }, layout.DeviceIds); Assert.Empty(layout.Groups);
+    }
 }

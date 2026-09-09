@@ -11,6 +11,12 @@ public sealed partial class ControlService
             .Select(d => d.Id).ToArray();
         return s.LightLayout.DeviceIds.Where(ids.Contains).Concat(ids).Distinct().ToArray();
     }
+    private LightLayout CurrentLightLayout(HostState s)
+    {
+        var ids = OrderedLightIds(s);
+        return new(s.LightLayout.Version, ids) { Groups = s.LightLayout.Groups.Select(g =>
+            g with { DeviceIds = ids.Where(g.DeviceIds.Contains).ToArray() }).ToArray() };
+    }
     public LightLayout SaveLightOrder(string token, LightOrderRequest request) => Change(s =>
     {
         var session = Owner(s, token, request.Generation); Admin(s, token);
@@ -19,7 +25,19 @@ public sealed partial class ControlService
         Require(request.DeviceIds is not null && request.DeviceIds.Length == ids.Length &&
             request.DeviceIds.Distinct().Count() == ids.Length && request.DeviceIds.All(ids.Contains),
             "light_list_changed", "조명 목록이 변경되었거나 중복되었습니다. 편집을 취소하고 다시 시작하세요.");
-        s.LightLayout = new(s.LightLayout.Version + 1, request.DeviceIds!.ToArray());
+        // Older order-only clients preserve groups; missing groups in an old database means no grouping.
+        var groups = request.Groups ?? CurrentLightLayout(s).Groups;
+        Require(groups.Length <= 100 && groups.All(g => g is not null && g.Id != Guid.Empty &&
+            !string.IsNullOrWhiteSpace(g.Name) && g.Name.Trim().Length <= 50 && g.DeviceIds is not null),
+            "invalid_light_groups", "그룹 이름은 1~50자이며 최대 100개까지 만들 수 있습니다.", 400);
+        Require(groups.Select(g => g.Id).Distinct().Count() == groups.Length &&
+            groups.Select(g => g.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() == groups.Length,
+            "duplicate_light_group", "그룹 ID와 이름은 중복될 수 없습니다.", 400);
+        var members = groups.SelectMany(g => g.DeviceIds).ToArray();
+        Require(members.Length == members.Distinct().Count() && members.All(ids.Contains),
+            "invalid_group_members", "조명은 한 그룹에만 속할 수 있으며 등록된 조명만 배정할 수 있습니다.", 400);
+        s.LightLayout = new(s.LightLayout.Version + 1, request.DeviceIds!.ToArray())
+        { Groups = groups.Select(g => new LightGroup(g.Id, g.Name.Trim(), request.DeviceIds!.Where(g.DeviceIds.Contains).ToArray())).ToArray() };
         Audit(s, session.Info.UserId, "LightOrderSaved", $"version={s.LightLayout.Version}; count={ids.Length}");
         return s.LightLayout;
     });

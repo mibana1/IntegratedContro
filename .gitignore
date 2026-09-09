@@ -1,4 +1,4 @@
-# Prerequisites
+﻿# Prerequisites
 *.d
 
 # Object files
@@ -32,6 +32,8 @@
 *.exe
 *.out
 *.app
+# Keep the WPF project; this directory is not a macOS app bundle.
+!/src/IntegratedContro.App/
 *.i*86
 *.x86_64
 *.hex

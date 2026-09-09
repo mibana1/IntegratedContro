@@ -2,6 +2,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -247,6 +248,8 @@ public static class Program
             var (observer, _) = await host.Login();
             var observed = await HostProcess.Until(observer, s => s.LightLayout.DeviceIds.SequenceEqual(reordered));
             Require(observed.LightLayout.Version == 1, "Saved order not visible to the other HTTPS session");
+            await ExerciseGrouping(window, vm, host, output);
+            reordered = vm.Lights.Select(c => c.Id).ToArray();
             await Execute(vm, vm.ReleaseCommand);
             Require(vm.Lights.All(c => !c.PowerCommand.CanExecute(null)), "Read-only cards could control");
             await Execute(vm, vm.AcquireCommand);
@@ -287,6 +290,132 @@ public static class Program
             window.Close(); await Wait(() => !window.IsVisible);
             PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
         }
+    }
+    private static async Task ExerciseGrouping(MainWindow window, MainViewModel vm, HostProcess host, string output)
+    {
+        var board = Find<LightingView>(window)!;
+        var originalHeight = window.Height; window.Height = 1200; window.UpdateLayout();
+        var original = vm.Lights.Select(c => c.Id).ToArray();
+        var jobCount = vm.Jobs.Count;
+        await Execute(vm, vm.EditLightOrderCommand);
+        Require(vm.Lights.All(c => c.StateText is "ON" or "OFF") && vm.Lights.All(c => c.Hint == ""), "Compact card retained Korean state/editor text");
+        var groupName = (TextBox)board.FindName("NewGroupName");
+        groupName.SetCurrentValue(TextBox.TextProperty, "전시 구역");
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+        await Click(vm, (Button)board.FindName("AddGroup"));
+        var group = vm.LightGroups.Single(g => !g.IsDefault);
+        Require(group.Cards.Count == 0, "New group should be empty");
+        FrameworkElement Tile(Guid id) => FindAll<FrameworkElement>(board).Single(e => e.Name == "CardContainer" && e.DataContext is LightCard c && c.Id == id);
+        FrameworkElement Zone(Guid id) => FindAll<FrameworkElement>(board).Single(e => e.Name == "GroupDropZone" && e.DataContext is LightGroupRow g && g.Id == id);
+        Point Position(FrameworkElement e, double x, double y) => e.TranslatePoint(new Point(x, y), board);
+        void Drag(Guid id, FrameworkElement target, double x, double y, int pointerId)
+        {
+            window.UpdateLayout();
+            var tile = Tile(id); var start = Position(tile, 30, 35); var end = Position(target, x, y);
+            Require(board.BeginCardDrag(id, start, pointerId), "Pointer drag did not begin");
+            board.MoveCardDrag(end, pointerId);
+            Require(board.EndCardDrag(end, pointerId), "Pointer drop did not reorder");
+            window.UpdateLayout();
+        }
+        window.UpdateLayout();
+        var first = vm.Lights.Single(c => c.Id == original[0]);
+        // Click-sized movement in edit mode does not reorder or send power.
+        var point = Position(Tile(first.Id), 25, 30);
+        var mouseDown = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+            { RoutedEvent = Mouse.PreviewMouseDownEvent };
+        ((UIElement)board.InputHitTest(point)).RaiseEvent(mouseDown);
+        Require(mouseDown.Handled, "Routed mouse down was not intercepted for editing");
+        // Synthetic mouse events have no OS button press; capture may be released immediately.
+        // Real touch capture/release is tested with a synthetic WPF TouchDevice below.
+        board.CancelCardDrag();
+        using (var touch = new RecordedTouch(board, 901, point))
+        {
+            var touchDown = new TouchEventArgs(touch, Environment.TickCount) { RoutedEvent = UIElement.PreviewTouchDownEvent };
+            ((UIElement)board.InputHitTest(point)).RaiseEvent(touchDown);
+            Require(touchDown.Handled && ReferenceEquals(touch.Captured, board), "Routed touch was not captured");
+            var touchUp = new TouchEventArgs(touch, Environment.TickCount) { RoutedEvent = UIElement.PreviewTouchUpEvent };
+            board.RaiseEvent(touchUp);
+            Require(touchUp.Handled && touch.Captured is null, "Routed touch release did not suppress the click/release capture");
+        }
+        Require(vm.Jobs.Count == jobCount, "Edit-mode pointer click sent power");
+        Require(board.BeginCardDrag(first.Id, point, -1), "Mouse down rejected");
+        Require(!board.EndCardDrag(point + new Vector(2, 2), -1), "Click-sized move reordered");
+        Require(vm.Lights.Select(c => c.Id).SequenceEqual(original), "Short gesture changed order");
+        // Mouse path into an empty group.
+        var zone = Zone(group.Id);
+        Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
+        Require(group.Cards.Single().Id == first.Id, "Empty group did not receive light");
+        await Task.Delay(1200);
+        Require(group.Cards.Single().Id == first.Id, "Polling overwrote unsaved membership");
+        // Touch pointer path inserts before an existing card and ignores another finger.
+        var second = vm.Lights.Single(c => c.Id == original[1]);
+        window.UpdateLayout(); var start = Position(Tile(second.Id), 25, 30);
+        var end = Position(Tile(first.Id), 4, 50);
+        Require(board.BeginCardDrag(second.Id, start, 77), "Touch pointer down rejected");
+        Require(!board.EndCardDrag(end, 78), "Unrelated touch ended the gesture");
+        board.MoveCardDrag(end, 77); Require(board.EndCardDrag(end, 77), "Touch pointer drop rejected");
+        Require(group.Cards.Select(c => c.Id).SequenceEqual(new[] { second.Id, first.Id }), "Touch insertion position incorrect");
+        window.UpdateLayout();
+        // Outside drop, explicit cancellation, and a stale pointer after lost ownership do nothing.
+        var snapshot = vm.Lights.Select(c => c.Id).ToArray();
+        start = Position(Tile(first.Id), 25, 30);
+        Require(board.BeginCardDrag(first.Id, start, -1), "Outside-drop start failed");
+        Require(!board.EndCardDrag(new Point(-50, -50), -1), "Outside drop was accepted");
+        Require(board.BeginCardDrag(first.Id, start, 88), "Cancel start failed");
+        board.MoveCardDrag(end + new Vector(30, 0), 88); board.CancelCardDrag();
+        Require(!board.EndCardDrag(end, 88), "Cancelled pointer committed");
+        Require(vm.Lights.Select(c => c.Id).SequenceEqual(snapshot), "Cancelled gesture changed layout");
+        group.Name = "무대 조명";
+        window.UpdateLayout();
+        Require(Math.Abs(Position(Tile(first.Id), 0, 0).Y - Position(Tile(second.Id), 0, 0).Y) < 1, "Two compact cards did not fit in one group row");
+        Capture(window, Path.Combine(output, "lighting-groups-edit.png"));
+        await Execute(vm, vm.CancelLightOrderCommand);
+        Require(vm.LightGroups.All(g => g.IsDefault) && vm.Lights.Select(c => c.Id).SequenceEqual(original), "Cancel did not discard groups and order");
+        // Repeat and save; deleting the draft group returns members without deleting a device.
+        await Execute(vm, vm.EditLightOrderCommand);
+        vm.NewLightGroupName = "무대 조명"; await Execute(vm, vm.AddLightGroupCommand);
+        group = vm.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
+        zone = Zone(group.Id); Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
+        await Execute(vm, group.RemoveCommand);
+        Require(vm.LightGroups.Single().Cards.Count == 4 && vm.Devices.Count == 5, "Group deletion deleted devices");
+        vm.NewLightGroupName = "무대 조명"; await Execute(vm, vm.AddLightGroupCommand);
+        group = vm.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
+        zone = Zone(group.Id); Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
+        Drag(second.Id, Tile(first.Id), 4, 50, 99);
+        Require(vm.Jobs.Count == jobCount, "A drag or group edit sent a power job");
+        await Execute(vm, vm.SaveLightOrderCommand);
+        var (observer, _) = await host.Login();
+        var state = await HostProcess.Until(observer, s => s.LightLayout.Groups.Length == 1);
+        Require(state.LightLayout.Groups[0].Name == "무대 조명" &&
+            state.LightLayout.Groups[0].DeviceIds.SequenceEqual(group.Cards.Select(c => c.Id)), "Group did not persist to HTTPS state");
+        await Execute(vm, vm.EditLightOrderCommand);
+        window.UpdateLayout(); start = Position(Tile(first.Id), 25, 30);
+        Require(board.BeginCardDrag(first.Id, start, -1), "Lease-loss start failed");
+        await Execute(vm, vm.ReleaseCommand);
+        Require(!board.EndCardDrag(end, -1), "Pointer committed after use ended");
+        await Execute(vm, vm.CancelLightOrderCommand); await Execute(vm, vm.AcquireCommand);
+        Require(!board.BeginCardDrag(first.Id, start, -1), "Normal power mode started a drag");
+        window.Height = originalHeight; window.UpdateLayout();
+        Capture(window, Path.Combine(output, "lighting-groups.png"));
+        await File.WriteAllTextAsync(Path.Combine(output, "lighting-group-drag-result.txt"),
+            "PASS: compact ON/OFF cards; group add/rename/delete/cancel/save and second HTTPS session; routed mouse interception and synthetic WPF touch capture/release; shared production pointer pipeline with mouse and touch IDs; threshold, before-card insertion, empty group, outside/cancelled/wrong-pointer drop, poll stability and ownership loss; no extra power jobs. WPF hit-testing/code-driven input, not physical mouse/touch hardware.");
+    }
+    private sealed class RecordedTouch : TouchDevice, IDisposable
+    {
+        private readonly UIElement _root;
+        private readonly Point _point;
+        public RecordedTouch(UIElement root, int id, Point point) : base(id)
+        {
+            _root = root; _point = point;
+            SetActiveSource(PresentationSource.FromVisual(root)); Activate();
+        }
+        public override TouchPoint GetTouchPoint(IInputElement relativeTo)
+        {
+            var point = relativeTo is UIElement element ? _root.TranslatePoint(_point, element) : _point;
+            return new TouchPoint(this, point, new Rect(point, new Size(1, 1)), TouchAction.Move);
+        }
+        public override TouchPointCollection GetIntermediateTouchPoints(IInputElement relativeTo) => [GetTouchPoint(relativeTo)];
+        public void Dispose() { Capture(null); Deactivate(); }
     }
     private static IEnumerable<T> FindAll<T>(DependencyObject root) where T : DependencyObject
     {

@@ -1,10 +1,11 @@
-# IntegratedContro
+﻿# IntegratedContro
 
 Windows 11 25H2 Pro·Enterprise / x64용 통합 제어 앱의 첫 구현입니다.
 현재는 **가상 장비 전용**이며 WPF 운영 앱과 HTTPS 실행 호스트가 별도 프로세스로 동작합니다.
 
 - 호스트 최초 관리자 생성, 관리자의 운영자·조회 계정 등록
 - 장비·역할·순차 시나리오 설정, 가상 상태·요청값·단계별 결과 표시
+- 조명 ON/OFF 카드, 이름별 그룹, 마우스·터치 드래그 배치와 공유 저장
 - 한 앱 세션의 배타적 사용권, 교대 후 이전 사용자 작업 보존·선택 취소
 - 불변 실행 snapshot, 대상 예약, 명시적 시나리오 중단 및 가상 상태 대조 후 수동 전환
 - SQLite 복구, 오래된 세션 차단, 관리자 복구 인계, 불확실 명령 자동 재전송 금지
@@ -26,7 +27,7 @@ dotnet build IntegratedContro.sln --no-restore
 검증 스크립트는 독립된 테스트 데이터와 호스트 프로세스를 생성합니다.
 WPF 스모크 검증에는 로그인된 Windows 데스크톱이 필요하며 테스트 창이 잠시 열립니다.
 `-SkipUiSmoke`는 UI 실행을 생략합니다. 결과는 `artifacts/test-results`와 `artifacts/ui-smoke`에 저장합니다.
-`publish.ps1`은 `artifacts/publish/ControlHost`, `artifacts/publish/App`에 win-x64 self-contained 폴더를 만듭니다.
+`publish.ps1`은 `artifacts/publish/Current/ControlHost`, `artifacts/publish/Current/App`에 win-x64 self-contained 폴더를 만듭니다.
 
 ## 시작
 

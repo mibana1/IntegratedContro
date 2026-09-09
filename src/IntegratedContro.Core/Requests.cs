@@ -16,7 +16,7 @@ public sealed record SubmitRequest(Guid RequestId, long Generation, string? Role
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     CardPowerExpectation? CardPower = null);
 public sealed record CardPowerExpectation(Guid DeviceId, Guid PcId, int DeviceVersion, int RoleVersion, int Power, DateTimeOffset ObservedAt);
-public sealed record LightOrderRequest(long Generation, int ExpectedVersion, Guid[] DeviceIds);
+public sealed record LightOrderRequest(long Generation, int ExpectedVersion, Guid[] DeviceIds, LightGroup[]? Groups = null);
 public sealed record JobActionRequest(long Generation, Guid JobId);
 public sealed record ReconcileRequest(long Generation, Guid DeviceId);
 public sealed record RecoveryApprovalRequest(Guid ReviewId);
