@@ -51,6 +51,8 @@ public sealed class LightGroupRow(Guid id, string name) : Bindable
     private bool _dropTarget;
     public bool IsDropTarget { get => _dropTarget; internal set => Set(ref _dropTarget, value); }
     public AsyncCommand RemoveCommand { get; internal set; } = null!;
+    public AsyncCommand OnCommand { get; internal set; } = null!;
+    public AsyncCommand OffCommand { get; internal set; } = null!;
     internal void Refresh()
     {
         foreach (var name in new[] { nameof(CountText), nameof(LayoutWidth), nameof(IsEmpty), nameof(Editing), nameof(CanRename), nameof(IsVisible) }) Changed(name);
@@ -65,6 +67,8 @@ public sealed partial class MainViewModel
     public string NewLightGroupName { get => _newLightGroupName; set => Set(ref _newLightGroupName, value); }
     public bool CanArrangeLighting => _editingLightOrder && CanConfigure && !_busy && !_closing && _state?.LightGroupsSupported == true;
     public AsyncCommand AddLightGroupCommand { get; private set; } = null!;
+    public AsyncCommand AllLightsOnCommand { get; private set; } = null!;
+    public AsyncCommand AllLightsOffCommand { get; private set; } = null!;
     private bool _editingLightOrder;
     private int _lightOrderVersion;
     private int _deviceViewIndex;
@@ -75,12 +79,15 @@ public sealed partial class MainViewModel
     public string LightingHint => _state is { LightCardsSupported: false } ? "조명 카드를 사용하려면 새 호스트 실행 파일로 업데이트하세요." :
         _state is { LightGroupsSupported: false } ? "그룹과 드래그 편집에는 새 호스트가 필요합니다." :
         _editingLightOrder ? "카드를 드래그해 순서나 그룹을 바꾸고 저장하세요." :
-        "카드를 눌러 전원을 바꿉니다. 표시 상태는 가상 장비의 확인 결과입니다.";
+        _state is { LightBatchSupported: false } ? "일괄·그룹 제어에는 새 호스트가 필요합니다." :
+        "카드를 눌러 전원을 바꿉니다. 일괄 명령은 대상 전체를 검사한 뒤 순서대로 실행합니다.";
     public AsyncCommand EditLightOrderCommand { get; private set; } = null!;
     public AsyncCommand SaveLightOrderCommand { get; private set; } = null!;
     public AsyncCommand CancelLightOrderCommand { get; private set; } = null!;
     private void InitializeLighting()
     {
+        AllLightsOnCommand = Command(() => SubmitLightBatch(null, 1), () => CanSubmitLightBatch(null));
+        AllLightsOffCommand = Command(() => SubmitLightBatch(null, 0), () => CanSubmitLightBatch(null));
         EditLightOrderCommand = Command(() => { _lightOrderVersion = _state!.LightLayout.Version; _editingLightOrder = true; return Task.CompletedTask; },
             () => CanConfigure && _state?.LightCardsSupported == true && _state.LightGroupsSupported && Lights.Count > 0 && !_editingLightOrder);
         SaveLightOrderCommand = Command(async () =>
@@ -124,6 +131,8 @@ public sealed partial class MainViewModel
     private LightGroupRow NewGroup(Guid id, string name)
     {
         var group = new LightGroupRow(id, name);
+        group.OnCommand = Command(() => SubmitLightBatch(id, 1), () => CanSubmitLightBatch(id));
+        group.OffCommand = Command(() => SubmitLightBatch(id, 0), () => CanSubmitLightBatch(id));
         group.RemoveCommand = Command(() =>
         {
             var fallback = LightGroups.Single(g => g.IsDefault);
@@ -194,13 +203,33 @@ public sealed partial class MainViewModel
         if (_editingLightOrder) return "";
         if (!CanControl) return _connected ? "사용 시작 후 조작 가능" : "호스트 연결 확인";
         if (!AllowedLight(id)) return "비활성 장비 또는 제어 권한 없음";
-        if (_pending is not null) return "접수 여부 확인 중";
+        if (HasPending) return "접수 여부 확인 중";
         if (_state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(s => s.Target.Id == id))) return "시나리오 예약 · 작업 탭에서 수동 전환";
         if (LightHasWork(id)) return "명령 처리 중 · 결과 대기";
         if (_state.UncertainDevices.Contains(id)) return "상태 대조 필요";
         if (LightRole(id) is null) return "상세 설정에서 역할 배정 필요";
         if (LightPower(id)?.Value is not (0 or 1)) return "상태 확인을 먼저 누르세요";
         return null;
+    }
+    private IEnumerable<LightCard> BatchCards(Guid? groupId) => groupId is null ? Lights :
+        LightGroups.SingleOrDefault(g => g.Id == groupId)?.Cards ?? Enumerable.Empty<LightCard>();
+    private bool CanSubmitLightBatch(Guid? groupId) => CanControl && !_editingLightOrder && !HasPending &&
+        _state?.LightBatchSupported == true && BatchCards(groupId).Any();
+    private async Task SubmitLightBatch(Guid? groupId, int value)
+    {
+        var cards = BatchCards(groupId).ToArray();
+        var blocked = cards.Select(c => (Card: c, Reason: LightBlockReason(c.Id))).Where(x => x.Reason is not null).ToArray();
+        if (blocked.Length > 0)
+            throw new InvalidOperationException("일괄 접수하지 않았습니다. " +
+                string.Join(" / ", blocked.Take(4).Select(x => $"{x.Card.Name}: {x.Reason}")) +
+                (blocked.Length > 4 ? $" 외 {blocked.Length - 4}개" : ""));
+        _pendingLightBatch = new(Guid.NewGuid(), Generation, value, _state!.LightLayout.Version, groupId,
+            cards.Select(c =>
+            {
+                var device = c.Device.Config; var role = LightRole(c.Id)!; var power = LightPower(c.Id)!;
+                return new LightPowerTarget(role.Id, new(c.Id, device.PcId, device.Version, role.Version, power.Value, power.At));
+            }).ToArray());
+        Notify(); await SendPending();
     }
     private async Task ToggleLight(Guid id)
     {

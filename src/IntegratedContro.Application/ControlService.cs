@@ -57,7 +57,7 @@ public sealed partial class ControlService
         }
     }
     private void Audit(HostState s, Guid? user, string action, string detail) =>
-        s.Audit.Add(new(Now, user, action, detail));
+        s.Audit.Add(AuditPresentation.Enrich(new(Now, user, action, detail), s));
     private Session Authenticate(string token)
     {
         Require(!string.IsNullOrWhiteSpace(token) && _sessions.TryGetValue(Digest(token), out _),
@@ -145,8 +145,8 @@ public sealed partial class ControlService
                 s.Devices.ToArray(), s.DeviceStates, s.Roles.ToArray(), s.Scenarios.ToArray(), s.Jobs.ToArray(),
                 s.UncertainDevices.ToArray(), User(s, session).Role == AccountRole.Administrator
                     ? s.Accounts.Select(a => new AccountView(a.Id, a.Name, a.Role, a.Enabled, a.AllDevices, a.DeviceIds.ToArray())).ToArray() : [],
-                s.Audit.TakeLast(200).ToArray(), _driver.Models, (int)_heartbeatTimeout.TotalSeconds)
-                { LightCardsSupported = true, LightGroupsSupported = true, LightLayout = CurrentLightLayout(s),
+                s.Audit.TakeLast(200).Select(a => AuditPresentation.Enrich(a, s)).ToArray(), _driver.Models, (int)_heartbeatTimeout.TotalSeconds)
+                { LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = CurrentLightLayout(s),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(User(s, session), d.Id)).Select(d => d.Id).ToArray() });
         }
     }

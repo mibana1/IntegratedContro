@@ -6,20 +6,39 @@ namespace IntegratedContro.App;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
-    private bool _closed, _closing;
-    public MainWindow()
+    private bool _closed, _closing, _wasLoggedIn;
+    private readonly bool _showLoginPrompts;
+    public LoginWindow? LoginDialog { get; private set; }
+    public MainWindow(bool showLoginOnStart = true)
     {
+        _showLoginPrompts = showLoginOnStart;
         InitializeComponent();
         _viewModel = new MainViewModel
         {
-            ReadLoginPassword = () => LoginPassword.Password,
-            ClearLoginPassword = LoginPassword.Clear,
             ReadNewPassword = () => NewAccountPassword.Password,
             ClearNewPassword = NewAccountPassword.Clear,
             ConfirmManualSwitch = text => MessageBox.Show(this, text, "시나리오 중단 후 수동 전환",
                 MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes
         };
         DataContext = _viewModel;
+        _viewModel.PropertyChanged += ModelChanged;
+        if (showLoginOnStart) Loaded += (_, _) => Dispatcher.InvokeAsync(ShowLogin);
+        Closed += (_, _) => _viewModel.PropertyChanged -= ModelChanged;
+    }
+    private void ModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!_viewModel.IsAdmin && MainTabs.SelectedItem == AdminTab) MainTabs.SelectedIndex = 0;
+        var loggedOut = _wasLoggedIn && !_viewModel.IsLoggedIn;
+        _wasLoggedIn = _viewModel.IsLoggedIn;
+        if (loggedOut && !_closing && _showLoginPrompts) Dispatcher.InvokeAsync(ShowLogin);
+    }
+    private void OpenLogin(object sender, RoutedEventArgs e) => ShowLogin();
+    private void ShowLogin()
+    {
+        if (_closed || _closing || _viewModel.IsLoggedIn || LoginDialog is not null) return;
+        LoginDialog = new LoginWindow(_viewModel) { Owner = this };
+        try { LoginDialog.ShowDialog(); }
+        finally { LoginDialog = null; }
     }
     private async void OnClosing(object? sender, CancelEventArgs e)
     {

@@ -37,6 +37,8 @@ public sealed partial class ControlService
         var snapshots = steps.Select(step => Resolve(s, User(s, session), step)).ToArray();
         ValidateCardPower(s, request, snapshots);
         var targets = snapshots.Select(x => x.Target.Id).ToHashSet();
+        Require(!s.Jobs.Any(j => j.Active && j.IsLightBatch && j.Snapshot.Steps.Any(x => targets.Contains(x.Target.Id))),
+            "lighting_batch_busy", "일괄 조명 작업이 남아 있습니다. 작업 탭에서 결과를 확인하거나 미전송 부분을 취소하세요.");
         var isStop = definition is null && request.Operation == DeviceOperation.Stop;
         var conflicts = s.Jobs.Where(j => HoldsReservations(j) &&
             j.Snapshot.Steps.Any(x => targets.Contains(x.Target.Id)) &&

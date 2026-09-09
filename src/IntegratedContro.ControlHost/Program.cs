@@ -91,6 +91,7 @@ try
     app.MapPost("/api/layout/lights", (HttpContext c, LightOrderRequest r) => service.SaveLightOrder(Token(c), r));
     app.MapPost("/api/roles", (HttpContext c, RoleRequest r) => service.SaveRole(Token(c), r));
     app.MapPost("/api/scenarios", (HttpContext c, ScenarioRequest r) => service.SaveScenario(Token(c), r));
+    app.MapPost("/api/lights/power", (HttpContext c, LightBatchRequest r) => service.SubmitLightBatch(Token(c), r));
     app.MapPost("/api/jobs", (HttpContext c, SubmitRequest r) => service.Submit(Token(c), r));
     app.MapPost("/api/jobs/cancel", (HttpContext c, JobActionRequest r) => service.Cancel(Token(c), r));
     app.MapPost("/api/jobs/manual-switch", (HttpContext c, JobActionRequest r) => service.BeginManualSwitch(Token(c), r));

@@ -1,4 +1,4 @@
-using IntegratedContro.Core;
+﻿using IntegratedContro.Core;
 
 namespace IntegratedContro.Application;
 
@@ -22,7 +22,8 @@ public sealed partial class ControlService
             }
             // A never-dispatched manual command is durably queued and may proceed after revalidation.
             // Every interrupted scenario is stopped, including a wait before the first step.
-            if (job.Kind == JobKind.Scenario || job.Steps.Any(x => x.Status == StepStatus.Unknown) || job.Status == JobStatus.StopRequested)
+            if (job.Kind == JobKind.Scenario || (job.IsLightBatch && job.Steps.Any(x => x.SentAt is not null)) ||
+                job.Steps.Any(x => x.Status == StepStatus.Unknown) || job.Status == JobStatus.StopRequested)
             {
                 foreach (var step in job.Steps.Where(x => x.Status == StepStatus.Pending))
                 { step.Status = StepStatus.Skipped; step.Result = "호스트 재시작: 자동 재개 금지"; }

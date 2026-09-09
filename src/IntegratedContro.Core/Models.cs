@@ -15,7 +15,7 @@ public enum LeaseMode { Free, Held, RecoveryRequired }
 public enum DeviceOperation { Power, Brightness, Volume, Mute, Input, Lift, Stop }
 public enum VirtualFault { None, Failure, Disconnected, NoResponse, ResponseLost }
 public enum FailurePolicy { Stop, Continue }
-public enum JobKind { Manual, Scenario }
+public enum JobKind { Manual, Scenario, LightBatch }
 public enum JobStatus { Queued, Running, StopRequested, Completed, Cancelled, Interrupted, NeedsReview }
 public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped }
 
@@ -61,6 +61,7 @@ public sealed class Job
     public required string RequestFingerprint { get; set; }
     public required ExecutionSnapshot Snapshot { get; set; }
     public JobKind Kind { get; set; }
+    [JsonIgnore] public bool IsLightBatch => Kind == JobKind.LightBatch;
     public JobStatus Status { get; set; } = JobStatus.Queued;
     public List<StepRun> Steps { get; set; } = [];
     public DateTimeOffset ReadyAt { get; set; }
@@ -94,7 +95,12 @@ public sealed class Lease
     public DateTimeOffset? FencedAt { get; set; }
     public string? RecoveryReason { get; set; }
 }
-public sealed record AuditEntry(DateTimeOffset At, Guid? UserId, string Action, string Detail);
+public sealed record AuditEntry(DateTimeOffset At, Guid? UserId, string Action, string Detail)
+{
+    public string? UserName { get; init; }
+    public string? EventName { get; init; }
+    public string? Message { get; init; }
+}
 public sealed class HostState
 {
     public int SchemaVersion { get; set; } = 1;
@@ -124,6 +130,7 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public LightLayout LightLayout { get; init; } = new(0, []);
     public bool LightCardsSupported { get; init; }
     public bool LightGroupsSupported { get; init; }
+    public bool LightBatchSupported { get; init; }
     public Guid[] ControllableDeviceIds { get; init; } = [];
 }
 public sealed record RecoveryReview(Guid ReviewId, long Generation, DateTimeOffset ReviewedAt, Job[] Jobs, Guid[] UncertainDevices);

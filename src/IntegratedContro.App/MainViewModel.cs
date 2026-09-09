@@ -34,7 +34,7 @@ public sealed record JobRow(Job Job, bool PreviousSession)
     public string Name => Job.Snapshot.Name;
     public string Requester => $"{Job.Snapshot.RequesterName} / {Job.Snapshot.ClientPcName}";
     public string OriginSession => Job.Snapshot.SessionId.ToString()[..8];
-    public string Kind => Job.Kind == JobKind.Scenario ? "시나리오" : "일반 명령";
+    public string Kind => Job.IsLightBatch ? "일괄 조명" : Job.Kind == JobKind.Scenario ? "시나리오" : "일반 명령";
     public string Targets => string.Join(", ", Job.Snapshot.Steps.Select(x => $"{x.Target.Name} ({x.Target.PcName})").Distinct());
     public string Progress => $"{Job.Steps.Count(x => x.Status != StepStatus.Pending && x.Status != StepStatus.Dispatching)}/{Job.Steps.Count}";
     public string Status => Job.Status switch
@@ -55,11 +55,14 @@ public sealed partial class MainViewModel : Bindable
     private StateView? _state;
     private LoginResult? _login;
     private SubmitRequest? _pending;
+    private LightBatchRequest? _pendingLightBatch;
+    private bool HasPending => _pending is not null || _pendingLightBatch is not null;
     private RecoveryReview? _review;
     private bool _busy, _polling, _closing, _connected;
     private string _message = "호스트의 최초 설정을 완료한 뒤 주소·인증서 지문·앱 계정으로 접속하세요.";
     public string Message { get => _message; private set => Set(ref _message, value); }
     public bool IsBusy => _busy;
+    public bool CanEditLogin => !_busy;
     public bool IsLoggedIn => _login is not null;
     public bool CanControl => _connected && _state?.Lease.Mode == LeaseMode.Held &&
         _state.Lease.SessionId == _login?.Session.Id;
@@ -76,7 +79,7 @@ public sealed partial class MainViewModel : Bindable
     public string PreviousSummary => _state is null ? "이전 사용자 작업 0건" :
         $"이전 사용자 작업 {_state.Jobs.Count(j => j.Snapshot.SessionId != _login?.Session.Id && (j.Active || j.Status == JobStatus.NeedsReview))}건 · 사용 종료 후에도 호스트에서 유지";
     public string ConnectionSummary => _connected ? $"HTTPS 연결 · 마지막 확인 {DateTime.Now:HH:mm:ss}" : "미연결 / 표시된 이전 상태를 최신 관측으로 사용하지 마세요.";
-    public string PendingSummary => _pending is null ? "" : $"접수 결과 확인 필요: {_pending.RequestId} · 같은 요청 ID로만 재확인합니다.";
+    public string PendingSummary => !HasPending ? "" : $"접수 결과 확인 필요: {_pending?.RequestId ?? _pendingLightBatch?.RequestId} · 같은 요청 ID로만 재확인합니다.";
     public string RecoverySummary => _state?.Lease.Mode != LeaseMode.RecoveryRequired ? "복구 인계가 필요한 사용권이 없습니다." :
         $"1. 연결 이상: {_state.Lease.LostAt:O}\n2. 이전 세션 차단 확인: {_state.Lease.FencedAt:O}\n사유: {_state.Lease.RecoveryReason}\n3. 진행 작업 확인 후 4. 관리자 복구 인계를 승인하세요.";
     public string ReviewText { get; private set; } = "진행 작업 확인 버튼을 누르면 그 시점의 작업·예약·불확실 대상을 표시합니다.";
@@ -95,7 +98,10 @@ public sealed partial class MainViewModel : Bindable
     public ObservableCollection<DeviceModel> Models { get; } = [];
     public ObservableCollection<AccountView> Accounts { get; } = [];
     public ObservableCollection<ScenarioStep> DraftSteps { get; } = [];
-    public ObservableCollection<AuditEntry> Audit { get; } = [];
+    public ObservableCollection<AuditRow> Audit { get; } = [];
+    private AuditRow? _selectedAudit;
+    public AuditRow? SelectedAudit { get => _selectedAudit; set { Set(ref _selectedAudit, value); Changed(nameof(AuditDetails)); } }
+    public string AuditDetails => SelectedAudit?.Raw ?? "기록을 선택하면 원본 이벤트 코드와 ID를 확인할 수 있습니다.";
     public IEnumerable<AccountRole> AccountRoles => Enum.GetValues<AccountRole>();
     public IEnumerable<VirtualFault> Faults => Enum.GetValues<VirtualFault>();
     public IEnumerable<FailurePolicy> FailurePolicies => Enum.GetValues<FailurePolicy>();
@@ -207,8 +213,8 @@ public sealed partial class MainViewModel : Bindable
         AcquireCommand = Command(async () => { await Client.Post<Lease>("/api/lease/acquire"); }, () => _connected && IsLoggedIn && _state?.Lease.Mode == LeaseMode.Free);
         ReleaseCommand = Command(async () => { await Client.Post<Lease>("/api/lease/release", new LeaseRequest(Generation)); Message = "사용 종료 완료. 접수 작업과 예약은 호스트에서 유지됩니다."; }, () => CanControl);
         RefreshCommand = Command(Refresh, () => IsLoggedIn);
-        SubmitCommand = Command(() => Submit(false), () => CanControl && SelectedRole is not null && _pending is null);
-        RetryCommand = Command(SendPending, () => _connected && _pending is not null);
+        SubmitCommand = Command(() => Submit(false), () => CanControl && SelectedRole is not null && !HasPending);
+        RetryCommand = Command(SendPending, () => _connected && HasPending);
         CancelCommand = Command(async () => { await Client.Post<Job>("/api/jobs/cancel", new JobActionRequest(Generation, SelectedJob!.Id)); Message = "선택 취소 요청을 처리했습니다. 전송된 동작의 물리 정지·롤백은 아닙니다."; },
             () => CanControl && SelectedJob is not null && (SelectedJob.Job.Active || SelectedJob.Job.Status == JobStatus.NeedsReview));
         ManualSwitchCommand = Command(async () =>
@@ -253,7 +259,7 @@ public sealed partial class MainViewModel : Bindable
             Changed(nameof(ScenarioName)); return Task.CompletedTask;
         });
         NewScenarioCommand = Command(() => { _scenarioId = Guid.NewGuid(); _scenarioVersion = 0; ScenarioName = ""; DraftSteps.Clear(); Changed(nameof(ScenarioName)); return Task.CompletedTask; });
-        RunScenarioCommand = Command(() => Submit(true), () => CanControl && _pending is null);
+        RunScenarioCommand = Command(() => Submit(true), () => CanControl && !HasPending);
         CreateAccountCommand = Command(async () =>
         {
             var password = ReadNewPassword();
@@ -304,7 +310,8 @@ public sealed partial class MainViewModel : Bindable
     }
     private void Report(Exception error)
     {
-        if (error is ApiException api && (api.Status == HttpStatusCode.Unauthorized || api.Code == "account_disabled"))
+        if (error is ApiException { Code: "login_failed" } loginError) Message = loginError.Message;
+        else if (error is ApiException api && (api.Status == HttpStatusCode.Unauthorized || api.Code == "account_disabled"))
         { _connected = false; _login = null; _state = null; _review = null; Message = "인증 세션이 만료되었거나 계정이 차단되었습니다. 다시 로그인하세요."; }
         else if (error is HttpRequestException or TaskCanceledException || error is ApiException { Status: HttpStatusCode.ServiceUnavailable }) { _connected = false; Message = "연결 이상: 신규 제어 차단. 호스트 연결과 관리자 복구 상태를 확인하세요."; }
         else Message = error.Message;
@@ -312,9 +319,8 @@ public sealed partial class MainViewModel : Bindable
     }
     private async Task Login()
     {
-        _client?.Dispose(); _client = new(Endpoint, Fingerprint);
         var password = ReadLoginPassword();
-        try { _login = await Client.Post<LoginResult>("/api/login", new LoginRequest(LoginName, password, _preferences.PcId, Environment.MachineName)); }
+        try { _client?.Dispose(); _client = new(Endpoint, Fingerprint); _login = await Client.Post<LoginResult>("/api/login", new LoginRequest(LoginName, password, _preferences.PcId, Environment.MachineName)); }
         finally { ClearLoginPassword(); }
         Client.SetToken(_login.Token); _state = null; _connected = true;
         (_preferences with { Endpoint = Endpoint, Fingerprint = Fingerprint }).Save();
@@ -326,7 +332,7 @@ public sealed partial class MainViewModel : Bindable
         finally
         {
             _login = null; _connected = false; _state = null; _review = null;
-            _pending = null; _editingLightOrder = false; Lights.Clear(); Devices.Clear(); Roles.Clear(); Jobs.Clear(); Scenarios.Clear(); Accounts.Clear(); Audit.Clear();
+            _pending = null; _pendingLightBatch = null; _editingLightOrder = false; Lights.Clear(); Devices.Clear(); Roles.Clear(); Jobs.Clear(); Scenarios.Clear(); Accounts.Clear(); Audit.Clear();
         }
     }
     private async Task Poll()
@@ -373,9 +379,11 @@ public sealed partial class MainViewModel : Bindable
         Replace(Accounts, state.Accounts); SelectedAccount = Accounts.FirstOrDefault(x => x.Id == selectedAccountId);
         Replace(Jobs, state.Jobs.OrderByDescending(j => j.Snapshot.AcceptedAt).Select(j => new JobRow(j, j.Snapshot.SessionId != _login?.Session.Id)));
         _selectedJob = Jobs.FirstOrDefault(x => x.Id == selectedJobId);
-        Replace(Audit, state.Audit.Reverse());
-        if (_pending is not null && state.Jobs.Any(j => j.Snapshot.RequestId == _pending.RequestId))
-        { _pending = null; Message = "요청 ID로 호스트 접수 기록을 확인했습니다."; }
+        var auditEntry = SelectedAudit?.Entry;
+        Replace(Audit, state.Audit.Reverse().Select(a => new AuditRow(a)));
+        SelectedAudit = Audit.FirstOrDefault(a => a.Entry == auditEntry);
+        if (HasPending && state.Jobs.Any(j => j.Snapshot.RequestId == (_pending?.RequestId ?? _pendingLightBatch?.RequestId)))
+        { _pending = null; _pendingLightBatch = null; Message = "요청 ID로 호스트 접수 기록을 확인했습니다."; }
         Changed(nameof(SelectedDevice)); Changed(nameof(SelectedRole)); Changed(nameof(SelectedJob));
         Changed(nameof(SelectedScenario)); Changed(nameof(SelectedModel)); Changed(nameof(SelectedAccount));
         _selectedCapability = Capabilities.FirstOrDefault(c => c.Operation == operation); Changed(nameof(SelectedCapability)); Changed(nameof(Capabilities)); Changed(nameof(JobDetails)); Notify();
@@ -396,13 +404,13 @@ public sealed partial class MainViewModel : Bindable
     }
     private async Task SendPending()
     {
-        if (_pending is null) return;
+        if (!HasPending) return;
         try
         {
-            var job = await Client.Post<Job>("/api/jobs", _pending);
-            _pending = null; Message = $"접수 완료: {job.Id}. 실행 결과는 작업 탭에서 확인하세요.";
+            var job = _pendingLightBatch is not null ? await Client.Post<Job>("/api/lights/power", _pendingLightBatch) : await Client.Post<Job>("/api/jobs", _pending);
+            _pending = null; _pendingLightBatch = null; Message = $"접수 완료: {job.Id}. 실행 결과는 작업 탭에서 확인하세요.";
         }
-        catch (ApiException error) when ((int)error.Status < 500) { _pending = null; throw; }
+        catch (ApiException error) when ((int)error.Status < 500) { _pending = null; _pendingLightBatch = null; throw; }
         finally { Notify(); }
     }
     private async Task SaveDevice()
@@ -427,7 +435,7 @@ public sealed partial class MainViewModel : Bindable
     }
     private void Notify()
     {
-        foreach (var name in new[] { nameof(IsBusy), nameof(IsLoggedIn), nameof(IsAdmin), nameof(CanControl), nameof(CanConfigure), nameof(SiteTitle),
+        foreach (var name in new[] { nameof(IsBusy), nameof(CanEditLogin), nameof(IsLoggedIn), nameof(IsAdmin), nameof(CanControl), nameof(CanConfigure), nameof(SiteTitle),
             nameof(UserSummary), nameof(LeaseSummary), nameof(PreviousSummary), nameof(ConnectionSummary), nameof(PendingSummary),
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
         RefreshLighting();

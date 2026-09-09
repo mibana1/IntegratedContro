@@ -17,20 +17,82 @@ namespace IntegratedContro.UiSmoke;
 public static class Program
 {
     [STAThread]
-    public static int Main()
+    public static int Main(string[] args)
     {
+        var profileIndex = Array.IndexOf(args, "--profile-dir");
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "IntegratedContro.sln"))) root = root.Parent;
+        if (profileIndex < 0 || profileIndex + 1 >= args.Length || root is null ||
+            !Path.GetFullPath(args[profileIndex + 1]).StartsWith(Path.Combine(root.FullName, "artifacts") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Use --profile-dir with a folder under repository artifacts; user preferences must not be overwritten.");
+            return 2;
+        }
         var app = new System.Windows.Application();
         app.Resources = new ResourceDictionary { Source = new Uri("/IntegratedContro.App;component/Theme.xaml", UriKind.Relative) }; app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         var result = 1;
         app.Dispatcher.InvokeAsync(async () =>
         {
-            try { await Run(); await RunLighting(); result = 0; }
+            try { await RunLogin(); await Run(); await RunLighting(); result = 0; }
             catch (Exception error) { Console.Error.WriteLine(error); }
             finally { app.Shutdown(); }
         });
         app.Run(); return result;
     }
 
+    private static async Task RunLogin()
+    {
+        await using var host = new HostProcess(); await host.Initialize();
+        var output = Path.Combine(host.Root, "artifacts", "ui-smoke"); Directory.CreateDirectory(output);
+        var window = new MainWindow();
+        var vm = (MainViewModel)window.DataContext; vm.Endpoint = ""; vm.Fingerprint = "";
+        using var bindingLog = new StringWriter(); using var listener = new TextWriterTraceListener(bindingLog);
+        PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
+        PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
+        try
+        {
+            window.Show(); await Wait(() => window.LoginDialog?.IsVisible == true);
+            Require(((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed, "Admin tab visible before login");
+            var dialog = window.LoginDialog!;
+            ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, host.Endpoint);
+            ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, host.Fingerprint);
+            ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "admin");
+            var password = (PasswordBox)dialog.FindName("LoginPassword");
+            password.Password = "invalid-test-password";
+            await Click(vm, (Button)dialog.FindName("ConnectButton"));
+            Require(!vm.IsLoggedIn && dialog.IsVisible && password.Password == "", "Failed login closed popup or retained password");
+            Capture(dialog, Path.Combine(output, "login-popup.png")); // No password is present in the evidence.
+            password.Password = host.Password;
+            await Click(vm, (Button)dialog.FindName("ConnectButton"));
+            await Wait(() => window.LoginDialog is null);
+            Require(vm.IsLoggedIn && ((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Visible, "Admin login did not expose admin tab");
+            Require(!(await File.ReadAllTextAsync(ClientPreferences.ProfilePath)).Contains(host.Password), "Password was persisted");
+            await Execute(vm, vm.AcquireCommand);
+            vm.NewAccountName = "operator"; vm.NewAccountRole = AccountRole.Operator; vm.ReadNewPassword = () => host.Password;
+            await Execute(vm, vm.CreateAccountCommand);
+            ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("AdminTab");
+            await Click(vm, (Button)window.FindName("HeaderLogout"));
+            await Wait(() => window.LoginDialog?.IsVisible == true);
+            Require(((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed &&
+                ((TabControl)window.FindName("MainTabs")).SelectedIndex == 0, "Logout retained admin page");
+            dialog = window.LoginDialog!;
+            ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "operator");
+            ((PasswordBox)dialog.FindName("LoginPassword")).Password = host.Password;
+            await Click(vm, (Button)dialog.FindName("ConnectButton")); await Wait(() => window.LoginDialog is null);
+            Require(vm.IsLoggedIn && !vm.IsAdmin && ((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed,
+                "Operator could see admin settings");
+            Require(!vm.SaveDeviceCommand.CanExecute(null), "Hidden admin form retained write access");
+            Capture(window, Path.Combine(output, "operator-home.png"));
+            listener.Flush(); Require(string.IsNullOrWhiteSpace(bindingLog.ToString()), "Login binding errors: " + bindingLog);
+            await File.WriteAllTextAsync(Path.Combine(output, "login-result.txt"),
+                "PASS: startup modal fields and actual WPF bindings; failed login retains dialog and clears password; successful login closes dialog; header logout reopens popup; operator cannot see admin tab; selected admin tab removed after logout; password not saved. Local code-driven WPF.");
+        }
+        finally
+        {
+            window.LoginDialog?.Close(); window.Close(); await Wait(() => !window.IsVisible);
+            PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
+        }
+    }
     private static async Task Run()
     {
         await using var host = new HostProcess(); await host.Initialize();
@@ -43,7 +105,7 @@ public static class Program
         MainWindow? first = null, second = null;
         try
         {
-            first = new MainWindow { Title = "IntegratedContro · 로컬 WPF 검증 A" };
+            first = new MainWindow(false) { Title = "IntegratedContro · 로컬 WPF 검증 A" };
             var a = (MainViewModel)first.DataContext;
                         using (var badPin = new HostClient(host.Endpoint, new string('0', 64)))
             {
@@ -114,7 +176,7 @@ public static class Program
             await Execute(a, a.AcquireCommand);
             a.NewAccountName = "operator"; a.ReadNewPassword = () => host.Password;
             await Execute(a, a.CreateAccountCommand); Require(a.Accounts.Count == 2, a.Message);
-            second = new MainWindow { Title = "IntegratedContro · 로컬 WPF 검증 B" };
+            second = new MainWindow(false) { Title = "IntegratedContro · 로컬 WPF 검증 B" };
             var b = (MainViewModel)second.DataContext;
             b.DeviceViewIndex = 1;
             b.Endpoint = host.Endpoint; b.Fingerprint = host.Fingerprint; b.LoginName = "operator"; b.ReadLoginPassword = () => host.Password;
@@ -192,7 +254,7 @@ public static class Program
     {
         await using var host = new HostProcess(); await host.Initialize();
         var output = Path.Combine(host.Root, "artifacts", "ui-smoke");
-        var window = new MainWindow { Title = "IntegratedContro · 조명 카드 검증" };
+        var window = new MainWindow(false) { Title = "IntegratedContro · 조명 카드 검증" };
         var vm = (MainViewModel)window.DataContext;
         vm.Endpoint = host.Endpoint; vm.Fingerprint = host.Fingerprint; vm.LoginName = "admin"; vm.ReadLoginPassword = () => host.Password;
         window.DataContext = null; window.DataContext = vm; window.Show();
@@ -249,6 +311,7 @@ public static class Program
             var observed = await HostProcess.Until(observer, s => s.LightLayout.DeviceIds.SequenceEqual(reordered));
             Require(observed.LightLayout.Version == 1, "Saved order not visible to the other HTTPS session");
             await ExerciseGrouping(window, vm, host, output);
+            await ExerciseBatch(window, vm, output);
             reordered = vm.Lights.Select(c => c.Id).ToArray();
             await Execute(vm, vm.ReleaseCommand);
             Require(vm.Lights.All(c => !c.PowerCommand.CanExecute(null)), "Read-only cards could control");
@@ -271,6 +334,9 @@ public static class Program
             await Execute(vm, vm.LoadDeviceCommand); vm.DeviceFault = VirtualFault.Disconnected;
             await Execute(vm, vm.SaveDeviceCommand);
             window.UpdateLayout(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            var countBeforeBlocked = vm.Jobs.Count;
+            await Execute(vm, vm.AllLightsOnCommand);
+            Require(vm.Jobs.Count == countBeforeBlocked && vm.Message.Contains("일괄 접수하지 않았습니다"), "Unobserved target allowed partial bulk acceptance");
             Capture(window, Path.Combine(output, "lighting-cards.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
@@ -290,6 +356,46 @@ public static class Program
             window.Close(); await Wait(() => !window.IsVisible);
             PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
         }
+    }
+    private static async Task ExerciseBatch(MainWindow window, MainViewModel vm, string output)
+    {
+        var board = Find<LightingView>(window)!;
+        async Task WaitBatch(int value, IEnumerable<LightCard> cards)
+        {
+            var targets = cards.ToArray();
+            await Wait(() => targets.All(c => c.Power == value && c.PowerCommand.CanExecute(null)) &&
+                vm.Jobs.All(j => !j.Job.Active));
+        }
+        await Click(vm, (Button)board.FindName("AllLightsOn"));
+        await WaitBatch(1, vm.Lights);
+        Require(vm.Jobs.First().Job.IsLightBatch && vm.Jobs.First().Job.Snapshot.Steps.Length == 4, "All ON omitted a light");
+        await Click(vm, (Button)board.FindName("AllLightsOff")); await WaitBatch(0, vm.Lights);
+        var group = vm.LightGroups.Single(g => !g.IsDefault);
+        Button GroupButton(string name) => FindAll<Button>(board).Single(b => b.Name == name && ReferenceEquals(b.DataContext, group));
+        await Click(vm, GroupButton("GroupOn")); await WaitBatch(1, group.Cards);
+        Require(vm.Lights.Except(group.Cards).All(c => c.Power == 0), "Group command changed an outside light");
+        Require(vm.Jobs.First().Job.Snapshot.Steps.Select(s => s.Target.Id).SequenceEqual(group.Cards.Select(c => c.Id)), "Group snapshot mismatch");
+        await Click(vm, GroupButton("GroupOff")); await WaitBatch(0, group.Cards);
+        await Execute(vm, vm.EditLightOrderCommand);
+        Require(!vm.AllLightsOnCommand.CanExecute(null) && !group.OnCommand.CanExecute(null), "Layout edit allowed bulk power");
+        await Execute(vm, vm.CancelLightOrderCommand);
+        await Execute(vm, vm.ReleaseCommand);
+        Require(!vm.AllLightsOffCommand.CanExecute(null) && !group.OffCommand.CanExecute(null), "Read-only mode allowed bulk power");
+        await Execute(vm, vm.AcquireCommand);
+        var tabs = (TabControl)window.FindName("MainTabs"); tabs.SelectedIndex = 4;
+        window.UpdateLayout();
+        Require(vm.Audit.Any(a => a.Event == "조명 일괄 명령 접수" && a.Summary.Contains("단계")), "Readable audit message missing");
+        vm.SelectedAudit = vm.Audit.First(a => a.Entry.Action == "DispatchResult");
+        Require(vm.AuditDetails.Contains("job=") && vm.SelectedAudit.Summary.Contains("가상 실행 완료"), "Audit lost raw detail or result label");
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle); window.UpdateLayout();
+        var auditGrid = (DataGrid)window.FindName("AuditGrid");
+        Require(auditGrid.Columns.Take(3).All(c => c.ActualWidth >= 100) && auditGrid.Columns.Last().ActualWidth >= 360,
+            "Audit columns collapsed before rendering");
+        Capture(window, Path.Combine(output, "readable-audit.png"));
+        tabs.SelectedIndex = 0; window.UpdateLayout();
+        Capture(window, Path.Combine(output, "lighting-bulk.png"));
+        await File.WriteAllTextAsync(Path.Combine(output, "lighting-bulk-result.txt"),
+            "PASS: actual WPF all/group ON/OFF button invocation against separate HTTPS host; absolute requested states, frozen exact target set, outside group unchanged, edit/read-only blocking, readable audit and preserved raw detail. No physical devices.");
     }
     private static async Task ExerciseGrouping(MainWindow window, MainViewModel vm, HostProcess host, string output)
     {

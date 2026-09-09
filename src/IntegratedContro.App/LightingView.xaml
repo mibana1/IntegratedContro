@@ -31,6 +31,8 @@
   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
    <StackPanel><TextBlock Text="조명" FontSize="26" FontWeight="Bold" Foreground="#172B46"/><TextBlock Text="{Binding LightingSummary}" FontSize="14" Foreground="#596E85" Margin="0,8,0,0"/></StackPanel>
    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+    <Button x:Name="AllLightsOn" Content="전체 ON" Command="{Binding AllLightsOnCommand}" MinHeight="44"/>
+    <Button x:Name="AllLightsOff" Content="전체 OFF" Command="{Binding AllLightsOffCommand}" MinHeight="44"/>
     <Button Content="그룹 · 순서 편집" Command="{Binding EditLightOrderCommand}" MinHeight="44"/>
     <Button Content="저장" Command="{Binding SaveLightOrderCommand}" MinHeight="44" Visibility="{Binding EditingLightOrder, Converter={StaticResource BoolVisibility}}"/>
     <Button Content="취소" Command="{Binding CancelLightOrderCommand}" MinHeight="44" Visibility="{Binding EditingLightOrder, Converter={StaticResource BoolVisibility}}"/>
@@ -71,6 +73,11 @@
           <TextBlock Text="{Binding CountText}" FontSize="12" Foreground="#708297" Margin="10,0" VerticalAlignment="Center"/>
          </StackPanel>
         </DockPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+         <StackPanel.Style><Style TargetType="StackPanel"><Style.Triggers><DataTrigger Binding="{Binding Editing}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
+         <Button x:Name="GroupOn" Content="그룹 ON" Command="{Binding OnCommand}" MinHeight="36" Padding="12,5" Margin="0,0,8,0"/>
+         <Button x:Name="GroupOff" Content="그룹 OFF" Command="{Binding OffCommand}" MinHeight="36" Padding="12,5" Margin="0"/>
+        </StackPanel>
         <Border MinHeight="60" Background="Transparent" Visibility="{Binding IsEmpty, Converter={StaticResource BoolVisibility}}">
          <TextBlock Text="조명을 여기에 놓으세요" Foreground="#8392A4" VerticalAlignment="Center" HorizontalAlignment="Center"/>
         </Border>
