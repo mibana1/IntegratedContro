@@ -28,6 +28,8 @@ public static class AuditPresentation
             "PreviousSessionFenced" => "이전 세션 차단", "AccountCreated" => "계정 등록",
             "AccountPermissionsChanged" => "계정 권한 변경", "VirtualDeviceSaved" => "가상 장비 저장",
             "RoleAssigned" => "역할 배정", "ScenarioSaved" => "시나리오 저장",
+            "HiperwallLayoutSaved" => "영상벽 배치 저장", "HiperwallLayoutDeleted" => "영상벽 배치 삭제",
+            "HiperwallLayoutAccepted" => "영상벽 배치 표시 접수",
             "HiperwallSettingsSaved" => "Hiperwall 연결 설정 변경", "HiperwallConnectionTest" => "Hiperwall 연결 테스트",
             "HiperwallEditAccepted" => "Hiperwall 편집 접수", "HiperwallEditResult" => "Hiperwall 전송 결과", "HiperwallEditCancelled" => "Hiperwall 미전송 취소",
             "LightOrderSaved" => "조명 배치 저장", "LightBatchAccepted" => "조명 일괄 명령 접수",
@@ -38,7 +40,7 @@ public static class AuditPresentation
             _ => "기타 기록"
         };
         var deviceName = device is null ? $"장비 {Short(Id("device"))}" : $"{device.Name} / {device.PcName}";
-        string Step(StepSnapshot s) => $"{s.Target.Name} / {s.Target.PcName}: {Operation(s.Operation, s.Value, s.Unit)}";
+        string Step(StepSnapshot s) => $"{ScenarioLabels.Kind(s.Kind)} · {ScenarioLabels.Target(s)}: {Operation(s.Operation, s.Value, s.Unit)}";
         var work = job is null ? $"작업 {Short(Id("job"))}" :
             $"{job.Snapshot.RequesterName} 요청 · " + (job.IsLightBatch || job.Kind == JobKind.Scenario
                 ? $"{job.Snapshot.Name} · {job.Snapshot.Steps.Length}단계"

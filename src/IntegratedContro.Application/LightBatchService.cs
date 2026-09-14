@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
 
@@ -39,15 +39,15 @@ public sealed partial class ControlService
         {
             var step = Resolve(s, User(s, session), new(t.RoleId, DeviceOperation.Power, request.Value));
             var expected = t.Expected;
-            Require(step.Target.Id == expected.DeviceId && step.Target.PcId == expected.PcId &&
-                step.Target.Version == expected.DeviceVersion && step.Role.Version == expected.RoleVersion,
-                "card_target_changed", $"{step.Target.Name}: 대상 또는 역할이 변경되었습니다.");
-            Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target.Id == expected.DeviceId)),
-                "device_busy", $"{step.Target.Name}: 진행 중 작업 또는 시나리오 예약이 있습니다. 작업 탭에서 확인하세요.");
-            Require(!s.UncertainDevices.Contains(expected.DeviceId), "device_uncertain", $"{step.Target.Name}: 가상 상태 대조가 필요합니다.");
+            Require(step.Target!.Id == expected.DeviceId && step.Target!.PcId == expected.PcId &&
+                step.Target!.Version == expected.DeviceVersion && step.Role!.Version == expected.RoleVersion,
+                "card_target_changed", $"{step.Target!.Name}: 대상 또는 역할이 변경되었습니다.");
+            Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == expected.DeviceId)),
+                "device_busy", $"{step.Target!.Name}: 진행 중 작업 또는 시나리오 예약이 있습니다. 작업 탭에서 확인하세요.");
+            Require(!s.UncertainDevices.Contains(expected.DeviceId), "device_uncertain", $"{step.Target!.Name}: 가상 상태 대조가 필요합니다.");
             var actual = s.DeviceStates[expected.DeviceId].Simulated.GetValueOrDefault(DeviceOperation.Power);
             Require(expected.Power is 0 or 1 && actual is not null && actual.Value == expected.Power && actual.At == expected.ObservedAt,
-                "light_state_changed", $"{step.Target.Name}: 상태가 변경되었거나 확인되지 않았습니다. 상태 확인 후 다시 누르세요.");
+                "light_state_changed", $"{step.Target!.Name}: 상태가 변경되었거나 확인되지 않았습니다. 상태 확인 후 다시 누르세요.");
             return step with { ConditionOperation = DeviceOperation.Power, ConditionValue = expected.Power };
         }).ToArray();
         var name = $"{(request.GroupId is null ? "전체 조명" : group?.Name ?? "미분류")} · {(request.Value == 1 ? "ON" : "OFF")} ({snapshots.Length}개)";

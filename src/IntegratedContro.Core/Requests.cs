@@ -14,7 +14,11 @@ public sealed record SubmitRequest(Guid RequestId, long Generation, string? Role
     DeviceOperation Operation = DeviceOperation.Power, int Value = 1, Guid? ScenarioId = null,
     int DelayBeforeMs = 0, int TimeoutMs = 3000, int ExpiresAfterSeconds = 86400,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    CardPowerExpectation? CardPower = null);
+    CardPowerExpectation? CardPower = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    Guid? SavedLayoutId = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    int? SavedLayoutVersion = null);
 public sealed record CardPowerExpectation(Guid DeviceId, Guid PcId, int DeviceVersion, int RoleVersion, int Power, DateTimeOffset ObservedAt);
 public sealed record LightPowerTarget(string RoleId, CardPowerExpectation Expected);
 public sealed record LightBatchRequest(Guid RequestId, long Generation, int Value, int LayoutVersion,

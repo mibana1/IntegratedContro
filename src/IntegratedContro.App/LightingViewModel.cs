@@ -194,7 +194,7 @@ public sealed partial class MainViewModel
     }
     private bool AllowedLight(Guid id) => _state?.ControllableDeviceIds.Contains(id) == true &&
         _state.Devices.Any(d => d.Id == id && d.Enabled);
-    private bool LightHasWork(Guid id) => _state?.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(s => s.Target.Id == id)) == true;
+    private bool LightHasWork(Guid id) => _state?.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(s => s.Target?.Id == id)) == true;
     private RoleBinding? LightRole(Guid id) => _state?.Roles.Where(r => r.DeviceId == id).OrderBy(r => r.Id, StringComparer.Ordinal).FirstOrDefault();
     private StateValue? LightPower(Guid id) => _state?.DeviceStates.GetValueOrDefault(id)?.Simulated.GetValueOrDefault(DeviceOperation.Power);
     private string? LightBlockReason(Guid id)
@@ -204,7 +204,7 @@ public sealed partial class MainViewModel
         if (!CanControl) return _connected ? "사용 시작 후 조작 가능" : "호스트 연결 확인";
         if (!AllowedLight(id)) return "비활성 장비 또는 제어 권한 없음";
         if (HasPending) return "접수 여부 확인 중";
-        if (_state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(s => s.Target.Id == id))) return "시나리오 예약 · 작업 탭에서 수동 전환";
+        if (_state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(s => s.Target?.Id == id))) return "시나리오 예약 · 작업 탭에서 수동 전환";
         if (LightHasWork(id)) return "명령 처리 중 · 결과 대기";
         if (_state.UncertainDevices.Contains(id)) return "상태 대조 필요";
         if (LightRole(id) is null) return "상세 설정에서 역할 배정 필요";

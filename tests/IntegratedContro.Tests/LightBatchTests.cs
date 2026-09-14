@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using IntegratedContro.Application;
 using IntegratedContro.Core;
 
@@ -29,7 +29,7 @@ public sealed class LightBatchTests
         var accepted = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => Task.Run(() => r.Service.SubmitLightBatch(r.Admin.Token, request))));
         Assert.Single(accepted.Select(j => j.Id).Distinct());
         var job = accepted[0]; var snapshot = JsonSerializer.Serialize(job.Snapshot);
-        Assert.Equal(new[] { b.Id, a.Id }, job.Snapshot.Steps.Select(s => s.Target.Id));
+        Assert.Equal(new[] { b.Id, a.Id }, job.Snapshot.Steps.Select(s => s.Target!.Id));
         Assert.All(job.Snapshot.Steps, s => { Assert.Equal(0, s.Value); Assert.Equal(1, s.ConditionValue); });
         Rig.Reject("lighting_batch_busy", () => r.Service.Submit(r.Admin.Token, r.Manual()));
         r.Service.SaveLightOrder(r.Admin.Token, new(r.Generation, 1, [outside.Id, a.Id, b.Id], [new(id, "변경", [outside.Id])]));
@@ -39,7 +39,7 @@ public sealed class LightBatchTests
         Rig.Reject("lease_required", () => r.Service.SubmitLightBatch(r.Admin.Token, request with { RequestId = Guid.NewGuid() }));
         await r.Service.DispatchNextAsync(); await r.Service.DispatchNextAsync();
         Assert.Equal(JobStatus.Completed, r.Job(job.Id).Status);
-        Assert.DoesNotContain(r.Driver.Sent, s => s.Target.Id == outside.Id);
+        Assert.DoesNotContain(r.Driver.Sent, s => s.Target!.Id == outside.Id);
     }
     [Fact]
     public async Task Entire_set_is_rejected_for_stale_target_membership_or_busy_device()

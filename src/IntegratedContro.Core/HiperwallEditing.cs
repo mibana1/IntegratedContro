@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace IntegratedContro.Core;
 
-public enum HiperwallEditAction { Open, Change, Close, MuteAll, CloseAll }
+public enum HiperwallEditAction { Open, Change, Close, MuteAll, CloseAll, DisplayLayout }
 public enum HiperwallSendState { Pending, Sending, Acknowledged, Rejected, Unknown }
 public sealed record HiperwallLayout(double X, double Y, double Width, double Height)
 {
@@ -24,11 +24,14 @@ public sealed class HiperwallEditStep
 {
     public required HiperwallWireCommand Command { get; init; }
     public string? ExpectedTargetRevision { get; init; }
+    public bool BlocksFollowingSteps { get; set; }
     public HiperwallSendState State { get; set; }
     public string Message { get; set; } = "전송 대기";
 }
 public sealed class HiperwallEditReceipt
 {
+    public Guid? ParentJobId { get; init; }
+    public int? ParentStepIndex { get; init; }
     public required HiperwallEditRequest Request { get; init; }
     public required SessionInfo Requester { get; init; }
     public required string Endpoint { get; init; }
@@ -42,6 +45,7 @@ public static class HiperwallEditing
 {
     public static string ActionName(HiperwallEditAction action) => action switch
     {
+        HiperwallEditAction.DisplayLayout => "저장 배치 표시",
         HiperwallEditAction.Open => "콘텐츠 추가", HiperwallEditAction.Change => "위치·크기·소리 변경",
         HiperwallEditAction.Close => "선택 닫기", HiperwallEditAction.CloseAll => "전체 닫기", _ => "전체 음소거 변경"
     };

@@ -89,6 +89,12 @@ public sealed partial class ControlService
     });
     private StepSnapshot Resolve(HostState s, Account user, ScenarioStep step, RoleBinding? overrideRole = null)
     {
+        Require(Enum.IsDefined(step.Kind) && step.DelayBeforeMs is >= 0 and <= 3600000 && Enum.IsDefined(step.OnFailure),
+            "invalid_scenario", "단계 종류·대기 시간·실패 정책을 확인하세요.", 400);
+        Require(step.TimeoutMs >= 100 && step.TimeoutMs <= (step.Kind == ScenarioStepKind.DeviceCommand ? 30000 : 3600000),
+            "invalid_timing", "명령 제한시간은 최대 30초, 조건 대기·배치 표시는 최대 1시간입니다.", 400);
+        if (step.Kind == ScenarioStepKind.ShowLayout) return ResolveLayout(s, user, step);
+        Require(step.SavedLayoutId is null, "invalid_scenario", "장비 단계에는 저장 배치를 지정할 수 없습니다.", 400);
         var role = overrideRole ?? s.Roles.SingleOrDefault(r => r.Id == step.RoleId);
         Require(role is not null, "role_missing", $"역할을 찾을 수 없습니다: {step.RoleId}", 400);
         var device = s.Devices.SingleOrDefault(d => d.Id == role!.DeviceId);
@@ -98,12 +104,20 @@ public sealed partial class ControlService
         Require(capability is not null, "unsupported", "이 모델은 해당 기능을 지원하지 않습니다.", 400);
         Require(step.Value >= capability!.Minimum && step.Value <= capability.Maximum, "value_range",
             $"허용 범위: {capability.Minimum}~{capability.Maximum} {capability.Unit}", 400);
-        Require(step.DelayBeforeMs is >= 0 and <= 3600000 && step.TimeoutMs is >= 100 and <= 30000 &&
+        Require(step.DelayBeforeMs is >= 0 and <= 3600000 && step.TimeoutMs >= 100 && step.TimeoutMs <= (step.Kind == ScenarioStepKind.WaitUntil ? 3600000 : 30000) &&
             Enum.IsDefined(step.OnFailure), "invalid_timing", "대기는 0~3600000ms, 제한시간은 100~30000ms입니다.", 400);
         Require((step.ConditionOperation is null) == (step.ConditionValue is null), "invalid_condition", "확인 조건의 동작과 값을 함께 지정하세요.", 400);
         Require(capability.MinimumCommandIntervalMs is >= 0 and <= 3600000 && capability.SettleAfterMs is >= 0 and <= 3600000 &&
             capability.ObservationMaxAgeMs is > 0 and <= 3600000 && Enum.IsDefined(capability.RetrySafety),
             "invalid_capability", "드라이버의 전송·관측 제약을 확인하세요.", 400);
+        if (step.Kind == ScenarioStepKind.WaitUntil)
+        {
+            Require(capability.CanRead && step.PollIntervalMs is >= 100 and <= 10000 &&
+                step.ConditionOperation is null && step.ConditionValue is null, "invalid_condition", "읽기 지원 기능과 100~10000ms 조회 간격이 필요합니다.", 400);
+            return new(role!, device, step.Operation, step.Value, capability.Unit, step.DelayBeforeMs, step.TimeoutMs,
+                step.OnFailure, step.Operation, step.Value)
+                { Kind = step.Kind, Capability = capability, ConditionCapability = capability, PollIntervalMs = step.PollIntervalMs };
+        }
         Capability? conditionCapability = null;
         if (step.ConditionOperation is { } condition)
         {

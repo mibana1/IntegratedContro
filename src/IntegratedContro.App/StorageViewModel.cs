@@ -70,7 +70,8 @@ public sealed partial class MainViewModel
                 return new StoredHistoryRow(i.Sequence, j.AcceptedAt, j.Requester, $"{j.Name} · {j.Status}",
                     $"작업 ID: {j.Id}\n원 세션: {i.Value.Snapshot.SessionId}\n대상: {j.Targets}\n{j.Result}\n" +
                     string.Join("\n", i.Value.Steps.Select((s, n) =>
-                        $"{n + 1}. {s.Status} · {DeviceEvidence.Label(s.Evidence?.Confirmation ?? ConfirmationLevel.None)} · {s.Result} · {DeviceEvidence.RecordedObservations(s.Evidence)}")));
+                        $"{n + 1}. {s.Status} · {DeviceEvidence.Label(s.Evidence?.Confirmation ?? ConfirmationLevel.None)} · {s.Result} · {DeviceEvidence.RecordedObservations(s.Evidence)}\n" +
+                        string.Join("\n", s.HiperwallResults.Select(r => $"{r.Command.InstanceId}: {r.State} · {r.Message}")))));
             }).ToArray();
         }
         else if (kind == "Hiperwall 편집")

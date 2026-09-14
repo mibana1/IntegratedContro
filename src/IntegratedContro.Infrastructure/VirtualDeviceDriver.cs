@@ -1,4 +1,4 @@
-﻿using IntegratedContro.Application;
+using IntegratedContro.Application;
 using IntegratedContro.Core;
 using Microsoft.Data.Sqlite;
 
@@ -17,10 +17,10 @@ public sealed class VirtualDeviceDriver(string connectionString) : IDeviceDriver
     ];
     public async Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken cancellationToken)
     {
-        if (step.Target.Fault == VirtualFault.Disconnected) return new(StepStatus.Failed, "가상 연결 끊김 / 전송 없음");
-        if (step.Target.Fault == VirtualFault.Failure) return new(StepStatus.Failed, "주입된 가상 실패 / 전송 없음");
-        await Task.Delay(step.Target.LatencyMs, cancellationToken);
-        if (step.Target.Fault == VirtualFault.NoResponse) await Task.Delay(Timeout.Infinite, cancellationToken);
+        if (step.Target!.Fault == VirtualFault.Disconnected) return new(StepStatus.Failed, "가상 연결 끊김 / 전송 없음");
+        if (step.Target!.Fault == VirtualFault.Failure) return new(StepStatus.Failed, "주입된 가상 실패 / 전송 없음");
+        await Task.Delay(step.Target!.LatencyMs, cancellationToken);
+        if (step.Target!.Fault == VirtualFault.NoResponse) await Task.Delay(Timeout.Infinite, cancellationToken);
         var operation = step.Operation == DeviceOperation.Stop ? DeviceOperation.Lift : step.Operation;
         using (var connection = new SqliteConnection(connectionString))
         {
@@ -30,13 +30,13 @@ public sealed class VirtualDeviceDriver(string connectionString) : IDeviceDriver
                 INSERT INTO virtual_values(pc_id,device_id,operation,value) VALUES($pc,$device,$op,$value)
                 ON CONFLICT(pc_id,device_id,operation) DO UPDATE SET value=excluded.value;
                 """;
-            command.Parameters.AddWithValue("$pc", step.Target.PcId.ToString());
-            command.Parameters.AddWithValue("$device", step.Target.Id.ToString());
+            command.Parameters.AddWithValue("$pc", step.Target!.PcId.ToString());
+            command.Parameters.AddWithValue("$device", step.Target!.Id.ToString());
             command.Parameters.AddWithValue("$op", operation.ToString());
             command.Parameters.AddWithValue("$value", step.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
-        if (step.Target.Fault == VirtualFault.ResponseLost) await Task.Delay(Timeout.Infinite, cancellationToken);
+        if (step.Target!.Fault == VirtualFault.ResponseLost) await Task.Delay(Timeout.Infinite, cancellationToken);
         return new(StepStatus.Simulated, "가상 장비 값 반영 / 실제 장비 관측 아님",
             new Dictionary<DeviceOperation, int> { [operation] = step.Value });
     }

@@ -21,6 +21,7 @@ public sealed partial class ControlService
         }
         Owner(s, token, request.Generation);
         Require(request.ExpiresAfterSeconds is >= 1 and <= 604800, "invalid_expiry", "만료는 1~604800초입니다.", 400);
+        Require(request.ScenarioId is null || request.SavedLayoutId is null, "invalid_request", "시나리오와 수동 배치 표시를 함께 요청할 수 없습니다.", 400);
         ScenarioDefinition? definition = null;
         ScenarioStep[] steps;
         if (request.ScenarioId is { } scenarioId)
@@ -29,25 +30,34 @@ public sealed partial class ControlService
             Require(definition is not null, "scenario_missing", "시나리오를 찾을 수 없습니다.", 404);
             steps = definition!.Steps;
         }
+        else if (request.SavedLayoutId is { } layoutId)
+            steps = [new("", DeviceOperation.Power, 0, request.DelayBeforeMs, request.TimeoutMs)
+                { Kind = ScenarioStepKind.ShowLayout, SavedLayoutId = layoutId }];
         else
         {
             Text(request.RoleId, "역할 ID");
             steps = [new(request.RoleId!, request.Operation, request.Value, request.DelayBeforeMs, request.TimeoutMs)];
         }
         var snapshots = steps.Select(step => Resolve(s, User(s, session), step)).ToArray();
+        if (request.SavedLayoutId is not null)
+            Require(request.SavedLayoutVersion == snapshots[0].SavedLayout!.Version, "version_conflict", "저장 배치가 변경되었습니다. 다시 조회하고 표시하세요.");
         ValidateCardPower(s, request, snapshots);
-        var targets = snapshots.Select(x => x.Target.Id).ToHashSet();
-        Require(!s.Jobs.Any(j => j.Active && j.IsLightBatch && j.Snapshot.Steps.Any(x => targets.Contains(x.Target.Id))),
+        var targets = DeviceTargets(snapshots).ToHashSet();
+        var displays = snapshots.Any(x => x.Kind == ScenarioStepKind.ShowLayout);
+        if (displays)
+            Require(!s.Jobs.Any(j => j.Active && UsesHiperwall(j)) && !s.HiperwallEdits.Any(r => r.Active),
+                "hiperwall_reserved", "Hiperwall 작업이 남아 있습니다. 작업 탭에서 결과를 확인하거나 시나리오를 명시적으로 중단하세요.");
+        Require(!s.Jobs.Any(j => j.Active && j.IsLightBatch && j.Snapshot.Steps.Any(x => x.Target is not null && targets.Contains(x.Target.Id))),
             "lighting_batch_busy", "일괄 조명 작업이 남아 있습니다. 작업 탭에서 결과를 확인하거나 미전송 부분을 취소하세요.");
         var isStop = definition is null && request.Operation == DeviceOperation.Stop;
         var conflicts = s.Jobs.Where(j => HoldsReservations(j) &&
-            j.Snapshot.Steps.Any(x => targets.Contains(x.Target.Id)) &&
+            j.Snapshot.Steps.Any(x => x.Target is not null && targets.Contains(x.Target.Id)) &&
             (definition is not null || j.Kind == JobKind.Scenario)).ToArray();
         if (isStop)
         {
             foreach (var job in conflicts)
             {
-                Require(job.Snapshot.Steps.All(x => CanControl(User(s, session), x.Target.Id)),
+                Require(job.Snapshot.Steps.All(x => CanControlStep(User(s, session), x)),
                     "target_forbidden", "연결된 시나리오의 중단 권한이 없습니다.", 403);
                 StopJob(s, job, session, "STOP 우선 요청: 시나리오 후속 단계 차단");
             }
@@ -58,12 +68,12 @@ public sealed partial class ControlService
                 "장비가 예약되어 있습니다. 작업을 확인하고 '시나리오 중단 후 수동 전환'을 명시적으로 선택하세요.");
             Require(!targets.Overlaps(s.UncertainDevices), "device_uncertain", "불확실 장비의 가상 상태를 먼저 대조하세요.");
         }
-        var snapshot = new ExecutionSnapshot(s.SiteId, "Virtual", request.RequestId, session.Info.UserId,
+        var snapshot = new ExecutionSnapshot(s.SiteId, ExecutionMode(snapshots), request.RequestId, session.Info.UserId,
             session.Info.UserName, session.Info.Id, session.Info.PcId, session.Info.PcName, request.Generation,
             Now, Now.AddSeconds(request.ExpiresAfterSeconds), definition?.Id, definition?.Version,
-            definition?.Name ?? $"{request.RoleId}: {request.Operation}={request.Value}", snapshots);
+            definition?.Name ?? (displays ? $"배치 표시: {snapshots[0].SavedLayout!.Name}" : $"{request.RoleId}: {request.Operation}={request.Value}"), snapshots);
         var jobNew = new Job { RequestFingerprint = fingerprint, Snapshot = snapshot,
-            Kind = definition is null ? JobKind.Manual : JobKind.Scenario,
+            Kind = definition is not null ? JobKind.Scenario : displays ? JobKind.LayoutDisplay : JobKind.Manual,
             Steps = snapshots.Select(_ => new StepRun()).ToList(), ReadyAt = Now.AddMilliseconds(snapshots[0].DelayBeforeMs) };
         s.Jobs.Add(jobNew);
         Audit(s, session.Info.UserId, "JobAccepted", $"job={jobNew.Id}; request={request.RequestId}; generation={request.Generation}");
@@ -73,7 +83,7 @@ public sealed partial class ControlService
     {
         var session = Owner(s, token, request.Generation);
         var job = FindJob(s, request.JobId);
-        Require(job.Snapshot.Steps.All(step => CanControl(User(s, session), step.Target.Id)),
+        Require(job.Snapshot.Steps.All(step => CanControlStep(User(s, session), step)),
             "target_forbidden", "작업 대상 전체에 대한 제어 권한이 필요합니다.", 403);
         StopJob(s, job, session, "선택 취소");
         return job;
@@ -83,11 +93,11 @@ public sealed partial class ControlService
         var session = Owner(s, token, request.Generation);
         var job = FindJob(s, request.JobId);
         Require(job.Kind == JobKind.Scenario, "scenario_required", "전환할 시나리오를 선택하세요.");
-        Require(job.Snapshot.Steps.All(step => CanControl(User(s, session), step.Target.Id)),
+        Require(job.Snapshot.Steps.All(step => CanControlStep(User(s, session), step)),
             "target_forbidden", "시나리오 대상 전체 제어 권한이 필요합니다.", 403);
         StopJob(s, job, session, "시나리오 중단 후 수동 전환 요청");
         // Reconciliation is a separate explicit operation. Never enqueue the earlier conflicting click.
-        foreach (var id in job.Snapshot.Steps.Select(x => x.Target.Id).Distinct())
+        foreach (var id in DeviceTargets(job.Snapshot.Steps).Distinct())
             if (!s.UncertainDevices.Contains(id)) s.UncertainDevices.Add(id);
         job.Result += " / 전환 대상의 가상 상태 조회·대조 후 새 수동 명령을 선택하세요.";
         return job;
@@ -104,7 +114,10 @@ public sealed partial class ControlService
         job.CancelledBy ??= session.Info.UserId;
         job.CancellerName ??= session.Info.UserName;
         job.CancelRequestedAt ??= Now;
-        foreach (var step in job.Steps.Where(x => x.Status == StepStatus.Pending))
+        foreach (var receipt in s.HiperwallEdits.Where(r => r.ParentJobId == job.Id))
+            foreach (var pending in receipt.Steps.Where(x => x.State == HiperwallSendState.Pending))
+            { pending.State = HiperwallSendState.Rejected; pending.Message = "원 작업 취소: 미전송 배치 항목 차단"; }
+        foreach (var step in job.Steps.Where(x => x.Status is StepStatus.Pending or StepStatus.Waiting))
         { step.Status = StepStatus.Skipped; step.Result = "미전송 부분 취소"; step.FinishedAt = Now; }
         job.Status = job.Steps.Any(x => x.Status == StepStatus.Dispatching) ? JobStatus.StopRequested :
             job.Steps.Any(x => x.Status == StepStatus.Unknown) ? JobStatus.NeedsReview : JobStatus.Cancelled;
@@ -123,7 +136,7 @@ public sealed partial class ControlService
             target = _state.Devices.SingleOrDefault(x => x.Id == request.DeviceId)
                 ?? throw new DomainException("target_missing", "대상 장비가 없습니다.", 404);
             Require(CanControl(User(_state, session), target.Id), "target_forbidden", "대상 제어 권한이 없습니다.", 403);
-            Require(!_state.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target.Id == target.Id)),
+            Require(!_state.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == target.Id)),
                 "device_busy", "대상 작업의 전송·중단 처리가 끝난 후 조회·대조하세요.");
         }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -135,7 +148,7 @@ public sealed partial class ControlService
         {
             var session = Owner(s, token, request.Generation);
             Require(CanControl(User(s, session), target.Id) && s.Devices.Any(x => x.MatchesExecutionTarget(target)) &&
-                !s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target.Id == target.Id)),
+                !s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == target.Id)),
                 "reconcile_changed", "대상/권한/작업이 변경되었습니다. 다시 대조하세요.");
             Require(reading.Available, "read_failed", reading.Detail);
             var state = s.DeviceStates[target.Id];
@@ -161,8 +174,12 @@ public sealed partial class ControlService
     }
     private string? Revalidate(HostState s, Job job, StepSnapshot step)
     {
-        if (job.Snapshot.SiteId != s.SiteId || job.Snapshot.Mode != "Virtual") return "현장/실행 모드 불일치";
+        if (job.Snapshot.SiteId != s.SiteId || job.Snapshot.Mode != ExecutionMode(job.Snapshot.Steps)) return "현장/실행 모드 불일치";
         if (Now >= job.Snapshot.ExpiresAt) return "작업 만료";
+        if (job.Snapshot.ScenarioId is { } currentScenario && !s.Scenarios.Any(x => x.Id == currentScenario && x.Version == job.Snapshot.ScenarioVersion))
+            return "시나리오 정의 변경";
+        if (step.Kind == ScenarioStepKind.ShowLayout) return ValidateLayoutDispatch(s, job, step);
+        if (step.Target is null || step.Role is null) return "장비 대상 snapshot 오류";
         var user = s.Accounts.SingleOrDefault(a => a.Id == job.Snapshot.RequestedBy);
         if (user is null || !CanControl(user, step.Target.Id)) return "원 요청자 계정/대상 권한 회수";
         var device = s.Devices.SingleOrDefault(d => d.Id == step.Target.Id);

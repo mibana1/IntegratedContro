@@ -5,14 +5,14 @@ namespace IntegratedContro.Application;
 public sealed partial class ControlService
 {
     private Capability CapabilityFor(StepSnapshot step) => step.Capability ??
-        _driver.Models.Single(m => m.Id == step.Target.ModelId).Capabilities.Single(c => c.Operation == step.Operation);
+        _driver.Models.Single(m => m.Id == step.Target!.ModelId).Capabilities.Single(c => c.Operation == step.Operation);
 
     private DateTimeOffset DispatchNotBefore(HostState state, StepSnapshot step)
     {
-        var constraints = state.DeviceStates[step.Target.Id].Constraints.Where(c => c.Blocks(step.Operation, Now))
+        var constraints = state.DeviceStates[step.Target!.Id].Constraints.Where(c => c.Blocks(step.Operation, Now))
             .Select(c => c.NotBefore);
-        var lastDispatch = state.ConnectionLastDispatchAt.GetValueOrDefault(step.Target.ConnectionId);
-        return constraints.Append(state.ConnectionNotBefore.GetValueOrDefault(step.Target.ConnectionId))
+        var lastDispatch = state.ConnectionLastDispatchAt.GetValueOrDefault(step.Target!.ConnectionId);
+        return constraints.Append(state.ConnectionNotBefore.GetValueOrDefault(step.Target!.ConnectionId))
             .Append(lastDispatch.AddMilliseconds(CapabilityFor(step).MinimumCommandIntervalMs)).Max();
     }
     private Dictionary<DeviceOperation, DeviceObservation> ValidObservations(DeviceConfig target,
@@ -38,7 +38,7 @@ public sealed partial class ControlService
         if (reading.Confirmation == ConfirmationLevel.Simulated)
             return reading.Values.TryGetValue(step.ConditionOperation!.Value, out var value) && value == step.ConditionValue;
         if (reading.Confirmation != ConfirmationLevel.Observed) return false;
-        return ValidObservations(step.Target, reading.Observations).TryGetValue(step.ConditionOperation!.Value, out var observed) &&
+        return ValidObservations(step.Target!, reading.Observations).TryGetValue(step.ConditionOperation!.Value, out var observed) &&
             observed.IsFresh(Now) && observed.Value == step.ConditionValue;
     }
     private DriverResult ValidateResult(StepSnapshot step, DriverResult? result)
@@ -61,14 +61,14 @@ public sealed partial class ControlService
             (result.Status != StepStatus.Simulated || result.Confirmation == ConfirmationLevel.Simulated) &&
             (result.Status != StepStatus.Succeeded || result.Confirmation is ConfirmationLevel.TransportSent or ConfirmationLevel.ProtocolAcknowledged or ConfirmationLevel.Observed);
         if (result.Confirmation == ConfirmationLevel.Observed)
-            valid &= ValidObservations(step.Target, result.Observations).TryGetValue(step.Operation, out var value) &&
+            valid &= ValidObservations(step.Target!, result.Observations).TryGetValue(step.Operation, out var value) &&
                 value.IsFresh(Now) && (!success || value.Value == step.Value);
         if (!valid) return new(StepStatus.Unknown, "드라이버 결과·확인 근거 불일치: 상태 대조 필요");
         return result;
     }
     private DeviceCommandResult EvidenceFor(StepSnapshot step, DriverResult result) =>
         new(result.Outcome, result.Confirmation, result.Detail, Now)
-        { Observations = result.Confirmation == ConfirmationLevel.Observed ? ValidObservations(step.Target, result.Observations) : [] };
+        { Observations = result.Confirmation == ConfirmationLevel.Observed ? ValidObservations(step.Target!, result.Observations) : [] };
     private void ApplyDriverState(DeviceState state, StepSnapshot step, DriverResult result)
     {
         state.LastCommand = EvidenceFor(step, result);
@@ -80,7 +80,7 @@ public sealed partial class ControlService
         if (result.Confirmation == ConfirmationLevel.Simulated && result.Values is not null)
             foreach (var pair in result.Values) state.Simulated[pair.Key] = new(pair.Value, Now);
         if (result.Confirmation == ConfirmationLevel.Observed)
-            foreach (var pair in ValidObservations(step.Target, result.Observations)) state.Observed[pair.Key] = pair.Value;
+            foreach (var pair in ValidObservations(step.Target!, result.Observations)) state.Observed[pair.Key] = pair.Value;
         state.Constraints.RemoveAll(c => c.NotBefore <= Now);
         state.Constraints.AddRange(result.Constraints.Where(c => c.NotBefore > Now &&
             c.NotBefore <= Now.AddHours(24) && (c.Operation is null || Enum.IsDefined(c.Operation.Value))));

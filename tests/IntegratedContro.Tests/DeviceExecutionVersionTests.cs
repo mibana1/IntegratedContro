@@ -167,6 +167,6 @@ public sealed class DeviceExecutionVersionTests
         Assert.Contains("새 상태 조회 필요", state.DeviceStates[d.Id].Connection);
         Assert.DoesNotContain(d.Id, state.UncertainDevices);
         Assert.Equal(JobStatus.NeedsReview, r.Job(job.Id).Status);
-        Assert.Equal(d.PcId, r.Job(job.Id).Snapshot.Steps[0].Target.PcId);
+        Assert.Equal(d.PcId, r.Job(job.Id).Snapshot.Steps[0].Target!.PcId);
     }
 }

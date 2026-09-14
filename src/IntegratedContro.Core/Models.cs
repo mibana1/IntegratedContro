@@ -15,9 +15,9 @@ public enum LeaseMode { Free, Held, RecoveryRequired }
 public enum DeviceOperation { Power, Brightness, Volume, Mute, Input, Lift, Stop }
 public enum VirtualFault { None, Failure, Disconnected, NoResponse, ResponseLost }
 public enum FailurePolicy { Stop, Continue }
-public enum JobKind { Manual, Scenario, LightBatch }
+public enum JobKind { Manual, Scenario, LightBatch, LayoutDisplay }
 public enum JobStatus { Queued, Running, StopRequested, Completed, Cancelled, Interrupted, NeedsReview }
-public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped, Succeeded }
+public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped, Succeeded, Waiting }
 
 public sealed record Capability(DeviceOperation Operation, int Minimum, int Maximum, string Unit)
 {
@@ -59,14 +59,28 @@ public sealed class DeviceState
 }
 public sealed record ScenarioStep(string RoleId, DeviceOperation Operation, int Value,
     int DelayBeforeMs = 0, int TimeoutMs = 3000, FailurePolicy OnFailure = FailurePolicy.Stop,
-    DeviceOperation? ConditionOperation = null, int? ConditionValue = null);
+    DeviceOperation? ConditionOperation = null, int? ConditionValue = null)
+{
+    public ScenarioStepKind Kind { get; init; } = ScenarioStepKind.DeviceCommand;
+    public Guid? SavedLayoutId { get; init; }
+    public string? SavedLayoutName { get; init; }
+    public int PollIntervalMs { get; init; } = 1000;
+    [JsonIgnore] public string KindName => ScenarioLabels.Kind(Kind);
+    [JsonIgnore] public string TargetLabel => Kind == ScenarioStepKind.ShowLayout ? SavedLayoutName ?? SavedLayoutId?.ToString() ?? "" : RoleId;
+    [JsonIgnore] public string ActionLabel => Kind == ScenarioStepKind.ShowLayout ? "새 인스턴스 추가 표시" :
+        $"{Operation}={Value}" + (ConditionOperation is null ? "" : $" / 확인 {ConditionOperation}={ConditionValue}");
+}
 public sealed record ScenarioDefinition(Guid Id, string Name, int Version, ScenarioStep[] Steps);
-public sealed record StepSnapshot(RoleBinding Role, DeviceConfig Target, DeviceOperation Operation,
+public sealed record StepSnapshot(RoleBinding? Role, DeviceConfig? Target, DeviceOperation Operation,
     int Value, string Unit, int DelayBeforeMs, int TimeoutMs, FailurePolicy OnFailure,
     DeviceOperation? ConditionOperation, int? ConditionValue)
 {
     public Capability? Capability { get; init; }
     public Capability? ConditionCapability { get; init; }
+    public ScenarioStepKind Kind { get; init; } = ScenarioStepKind.DeviceCommand;
+    public int PollIntervalMs { get; init; } = 1000;
+    public SavedHiperwallLayout? SavedLayout { get; init; }
+    public Guid? DisplayReceiptId { get; init; }
 }
 public sealed record ExecutionSnapshot(Guid SiteId, string Mode, Guid RequestId, Guid RequestedBy,
     string RequesterName, Guid SessionId, Guid ClientPcId, string ClientPcName, long LeaseGeneration,
@@ -79,6 +93,10 @@ public sealed class StepRun
     public DateTimeOffset? FinishedAt { get; set; }
     public string Result { get; set; } = "미전송";
     public DeviceCommandResult? Evidence { get; set; }
+    public DateTimeOffset? WaitStartedAt { get; set; }
+    public DateTimeOffset? WaitDeadline { get; set; }
+    public int ObservationsChecked { get; set; }
+    public List<HiperwallEditStep> HiperwallResults { get; set; } = [];
 }
 public sealed class Job
 {
@@ -145,6 +163,7 @@ public sealed class HostState
     public List<DeviceConfig> Devices { get; set; } = [];
     public HiperwallConfiguration? Hiperwall { get; set; }
     public List<HiperwallEditReceipt> HiperwallEdits { get; set; } = [];
+    public List<SavedHiperwallLayout> HiperwallLayouts { get; set; } = [];
     public LightLayout LightLayout { get; set; } = new(0, []);
     public Dictionary<Guid, DeviceState> DeviceStates { get; set; } = [];
     public List<RoleBinding> Roles { get; set; } = [];
@@ -163,6 +182,9 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     AuditEntry[] Audit, DeviceModel[] Models, int HeartbeatTimeoutSeconds)
 {
     public LightLayout LightLayout { get; init; } = new(0, []);
+    public SavedHiperwallLayout[] HiperwallLayouts { get; init; } = [];
+    public bool ScenarioExtensionsSupported { get; init; }
+    public bool HiperwallReserved { get; init; }
     public bool HistorySupported { get; init; }
     public bool BackupSupported { get; init; }
     public bool LightCardsSupported { get; init; }

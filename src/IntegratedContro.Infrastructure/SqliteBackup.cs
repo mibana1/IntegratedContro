@@ -139,7 +139,7 @@ public sealed partial class SqliteStateStore
         {
             foreach (var step in job.Steps)
             {
-                if (step.Status is not (StepStatus.Pending or StepStatus.Dispatching)) continue;
+                if (step.Status is not (StepStatus.Pending or StepStatus.Waiting or StepStatus.Dispatching)) continue;
                 var sending = step.Status == StepStatus.Dispatching;
                 step.Status = sending ? StepStatus.Unknown : StepStatus.Skipped;
                 step.Result = sending ? "백업 복원: 결과 대조 필요" : "백업 복원: 과거 명령 자동 실행 금지";
