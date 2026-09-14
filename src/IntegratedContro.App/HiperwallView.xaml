@@ -1,0 +1,188 @@
+<UserControl x:Class="IntegratedContro.App.HiperwallView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:IntegratedContro.App" Background="#0B111A" Foreground="#E4EDF7">
+ <UserControl.Resources>
+  <local:HiperwallZoneMatchConverter x:Key="ZoneMatch"/>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#DCE7F3"/></Style>
+  <Style x:Key="Muted" TargetType="TextBlock"><Setter Property="Foreground" Value="#91A6BB"/><Setter Property="FontSize" Value="11"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  <Style x:Key="Panel" TargetType="Border"><Setter Property="Background" Value="#121D2B"/><Setter Property="BorderBrush" Value="#2C3D51"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="10"/><Setter Property="Padding" Value="14"/></Style>
+  <Style TargetType="Button">
+   <Setter Property="Foreground" Value="#E4EDF7"/><Setter Property="Background" Value="#25374D"/><Setter Property="BorderBrush" Value="#415773"/><Setter Property="Padding" Value="10,7"/><Setter Property="Margin" Value="3,0"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="5" Padding="{TemplateBinding Padding}">
+     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Border>
+    <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#385675"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#FFD58A"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value=".4"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="TextBox"><Setter Property="Foreground" Value="#E4EDF7"/><Setter Property="CaretBrush" Value="White"/><Setter Property="Background" Value="#0D1622"/><Setter Property="BorderBrush" Value="#415773"/><Setter Property="Padding" Value="8"/><Setter Property="Margin" Value="0,6,0,8"/></Style>
+  <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+   <Setter Property="Background" Value="#101A27"/><Setter Property="Foreground" Value="#DCE7F3"/><Setter Property="BorderThickness" Value="0"/><Setter Property="RowBackground" Value="#101A27"/><Setter Property="AlternatingRowBackground" Value="#142131"/>
+   <Setter Property="HorizontalGridLinesBrush" Value="#263549"/><Setter Property="HeadersVisibility" Value="Column"/><Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/><Setter Property="RowHeight" Value="30"/><Setter Property="CanUserSortColumns" Value="False"/><Setter Property="VirtualizingPanel.IsVirtualizingWhenGrouping" Value="True"/>
+  </Style>
+  <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#1B2C40"/><Setter Property="Foreground" Value="#AFC4DA"/><Setter Property="Padding" Value="8,6"/><Setter Property="BorderThickness" Value="0"/></Style>
+  <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="6"/>
+   <Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#354A63"/><Setter Property="Foreground" Value="#FFD58A"/></Trigger></Style.Triggers>
+  </Style>
+  <Style TargetType="TabItem"><Setter Property="Foreground" Value="#182F47"/><Setter Property="Padding" Value="10,6"/></Style>
+ </UserControl.Resources>
+ <Grid Margin="14">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <DockPanel Margin="2,0,2,10">
+   <Button DockPanel.Dock="Right" VerticalAlignment="Top" Content="목록 새로 고침" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HiperwallRefresh" Background="#20695E"/>
+   <StackPanel>
+    <StackPanel Orientation="Horizontal"><TextBlock Text="Hiperwall 편집" FontSize="23" FontWeight="Bold"/>
+     <Border Background="#1F3A38" CornerRadius="10" Padding="10,4" Margin="14,2"><TextBlock Text="{Binding EditMode}" Foreground="#7DDFC5" FontSize="11"/></Border>
+     <TextBlock Text="{Binding Status}" Margin="8,6,0,0" FontWeight="SemiBold" Foreground="#FFD58A"/>
+    </StackPanel>
+    <TextBlock Text="{Binding CurrentConnection}" Margin="0,4,0,3"/>
+    <WrapPanel><TextBlock Text="{Binding ControllerInfo}" Style="{StaticResource Muted}" Margin="0,0,18,0"/><TextBlock Text="{Binding LastSuccess}" Style="{StaticResource Muted}"/></WrapPanel>
+   </StackPanel>
+  </DockPanel>
+  <Border Grid.Row="1" Background="#1B2C40" CornerRadius="6" Padding="10,8" Margin="0,0,0,12"><TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12"/></Border>
+  <Grid Grid.Row="2">
+   <Grid.ColumnDefinitions><ColumnDefinition Width=".9*" MinWidth="225"/><ColumnDefinition Width="12"/><ColumnDefinition Width="2*" MinWidth="365"/><ColumnDefinition Width="12"/><ColumnDefinition Width=".9*" MinWidth="225"/></Grid.ColumnDefinitions>
+   <Border Style="{StaticResource Panel}">
+    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <StackPanel><TextBlock Text="CONTENTS LIBRARY" Foreground="#71B8F2" FontSize="10" FontWeight="Bold"/><TextBlock Text="Contents" FontSize="19" FontWeight="SemiBold" Margin="0,4"/><TextBlock Text="{Binding ContentCount}" Style="{StaticResource Muted}"/></StackPanel>
+     <Grid Grid.Row="1"><TextBox x:Name="ContentSearch" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" ToolTip="이름·경로·UUID·유형 검색" AutomationProperties.Name="Contents 이름 UUID 유형 검색"/>
+      <TextBlock Text="이름 · UUID · 유형 검색" Margin="9,6,9,8" VerticalAlignment="Center" Foreground="#91A6BB" IsHitTestVisible="False">
+       <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Search}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+      </TextBlock></Grid>
+     <ComboBox x:Name="ContentTypePicker" Grid.Row="2" ItemsSource="{Binding ContentTypes}" SelectedItem="{Binding TypeFilter}" Margin="0,0,0,10" Foreground="#172B46" AutomationProperties.Name="Contents 유형 필터"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="#172B46"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+     <TextBlock Grid.Row="3" Text="{Binding ContentState}" Style="{StaticResource Muted}" Margin="0,0,0,10"/>
+     <ListBox PreviewMouseLeftButtonDown="ContentPointerDown" PreviewMouseMove="ContentPointerMove" x:Name="ContentList" Grid.Row="4" ItemsSource="{Binding FilteredContents}" SelectedItem="{Binding SelectedContent}"
+      Background="#101A27" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizingWhenGrouping="True">
+      <ListBox.GroupStyle><GroupStyle><GroupStyle.HeaderTemplate><DataTemplate><TextBlock Text="{Binding Name}" Foreground="#73BBAE" FontSize="11" FontWeight="SemiBold" Margin="4,12,0,6" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/></DataTemplate></GroupStyle.HeaderTemplate></GroupStyle></ListBox.GroupStyle>
+      <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem">
+       <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="6,9"/><Setter Property="Foreground" Value="#E4EDF7"/>
+       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+        <Border x:Name="ItemSurface" Background="Transparent" BorderBrush="#263549" BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
+        <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="#354A63"/></Trigger>
+         <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemSurface" Property="BorderBrush" Value="#73BBAE"/></Trigger>
+        </ControlTemplate.Triggers>
+       </ControlTemplate></Setter.Value></Setter>
+      </Style></ListBox.ItemContainerStyle>
+      <ListBox.ItemTemplate><DataTemplate><StackPanel>
+       <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+       <TextBlock FontSize="10" Foreground="#91A6BB" TextTrimming="CharacterEllipsis"><Run Text="{Binding Type, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Identity, Mode=OneWay}"/></TextBlock>
+      </StackPanel></DataTemplate></ListBox.ItemTemplate>
+     </ListBox>
+     <StackPanel Grid.Row="5" Margin="0,12,0,0">
+      <Button Content="선택 콘텐츠 추가" Command="{Binding AddContentCommand}" AutomationProperties.AutomationId="HiperwallAdd" Background="#20695E"/>
+      <TextBlock Text="Zone으로 드래그하거나 오른쪽에서 위치·크기를 지정해 추가하세요." Style="{StaticResource Muted}" Margin="0,8,0,0"/>
+     </StackPanel>
+    </Grid>
+   </Border>
+   <Border Grid.Column="2" Style="{StaticResource Panel}">
+    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="2*" MinHeight="90"/><RowDefinition Height="Auto"/><RowDefinition Height=".6*" MinHeight="85" MaxHeight="160"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <TextBlock Text="Wall · Zone 캔버스" ToolTip="{Binding CanvasSummary}" FontSize="19" FontWeight="SemiBold" Margin="0,4"/>
+     <WrapPanel Grid.Row="1" Margin="0,6,0,8">
+      <Button Content="−" Click="ZoomOut" AutomationProperties.Name="캔버스 축소"/><TextBlock Text="{Binding ZoomLabel, ElementName=WallCanvas}" VerticalAlignment="Center" MinWidth="54" TextAlignment="Center"/>
+      <Button Content="+" Click="ZoomIn" AutomationProperties.Name="캔버스 확대"/><Button Content="전체 맞춤" Click="FitAll"/><Button Content="선택 맞춤" Click="FitSelected"/>
+     </WrapPanel>
+     <Border Grid.Row="2" BorderBrush="#38536D" BorderThickness="1" CornerRadius="6" ClipToBounds="True">
+      <local:HiperwallCanvas x:Name="WallCanvas" Items="{Binding CanvasItems}" Selected="{Binding Selected}" CanManipulate="{Binding CanMove}" LockAspect="{Binding LockAspect}" SnapToGrid="{Binding SnapToGrid}" TargetZone="{Binding TargetZone}"
+       AllowDrop="True" DragOver="CanvasDragOver" Drop="CanvasDrop" AutomationProperties.Name="Hiperwall 편집 캔버스"/>
+     </Border>
+     <StackPanel Grid.Row="3" Margin="0,6,0,5">
+      <ScrollViewer x:Name="ZoneShortcutScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" PanningMode="HorizontalOnly" MaxHeight="56">
+       <ItemsControl x:Name="ZoneShortcuts" ItemsSource="{Binding Zones}">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate><DataTemplate>
+         <Button Tag="{Binding}" Click="ZoneButtonClick" AllowDrop="True" DragOver="ZoneButtonDragOver" DragLeave="ZoneButtonDragLeave" Drop="ZoneButtonDrop"
+          IsEnabled="{Binding CanNavigateZone}" MinHeight="36" Padding="10,4" Margin="0,0,6,0" MaxWidth="180" ToolTip="{Binding ZoneShortcutLabel}" AutomationProperties.Name="{Binding ZoneShortcutLabel}">
+          <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+           <Style.Triggers>
+            <DataTrigger Value="True"><DataTrigger.Binding><MultiBinding Converter="{StaticResource ZoneMatch}">
+             <Binding/><Binding Path="DataContext.TargetZone" RelativeSource="{RelativeSource AncestorType={x:Type UserControl}}"/>
+            </MultiBinding></DataTrigger.Binding><Setter Property="Background" Value="#20695E"/><Setter Property="BorderBrush" Value="#67D4BB"/></DataTrigger>
+            <Trigger Property="local:HiperwallView.IsZoneDropTarget" Value="True"><Setter Property="Background" Value="#725323"/><Setter Property="BorderBrush" Value="#FFD58A"/></Trigger>
+           </Style.Triggers>
+          </Style></Button.Style>
+          <TextBlock Text="{Binding ZoneShortcutLabel}" TextTrimming="CharacterEllipsis" FontSize="11"/>
+         </Button>
+        </DataTemplate></ItemsControl.ItemTemplate>
+       </ItemsControl>
+      </ScrollViewer>
+      <TextBlock Text="Zone 버튼: 화면 이동 · 소스를 버튼에 놓기: 크기 유지 이동" Style="{StaticResource Muted}" FontSize="10" Margin="0,4,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+       ToolTip="Zone 버튼을 클릭하면 해당 영역을 봅니다. 열린 소스를 버튼에 놓으면 원래 크기로 Zone 중앙에 이동합니다. Contents를 놓으면 원본 크기로 추가합니다. 마우스·터치 이동 / 모서리 크기 조절 / 휠 확대 / Esc 취소."/>
+     </StackPanel>
+     <TabControl Grid.Row="4" Background="#101A27" BorderBrush="#2C3D51" Padding="0">
+      <TabItem Header="열린 콘텐츠">
+       <Grid Margin="6"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <TextBlock Text="{Binding InstanceBrief}" ToolTip="{Binding InstanceState}" Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
+        <DataGrid x:Name="InstanceGrid" Grid.Row="1" ItemsSource="{Binding Instances}" SelectedItem="{Binding SelectedInstance}"><DataGrid.Columns>
+         <DataGridTextColumn Header="콘텐츠 이름" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="인스턴스 ID" Binding="{Binding Identity}" Width="*"/>
+        </DataGrid.Columns></DataGrid>
+       </Grid>
+      </TabItem>
+      <TabItem Header="Zone">
+       <Grid Margin="6"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <TextBlock Text="{Binding ZoneBrief}" ToolTip="{Binding ZoneState}" Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
+        <DataGrid x:Name="ZoneGrid" Grid.Row="1" ItemsSource="{Binding Zones}" SelectedItem="{Binding SelectedZone}"><DataGrid.Columns>
+         <DataGridTextColumn Header="Zone 이름" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="Zone ID" Binding="{Binding Identity}" Width="*"/>
+        </DataGrid.Columns></DataGrid>
+       </Grid>
+      </TabItem>
+      <TabItem Header="Wall">
+       <Grid Margin="6"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <TextBlock Text="{Binding WallBrief}" ToolTip="{Binding WallState}" Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
+        <DataGrid Grid.Row="1" ItemsSource="{Binding Walls}" SelectedItem="{Binding SelectedWall}"><DataGrid.Columns>
+         <DataGridTextColumn Header="Wall 이름" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="식별자" Binding="{Binding Identity}" Width="*"/>
+        </DataGrid.Columns></DataGrid>
+       </Grid>
+      </TabItem>
+      <TabItem Header="전송 기록">
+       <Grid Margin="6"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <WrapPanel><Button Content="전송 기록 확인" Command="{Binding CheckEditCommand}"/><Button Content="선택 기록의 남은 전송 취소" Command="{Binding CancelEditCommand}"/></WrapPanel>
+        <ListBox Grid.Row="1" ItemsSource="{Binding EditHistory}" SelectedItem="{Binding SelectedEdit}" DisplayMemberPath="Summary" ToolTip="{Binding EditDetails}" Background="#101A27" Foreground="#DCE7F3" BorderThickness="0" Margin="0,6,0,0"/>
+       </Grid>
+      </TabItem>
+     </TabControl>
+     <StackPanel Grid.Row="5" Margin="0,6,0,0">
+      <WrapPanel><Button Content="선택 닫기" Command="{Binding CloseInstanceCommand}"/>
+       <Button Content="전체 음소거" Command="{Binding MuteAllCommand}"/><Button Content="전체 음소거 해제" Command="{Binding UnmuteAllCommand}"/>
+       <Button x:Name="CloseAllButton" Content="전체 닫기…" Command="{Binding CloseAllCommand}" Background="#733D47"/>
+      </WrapPanel>
+      <TextBlock Text="{Binding EditResult}" Style="{StaticResource Muted}" Margin="3,8,0,0"/>
+     </StackPanel>
+    </Grid>
+   </Border>
+   <Border Grid.Column="4" Style="{StaticResource Panel}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+     <StackPanel>
+      <TextBlock Text="LIVE CONTROLS" Foreground="#71B8F2" FontSize="10" FontWeight="Bold"/>
+      <TextBlock Text="선택 콘텐츠 편집" FontSize="19" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Text="{Binding SelectedName}" Foreground="#FFD58A" TextWrapping="Wrap" Margin="0,10"/>
+      <TextBlock Text="{Binding EditHint}" Style="{StaticResource Muted}" Margin="0,0,0,12"/>
+      <TextBlock Text="배치할 Zone" FontWeight="SemiBold"/>
+      <ComboBox x:Name="EditZonePicker" ItemsSource="{Binding Zones}" SelectedItem="{Binding TargetZone}" ToolTip="{Binding TargetZone.Identity}" Foreground="#172B46" Margin="0,7,0,12" IsEnabled="{Binding CanOperate}"><ComboBox.ItemTemplate><DataTemplate><TextBlock Foreground="#172B46"><Run Text="{Binding Name, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Identity, Mode=OneWay}"/></TextBlock></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+      <TextBlock Text="위치 · 크기 (절대 px)" FontWeight="SemiBold"/>
+      <UniformGrid Columns="2" Margin="0,5,0,0">
+       <StackPanel Margin="0,0,5,0"><TextBlock Text="중심 X" Style="{StaticResource Muted}"/><TextBox x:Name="EditX" Text="{Binding EditX, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanOperate}" AutomationProperties.Name="중심 X"/></StackPanel>
+       <StackPanel Margin="5,0,0,0"><TextBlock Text="중심 Y" Style="{StaticResource Muted}"/><TextBox x:Name="EditY" Text="{Binding EditY, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanOperate}" AutomationProperties.Name="중심 Y"/></StackPanel>
+       <StackPanel Margin="0,0,5,0"><TextBlock Text="너비" Style="{StaticResource Muted}"/><TextBox x:Name="EditWidth" Text="{Binding EditWidth, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanOperate}" AutomationProperties.Name="너비"/></StackPanel>
+       <StackPanel Margin="5,0,0,0"><TextBlock Text="높이" Style="{StaticResource Muted}"/><TextBox x:Name="EditHeight" Text="{Binding EditHeight, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanOperate}" AutomationProperties.Name="높이"/></StackPanel>
+      </UniformGrid>
+      <WrapPanel><Button Content="위치·크기 적용" Command="{Binding ApplyGeometryCommand}" AutomationProperties.AutomationId="HiperwallGeometry"/><Button Content="Zone 중앙 이동" Command="{Binding CenterInZoneCommand}"/></WrapPanel>
+      <CheckBox Content="크기 드래그 시 비율 유지" IsChecked="{Binding LockAspect}" Foreground="#DCE7F3" Margin="4,12,0,5"/>
+      <CheckBox Content="드래그 시 Zone 격자 맞춤" IsChecked="{Binding SnapToGrid}" Foreground="#DCE7F3" Margin="4,0,0,12" ToolTip="Controller가 제공한 Zone 격자 수를 사용합니다."/>
+      <TextBlock Text="Zone 밖으로 이동할 수 있습니다. Zone 이동은 현재 크기를 유지합니다." Style="{StaticResource Muted}"/>
+      <Border Height="1" Background="#2C3D51" Margin="0,16"/>
+      <DockPanel><TextBlock Text="콘텐츠 소리" FontWeight="SemiBold"/><TextBlock Text="{Binding EditVolume, StringFormat={}{0}%}" HorizontalAlignment="Right" Foreground="#FFD58A"/></DockPanel>
+      <Slider x:Name="VolumeSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding EditVolume}" IsEnabled="{Binding CanAudio}" Margin="0,12" AutomationProperties.Name="선택 콘텐츠 음량"/>
+      <WrapPanel><Button Content="음량 적용" Command="{Binding ApplyVolumeCommand}"/><Button Content="{Binding MuteLabel}" Command="{Binding MuteCommand}"/></WrapPanel>
+      <TextBlock Text="음량 적용은 현재 음소거 상태를 유지합니다. 소리 정보가 없는 콘텐츠는 조절할 수 없습니다." Style="{StaticResource Muted}" Margin="0,10"/>
+      <Expander Header="현재 관측 · 원문 필드" Foreground="#DCE7F3" Margin="0,10,0,0">
+       <StackPanel><TextBlock Text="{Binding SelectedGeometry}" Style="{StaticResource Muted}" Margin="0,8"/><TextBox Text="{Binding Details, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Height="200" VerticalScrollBarVisibility="Auto" FontSize="11"/></StackPanel>
+      </Expander>
+      <Expander Header="선택 전송 기록 상세" Foreground="#DCE7F3" Margin="0,10,0,0"><TextBox Text="{Binding EditDetails, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Height="200" VerticalScrollBarVisibility="Auto" FontSize="11"/></Expander>
+     </StackPanel>
+    </ScrollViewer>
+   </Border>
+  </Grid>
+ </Grid>
+</UserControl>

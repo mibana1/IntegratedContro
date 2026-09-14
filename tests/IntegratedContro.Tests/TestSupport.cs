@@ -1,4 +1,4 @@
-﻿using IntegratedContro.Application;
+using IntegratedContro.Application;
 using IntegratedContro.Core;
 using IntegratedContro.Infrastructure;
 
@@ -53,12 +53,15 @@ internal sealed class Rig : IDisposable
     public TestHasher Hasher { get; } = new();
     public LoginResult Admin { get; private set; }
     public long Generation { get; set; }
-    public Rig()
+    private readonly IHiperwallReader? _hiperwall;
+    private readonly ICredentialStore? _credentials;
+    public Rig(IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null)
     {
+        _hiperwall = hiperwall; _credentials = credentials;
         Store = new(DirectoryPath, true);
         var admin = new InitialAdministratorPolicy(Hasher).Create("admin", Password);
         Store.Save(new HostState { Initialized = true, SiteName = "Test site", Accounts = [admin] });
-        Service = new(Store, Hasher, Driver, Clock);
+        Service = new(Store, Hasher, Driver, Clock, hiperwall: _hiperwall, credentials: _credentials);
         Admin = Login(); Generation = Service.Acquire(Admin.Token).Generation;
     }
     public LoginResult Login(string name = "admin", string? pc = null) =>
@@ -85,7 +88,7 @@ internal sealed class Rig : IDisposable
     public void Restart()
     {
         Store.Dispose(); Store = new(DirectoryPath);
-        Service = new(Store, Hasher, Driver, Clock);
+        Service = new(Store, Hasher, Driver, Clock, hiperwall: _hiperwall, credentials: _credentials);
         Admin = Login();
     }
     public void Dispose()

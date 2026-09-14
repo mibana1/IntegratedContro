@@ -1,4 +1,4 @@
-﻿using IntegratedContro.Core;
+using IntegratedContro.Core;
 
 namespace IntegratedContro.Application;
 
@@ -27,6 +27,8 @@ public static class AuditPresentation
             "PreviousSessionFenced" => "이전 세션 차단", "AccountCreated" => "계정 등록",
             "AccountPermissionsChanged" => "계정 권한 변경", "VirtualDeviceSaved" => "가상 장비 저장",
             "RoleAssigned" => "역할 배정", "ScenarioSaved" => "시나리오 저장",
+            "HiperwallSettingsSaved" => "Hiperwall 연결 설정 변경", "HiperwallConnectionTest" => "Hiperwall 연결 테스트",
+            "HiperwallEditAccepted" => "Hiperwall 편집 접수", "HiperwallEditResult" => "Hiperwall 전송 결과", "HiperwallEditCancelled" => "Hiperwall 미전송 취소",
             "LightOrderSaved" => "조명 배치 저장", "LightBatchAccepted" => "조명 일괄 명령 접수",
             "JobAccepted" => "작업 접수", "JobCancellation" => "작업 취소 요청",
             "VirtualStateReconciled" => "가상 상태 대조", "DispatchIntent" => "전송 준비",
@@ -51,6 +53,9 @@ public static class AuditPresentation
         };
         var message = entry.Action switch
         {
+            "HiperwallSettingsSaved" => $"Hiperwall 연결 설정 버전 {Field("version")}을 저장했습니다. 새 연결 확인이 필요합니다.",
+            "HiperwallConnectionTest" => $"적용 설정 버전 {Field("version")}의 읽기 전용 연결 테스트: {(Enum.TryParse<HiperwallConnectionState>(Field("result"), out var status) ? HiperwallLabels.State(status) : "결과 확인 필요")}.",
+            "HiperwallEditAccepted" or "HiperwallEditResult" or "HiperwallEditCancelled" => entry.Detail,
             "InitialAdministratorCreated" => "호스트 최초 설정과 관리자 생성을 완료했습니다.",
             "HostStarted" => "호스트를 시작하고 작업을 복구했습니다. 불확실 명령과 중단 시나리오는 자동 재실행하지 않습니다.",
             "Login" => $"{Field("pc")}에서 로그인했습니다.",

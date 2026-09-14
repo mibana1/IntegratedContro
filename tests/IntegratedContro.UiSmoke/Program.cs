@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,7 +14,7 @@ namespace IntegratedContro.UiSmoke;
 
 /// <summary>Runs the production WPF window/ViewModels on an STA dispatcher against a separate real HTTPS EXE.
 /// This is code-driven WPF smoke coverage, not native input automation or a physical second-PC test.</summary>
-public static class Program
+public static partial class Program
 {
     [STAThread]
     public static int Main(string[] args)
@@ -33,7 +33,7 @@ public static class Program
         var result = 1;
         app.Dispatcher.InvokeAsync(async () =>
         {
-            try { await RunLogin(); await Run(); await RunLighting(); result = 0; }
+            try { if (!args.Contains("--hiperwall-only")) { await RunLogin(); await Run(); await RunLighting(); } await RunHiperwall(); await RunHiperwallEditing(); result = 0; }
             catch (Exception error) { Console.Error.WriteLine(error); }
             finally { app.Shutdown(); }
         });
@@ -152,7 +152,7 @@ public static class Program
             a.DeviceName = firstDevice.Name; a.PcIdText = Guid.NewGuid().ToString(); a.PcName = "가상 대상 PC B";
             await Execute(a, a.SaveDeviceCommand); Require(a.Devices.Count == 2, a.Message);
             var secondDevice = a.Devices.Single(d => d.Id != firstDevice.Id);
-            var adminTabs = Find<TabControl>(first)!; adminTabs.SelectedIndex = 3; first.UpdateLayout();
+            var adminTabs = Find<TabControl>(first)!; adminTabs.SelectedItem = first.FindName("AdminTab"); first.UpdateLayout();
             var targetPicker = (ComboBox)first.FindName("RoleDevicePicker");
             targetPicker.SetCurrentValue(ComboBox.SelectedItemProperty, secondDevice);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
@@ -382,7 +382,7 @@ public static class Program
         await Execute(vm, vm.ReleaseCommand);
         Require(!vm.AllLightsOffCommand.CanExecute(null) && !group.OffCommand.CanExecute(null), "Read-only mode allowed bulk power");
         await Execute(vm, vm.AcquireCommand);
-        var tabs = (TabControl)window.FindName("MainTabs"); tabs.SelectedIndex = 4;
+        var tabs = (TabControl)window.FindName("MainTabs"); tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(t => t.Header?.ToString() == "복구 · 진단");
         window.UpdateLayout();
         Require(vm.Audit.Any(a => a.Event == "조명 일괄 명령 접수" && a.Summary.Contains("단계")), "Readable audit message missing");
         vm.SelectedAudit = vm.Audit.First(a => a.Entry.Action == "DispatchResult");

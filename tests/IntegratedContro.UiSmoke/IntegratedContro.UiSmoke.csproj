@@ -4,4 +4,6 @@
 <ProjectReference Include="../../src/IntegratedContro.App/IntegratedContro.App.csproj" />
 <ProjectReference Include="../../src/IntegratedContro.ControlHost/IntegratedContro.ControlHost.csproj" ReferenceOutputAssembly="false" />
 <Compile Include="../IntegratedContro.Tests/HostProcess.cs" Link="HostProcess.cs" />
+<Compile Include="../IntegratedContro.Tests/FakeHiperwallServer.cs" Link="FakeHiperwallServer.cs" />
+<Compile Include="../IntegratedContro.Tests/HiperwallEditorFixture.cs" Link="HiperwallEditorFixture.cs" />
 </ItemGroup></Project>

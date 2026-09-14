@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -48,6 +48,7 @@ public sealed record JobRow(Job Job, bool PreviousSession)
 }
 public sealed partial class MainViewModel : Bindable
 {
+    public HiperwallViewModel Hiperwall { get; } = new();
     private readonly ClientPreferences _preferences = ClientPreferences.Load();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly List<AsyncCommand> _commands = [];
@@ -285,6 +286,8 @@ public sealed partial class MainViewModel : Bindable
             ReviewText = $"확인 시각: {_review.ReviewedAt:O}\n사용권 세대: {_review.Generation}\n불확실 장비: {string.Join(", ", _review.UncertainDevices)}\n\n" +
                 string.Join("\n\n", _review.Jobs.Select(j => $"{j.Id} | {j.Snapshot.RequesterName} | {j.Snapshot.Name}\n{j.Status} | {j.Result}\n" +
                     string.Join(", ", j.Snapshot.Steps.Select(x => $"{x.Target.PcName}/{x.Target.Name}").Distinct())));
+            ReviewText += "\n\nHiperwall 편집 · 진행/결과 확인 필요\n" + string.Join("\n\n", _review.HiperwallEdits.Select(r =>
+                $"{r.Requester.UserName} / {r.Requester.PcName} · {r.Summary}\n요청 {r.Request.RequestId}\n" + string.Join("\n", r.Steps.Select(s => $"{s.Command.InstanceId}: {s.Message}"))));
             Changed(nameof(ReviewText)); Message = "진행 작업과 불확실 대상을 확인한 후 관리자 복구 인계를 승인하세요.";
         }, () => IsAdmin && _state?.Lease.Mode == LeaseMode.RecoveryRequired);
         ApproveCommand = Command(async () =>
@@ -328,6 +331,7 @@ public sealed partial class MainViewModel : Bindable
     }
     private async Task Logout()
     {
+        Hiperwall.Close();
         try { await Client.Post<bool>("/api/logout"); Message = "로그아웃 완료. 접수 작업은 호스트에서 계속 처리합니다."; }
         finally
         {
@@ -439,11 +443,14 @@ public sealed partial class MainViewModel : Bindable
             nameof(UserSummary), nameof(LeaseSummary), nameof(PreviousSummary), nameof(ConnectionSummary), nameof(PendingSummary),
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
         RefreshLighting();
+        Hiperwall.Generation = Generation;
+        Hiperwall.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
+            IsAdmin, CanConfigure, _state?.HiperwallReadSupported ?? false, _state?.HiperwallConfigurationVersion ?? 0, CanControl && (_state?.CanControlHiperwall ?? false), _state?.HiperwallWriteSupported ?? false);
         foreach (var command in _commands) command.Raise();
     }
     public async Task CloseAsync()
     {
-        _closing = true; _timer.Stop(); Notify();
+        _closing = true; Hiperwall.Close(); _timer.Stop(); Notify();
         try { if (IsLoggedIn) await Client.Post<bool>("/api/logout"); }
         catch (Exception) { /* The host fences on missed heartbeat; accepted work remains authoritative. */ }
         finally { _client?.Dispose(); }

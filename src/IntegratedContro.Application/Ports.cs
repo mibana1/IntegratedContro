@@ -7,6 +7,20 @@ public interface IStateStore : IDisposable
     HostState Load();
     void Save(HostState state);
 }
+public interface ICredentialStore
+{
+    Guid Save(string secret);
+    string Read(Guid reference);
+}
+public interface IHiperwallReader
+{
+    Task<HiperwallReading> ReadAsync(HiperwallConfiguration configuration, string? secret, CancellationToken cancellationToken);
+}
+public interface IHiperwallWriter
+{
+    Task<HiperwallWriteResult> WriteAsync(HiperwallConfiguration configuration, string? secret,
+        HiperwallWireCommand command, CancellationToken cancellationToken);
+}
 public interface IPasswordHasher
 {
     string Hash(string password);

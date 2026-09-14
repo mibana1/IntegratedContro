@@ -31,28 +31,32 @@ public sealed class HostClient : IDisposable
             cert is not null && DateTime.UtcNow >= cert.NotBefore.ToUniversalTime() &&
             DateTime.UtcNow <= cert.NotAfter.ToUniversalTime() &&
             CryptographicOperations.FixedTimeEquals(cert.GetCertHash(HashAlgorithmName.SHA256), pin);
-        _http = new HttpClient(handler) { BaseAddress = uri, Timeout = TimeSpan.FromSeconds(8) };
+        _http = new HttpClient(handler) { BaseAddress = uri, Timeout = Timeout.InfiniteTimeSpan };
     }
     public void SetToken(string token) => _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    public async Task<T> Post<T>(string route, object? request = null)
+    public async Task<T> Post<T>(string route, object? request = null, CancellationToken cancellationToken = default, int timeoutMs = 8000)
     {
-        using var response = request is null ? await _http.PostAsync(route, null) :
-            await _http.PostAsJsonAsync(route, request, JsonDefaults.Options);
-        return await Read<T>(response);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(timeoutMs);
+        using var response = request is null ? await _http.PostAsync(route, null, timeout.Token) :
+            await _http.PostAsJsonAsync(route, request, JsonDefaults.Options, timeout.Token);
+        return await Read<T>(response, timeout.Token);
     }
-    public async Task<T> Get<T>(string route)
+    public async Task<T> Get<T>(string route, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.GetAsync(route); return await Read<T>(response);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(8000);
+        using var response = await _http.GetAsync(route, timeout.Token); return await Read<T>(response, timeout.Token);
     }
-    private static async Task<T> Read<T>(HttpResponseMessage response)
+    private static async Task<T> Read<T>(HttpResponseMessage response, CancellationToken ct)
     {
         if (!response.IsSuccessStatusCode)
         {
             ApiError? error = null;
-            try { error = await response.Content.ReadFromJsonAsync<ApiError>(JsonDefaults.Options); } catch (JsonException) { }
+            try { error = await response.Content.ReadFromJsonAsync<ApiError>(JsonDefaults.Options, ct); } catch (JsonException) { }
             throw new ApiException(error?.Code ?? "http_error", error?.Message ?? $"호스트 응답: {(int)response.StatusCode}", response.StatusCode);
         }
-        return await response.Content.ReadFromJsonAsync<T>(JsonDefaults.Options) ?? throw new InvalidDataException("호스트 응답이 비어 있습니다.");
+        return await response.Content.ReadFromJsonAsync<T>(JsonDefaults.Options, ct) ?? throw new InvalidDataException("호스트 응답이 비어 있습니다.");
     }
     public void Dispose() => _http.Dispose();
 }

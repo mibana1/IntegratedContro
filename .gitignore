@@ -1,4 +1,4 @@
-﻿# Prerequisites
+# Prerequisites
 *.d
 
 # Object files
@@ -56,7 +56,10 @@ dkms.conf
 # debug information files
 *.dwo
 
-/docs/
+/docs/*
+!/docs/PROJECT_GUIDE.md
+!/docs/HIPERWALL_PROTOCOL.md
+!/docs/HIPERWALL_VALIDATION.md
 
 # .NET build output and local operational/test data
 **/bin/

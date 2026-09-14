@@ -1,4 +1,4 @@
-﻿using IntegratedContro.Core;
+using IntegratedContro.Core;
 
 namespace IntegratedContro.Application;
 
@@ -8,6 +8,10 @@ public sealed partial class ControlService
     {
         var next = JsonDefaults.Copy(_state);
         if (next.Lease.Mode != LeaseMode.Free) Fence(next, "호스트 재시작: 이전 인증 세션 무효");
+        foreach (var edit in next.HiperwallEdits.Where(r => r.Active))
+            foreach (var step in edit.Steps.Where(s => s.State is HiperwallSendState.Pending or HiperwallSendState.Sending))
+            { step.State = step.State == HiperwallSendState.Sending ? HiperwallSendState.Unknown : HiperwallSendState.Rejected;
+              step.Message = "호스트 재시작: 자동 재전송하지 않습니다. Controller 목록과 대조하세요."; }
         foreach (var job in next.Jobs.Where(j => j.Active))
         {
             foreach (var (run, index) in job.Steps.Select((x, i) => (x, i)))

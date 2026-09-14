@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
@@ -26,10 +26,12 @@ public sealed partial class ControlService
     { public DateTimeOffset LastSeen { get; set; } = CreatedAt; }
     private sealed record ReviewTicket(Guid UserId, long Generation, DateTimeOffset At, string Fingerprint);
     public ControlService(IStateStore store, IPasswordHasher passwords, IDeviceDriver driver,
-        TimeProvider? time = null, int heartbeatTimeoutSeconds = 15)
+        TimeProvider? time = null, int heartbeatTimeoutSeconds = 15,
+        IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null)
     {
         Require(heartbeatTimeoutSeconds is >= 3 and <= 300, "invalid_timeout", "생존 확인 제한은 3~300초입니다.", 400);
         _store = store; _passwords = passwords; _driver = driver;
+        _hiperwall = hiperwall; _credentials = credentials;
         _time = time ?? TimeProvider.System;
         _heartbeatTimeout = TimeSpan.FromSeconds(heartbeatTimeoutSeconds);
         _state = store.Load();
@@ -146,7 +148,8 @@ public sealed partial class ControlService
                 s.UncertainDevices.ToArray(), User(s, session).Role == AccountRole.Administrator
                     ? s.Accounts.Select(a => new AccountView(a.Id, a.Name, a.Role, a.Enabled, a.AllDevices, a.DeviceIds.ToArray())).ToArray() : [],
                 s.Audit.TakeLast(200).Select(a => AuditPresentation.Enrich(a, s)).ToArray(), _driver.Models, (int)_heartbeatTimeout.TotalSeconds)
-                { LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = CurrentLightLayout(s),
+                { HiperwallWriteSupported = _hiperwall is IHiperwallWriter, CanControlHiperwall = HiperwallPermission(User(s, session)), HiperwallReadSupported = _hiperwall is not null, HiperwallConfigurationVersion = s.Hiperwall?.Version ?? 0,
+                    LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = CurrentLightLayout(s),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(User(s, session), d.Id)).Select(d => d.Id).ToArray() });
         }
     }
@@ -184,6 +187,7 @@ public sealed partial class ControlService
     public bool Logout(string token) => Change(s =>
     {
         var session = Authenticate(token);
+        CancelHiperwallSession(session.Info.Id);
         if (s.Lease.Mode == LeaseMode.Held && s.Lease.SessionId == session.Info.Id)
             s.Lease = new Lease { Mode = LeaseMode.Free, Generation = s.Lease.Generation + 1 };
         if (!s.FencedSessions.Contains(session.Info.Id)) s.FencedSessions.Add(session.Info.Id);
@@ -204,11 +208,12 @@ public sealed partial class ControlService
             var next = JsonDefaults.Copy(_state);
             Audit(next, session.Info.UserId, "RecoveryReviewed", $"review={id}");
             Persist(next);
-            return new(id, _state.Lease.Generation, Now, JsonDefaults.Copy(_state.Jobs.ToArray()), _state.UncertainDevices.ToArray());
+            return new RecoveryReview(id, _state.Lease.Generation, Now, JsonDefaults.Copy(_state.Jobs.ToArray()), _state.UncertainDevices.ToArray())
+                { HiperwallEdits = JsonDefaults.Copy(_state.HiperwallEdits.Where(r => r.Active || r.Steps.Any(s => s.State == HiperwallSendState.Unknown)).ToArray()) };
         }
     }
     private static string RecoveryFingerprint(HostState state) => Digest(System.Text.Json.JsonSerializer.Serialize(
-        new { state.Jobs, state.UncertainDevices }, JsonDefaults.Options));
+        new { state.Jobs, state.UncertainDevices, HiperwallEdits = state.HiperwallEdits.Where(r => r.Active || r.Steps.Any(s => s.State == HiperwallSendState.Unknown)).ToArray() }, JsonDefaults.Options));
     public Lease ApproveRecovery(string token, Guid reviewId) => Change(s =>
     {
         var session = Admin(s, token);
@@ -224,6 +229,6 @@ public sealed partial class ControlService
     });
     public void StopAccepting()
     {
-        lock (_gate) { _stopping = true; }
+        lock (_gate) { _stopping = true; foreach (var query in _hiperwallQueries.Values) query.Cancel(); }
     }
 }
