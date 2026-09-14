@@ -10,7 +10,13 @@ public sealed partial class ControlService
     private static bool HiperwallPermission(Account account) => account.Enabled && account.Role != AccountRole.Viewer && account.AllDevices;
     public HiperwallEditReceipt[] GetHiperwallEdits(string token)
     {
-        lock (_gate) { HiperwallReaderSession(token); return JsonDefaults.Copy(_state.HiperwallEdits.TakeLast(100).Reverse().ToArray()); }
+        lock (_gate)
+        {
+            HiperwallReaderSession(token);
+            var recent = _state.HiperwallEdits.TakeLast(100).Select(r => r.Request.RequestId).ToHashSet();
+            return JsonDefaults.Copy(_state.HiperwallEdits.Where(r => r.NeedsAttention || recent.Contains(r.Request.RequestId))
+                .Reverse().ToArray());
+        }
     }
     public HiperwallEditReceipt GetHiperwallEdit(string token, Guid id)
     {

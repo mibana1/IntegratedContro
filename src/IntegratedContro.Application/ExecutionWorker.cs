@@ -18,11 +18,14 @@ public sealed partial class ControlService
             {
                 if (run.Status != StepStatus.Dispatching) continue;
                 run.Status = StepStatus.Unknown; run.Result = "호스트 중단: 전송/결과 불확실. 자동 재전송 금지.";
-                var recoveredDevice = next.DeviceStates[job.Snapshot.Steps[index].Target.Id];
-                recoveredDevice.Connection = "호스트 중단 / 가상 상태 대조 필요";
-                recoveredDevice.LastResult = run.Result;
-                if (!next.UncertainDevices.Contains(job.Snapshot.Steps[index].Target.Id))
-                    next.UncertainDevices.Add(job.Snapshot.Steps[index].Target.Id);
+                var target = job.Snapshot.Steps[index].Target;
+                if (next.Devices.Any(d => d.MatchesExecutionTarget(target)) &&
+                    next.DeviceStates.TryGetValue(target.Id, out var recoveredDevice))
+                {
+                    recoveredDevice.Connection = "호스트 중단 / 가상 상태 대조 필요";
+                    recoveredDevice.LastResult = run.Result;
+                    if (!next.UncertainDevices.Contains(target.Id)) next.UncertainDevices.Add(target.Id);
+                }
             }
             // A never-dispatched manual command is durably queued and may proceed after revalidation.
             // Every interrupted scenario is stopped, including a wait before the first step.
@@ -103,13 +106,17 @@ public sealed partial class ControlService
                 var job = FindJob(next, jobId);
                 var run = job.Steps[stepIndex];
                 run.Status = result.Status; run.Result = result.Detail; run.FinishedAt = Now;
-                var device = next.DeviceStates[snapshot.Target.Id];
-                device.LastResult = result.Detail;
-                device.Connection = result.Status == StepStatus.Simulated ? "가상 연결됨" : "가상 오류/대조 필요";
-                if (result.Values is not null)
-                    foreach (var pair in result.Values) device.Simulated[pair.Key] = new(pair.Value, Now);
-                if (result.Status == StepStatus.Unknown && !next.UncertainDevices.Contains(snapshot.Target.Id))
-                    next.UncertainDevices.Add(snapshot.Target.Id);
+                // Keep the original result in the job, but never attribute it to a replacement target.
+                if (next.Devices.Any(d => d.MatchesExecutionTarget(snapshot.Target)) &&
+                    next.DeviceStates.TryGetValue(snapshot.Target.Id, out var device))
+                {
+                    device.LastResult = result.Detail;
+                    device.Connection = result.Status == StepStatus.Simulated ? "가상 연결됨" : "가상 오류/대조 필요";
+                    if (result.Values is not null)
+                        foreach (var pair in result.Values) device.Simulated[pair.Key] = new(pair.Value, Now);
+                    if (result.Status == StepStatus.Unknown && !next.UncertainDevices.Contains(snapshot.Target.Id))
+                        next.UncertainDevices.Add(snapshot.Target.Id);
+                }
                 var cancelled = job.CancelRequestedAt is not null;
                 var stop = cancelled || result.Status is StepStatus.Unknown or StepStatus.Skipped ||
                     (result.Status != StepStatus.Simulated && snapshot.OnFailure == FailurePolicy.Stop);

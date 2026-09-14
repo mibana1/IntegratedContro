@@ -33,7 +33,16 @@ public static partial class Program
         var result = 1;
         app.Dispatcher.InvokeAsync(async () =>
         {
-            try { if (!args.Contains("--hiperwall-only")) { await RunLogin(); await Run(); await RunLighting(); } await RunHiperwall(); await RunHiperwallEditing(); result = 0; }
+            try
+            {
+                if (args.Contains("--handover-only")) await RunHandover();
+                else
+                {
+                    if (!args.Contains("--hiperwall-only")) { await RunLogin(); await Run(); await RunLighting(); }
+                    await RunHiperwall(); await RunHiperwallEditing(); await RunHandover();
+                }
+                result = 0;
+            }
             catch (Exception error) { Console.Error.WriteLine(error); }
             finally { app.Shutdown(); }
         });

@@ -149,6 +149,7 @@ public sealed partial class ControlService
                     ? s.Accounts.Select(a => new AccountView(a.Id, a.Name, a.Role, a.Enabled, a.AllDevices, a.DeviceIds.ToArray())).ToArray() : [],
                 s.Audit.TakeLast(200).Select(a => AuditPresentation.Enrich(a, s)).ToArray(), _driver.Models, (int)_heartbeatTimeout.TotalSeconds)
                 { HiperwallWriteSupported = _hiperwall is IHiperwallWriter, CanControlHiperwall = HiperwallPermission(User(s, session)), HiperwallReadSupported = _hiperwall is not null, HiperwallConfigurationVersion = s.Hiperwall?.Version ?? 0,
+                    OutstandingHiperwallEdits = s.HiperwallEdits.Where(r => r.NeedsAttention).OrderByDescending(r => r.AcceptedAt).ToArray(),
                     LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = CurrentLightLayout(s),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(User(s, session), d.Id)).Select(d => d.Id).ToArray() });
         }

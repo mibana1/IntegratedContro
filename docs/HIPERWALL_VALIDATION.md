@@ -2,6 +2,21 @@
 
 최근 검증일: 2026-09-14. 구현 완료·가짜 서버 검증·실제 Controller 검증을 구분한다.
 
+## 2026-09-14 F2·F3·F4 수정 검증 (소스 반영)
+
+- 전체 빌드 경고 0/오류 0, 서비스·통합 테스트 **149개 통과** (기존 127 + 대상/표시 이름 18 + Hiperwall 교대 4).
+- /api/state의 Hiperwall 미완료 목록·원 세션 보존, 다음 사용권자의 선택 취소,
+  조회/범위 제한 계정의 취소 거부, 완료 기록 제외·불확실 기록 유지,
+  최근 100건보다 오래된 Unknown 노출과 재시작 보존을 검증했다.
+- 실제 WPF **작업 · 교대** 화면을 별도 HTTPS 호스트와 가짜 Controller로 확인했다.
+  Hiperwall 탭을 열거나 이력 새로 고침을 하지 않아도 로그인 후 이전 작업 1건이 표시된다.
+  조회 시 취소 차단, 사용 시작 후 미전송 단계만 취소, 전송 중인 명령의 늦은 Unknown 자동 갱신,
+  로그아웃 시 목록 제거·재로그인 자동 표시와 원 요청자·세션·대상 표시를 검증했다.
+- 근거: artifacts/test-results/f2-f4-regression.trx, artifacts/ui-smoke/handover-result.txt,
+  artifacts/ui-smoke/handover-hiperwall.png, handover-hiperwall-small.png.
+- 기존 로그인·일반 운영·조명·Hiperwall·포인터·Zone의 WPF 전체 회귀도 통과했다. 새 교대 화면은 1180×860에서도 목록 스크롤·취소 버튼·상세 표시를 확인했다.
+- 운영 Current 교체·운영 호스트 재시작은 하지 않았다. 실제 Controller·두 PC·Enterprise는 미검증이다.
+
 ## 2026-09-14 Zone 바로가기 검증 (11:21 배포)
 
 - 캔버스 아래 Zone별 버튼, 선택/드롭 색상, 같은 이름의 ID 구분, 버튼 클릭 시 Zone 화면 이동을 구현했다.

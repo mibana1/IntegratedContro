@@ -48,8 +48,12 @@ public sealed partial class ControlService
         Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "장비 설정을 다시 조회하세요.");
         var device = new DeviceConfig(request.Id, request.PcId, request.PcName.Trim(), request.Name.Trim(),
             request.ConnectionId.Trim(), request.ModelId, (old?.Version ?? 0) + 1, request.Enabled, request.Fault, request.LatencyMs);
+        var executionChanged = old is null || !old.HasSameExecutionSettings(device);
+        device = device with { ExecutionVersion = old is null ? device.Version :
+            executionChanged ? old.ExecutionVersion + 1 : old.ExecutionVersion };
         s.Devices.RemoveAll(d => d.Id == device.Id); s.Devices.Add(device);
-        s.DeviceStates[device.Id] = new DeviceState { Connection = "가상 설정 저장 / 새 상태 조회 필요" };
+        if (executionChanged)
+            s.DeviceStates[device.Id] = new DeviceState { Connection = "가상 설정 저장 / 새 상태 조회 필요" };
         Audit(s, session.Info.UserId, "VirtualDeviceSaved", $"pc={device.PcId}; device={device.Id}; v={device.Version}");
         return device;
     });

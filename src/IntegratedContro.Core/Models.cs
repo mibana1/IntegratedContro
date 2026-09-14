@@ -27,7 +27,16 @@ public sealed record LightLayout(int Version, Guid[] DeviceIds)
     public LightGroup[] Groups { get; init; } = [];
 }
 public sealed record DeviceConfig(Guid Id, Guid PcId, string PcName, string Name, string ConnectionId,
-    string ModelId, int Version, bool Enabled, VirtualFault Fault, int LatencyMs);
+    string ModelId, int Version, bool Enabled, VirtualFault Fault, int LatencyMs)
+{
+    // Legacy records without this field start from their saved edit version.
+    public int ExecutionVersion { get; init; } = Version;
+    public bool HasSameExecutionSettings(DeviceConfig other) => Id == other.Id && PcId == other.PcId &&
+        ConnectionId == other.ConnectionId && ModelId == other.ModelId && Enabled == other.Enabled &&
+        Fault == other.Fault && LatencyMs == other.LatencyMs;
+    public bool MatchesExecutionTarget(DeviceConfig other) => ExecutionVersion == other.ExecutionVersion &&
+        HasSameExecutionSettings(other);
+}
 public sealed record RoleBinding(string Id, Guid DeviceId, int Version);
 public sealed record StateValue(int Value, DateTimeOffset At, string Evidence = "가상 상태");
 public sealed class DeviceState
@@ -135,6 +144,7 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public bool HiperwallWriteSupported { get; init; }
     public bool CanControlHiperwall { get; init; }
     public int HiperwallConfigurationVersion { get; init; }
+    public HiperwallEditReceipt[] OutstandingHiperwallEdits { get; init; } = [];
     public bool LightGroupsSupported { get; init; }
     public bool LightBatchSupported { get; init; }
     public Guid[] ControllableDeviceIds { get; init; } = [];

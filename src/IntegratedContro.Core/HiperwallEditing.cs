@@ -35,6 +35,7 @@ public sealed class HiperwallEditReceipt
     public DateTimeOffset AcceptedAt { get; init; }
     public List<HiperwallEditStep> Steps { get; init; } = [];
     public bool Active => Steps.Any(s => s.State is HiperwallSendState.Pending or HiperwallSendState.Sending);
+    public bool NeedsAttention => Active || Steps.Any(s => s.State == HiperwallSendState.Unknown);
     public string Summary => $"{HiperwallEditing.ActionName(Request.Action)} · 응답 확인 {Steps.Count(s => s.State == HiperwallSendState.Acknowledged)} / 거부 {Steps.Count(s => s.State == HiperwallSendState.Rejected)} / 결과 확인 필요 {Steps.Count(s => s.State == HiperwallSendState.Unknown)} / 대기·전송 {Steps.Count(s => s.State is HiperwallSendState.Pending or HiperwallSendState.Sending)}";
 }
 public static class HiperwallEditing

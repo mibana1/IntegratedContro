@@ -78,7 +78,8 @@ public sealed partial class MainViewModel : Bindable
         LeaseMode.Free => "조회 모드 · 사용 시작 가능", _ => "호스트에 연결되지 않음"
     };
     public string PreviousSummary => _state is null ? "이전 사용자 작업 0건" :
-        $"이전 사용자 작업 {_state.Jobs.Count(j => j.Snapshot.SessionId != _login?.Session.Id && (j.Active || j.Status == JobStatus.NeedsReview))}건 · 사용 종료 후에도 호스트에서 유지";
+        $"이전 사용자 작업 {_state.Jobs.Count(j => j.Snapshot.SessionId != _login?.Session.Id && (j.Active || j.Status == JobStatus.NeedsReview)) +
+            _state.OutstandingHiperwallEdits.Count(r => r.Requester.Id != _login?.Session.Id && r.NeedsAttention)}건 · Hiperwall 포함 · 사용 종료 후에도 호스트에서 유지";
     public string ConnectionSummary => _connected ? $"HTTPS 연결 · 마지막 확인 {DateTime.Now:HH:mm:ss}" : "미연결 / 표시된 이전 상태를 최신 관측으로 사용하지 마세요.";
     public string PendingSummary => !HasPending ? "" : $"접수 결과 확인 필요: {_pending?.RequestId ?? _pendingLightBatch?.RequestId} · 같은 요청 ID로만 재확인합니다.";
     public string RecoverySummary => _state?.Lease.Mode != LeaseMode.RecoveryRequired ? "복구 인계가 필요한 사용권이 없습니다." :
@@ -296,6 +297,7 @@ public sealed partial class MainViewModel : Bindable
             _review = null; Message = "관리자 복구 인계 완료. 다음 운영자는 사용 시작 후 남은 작업을 검토하세요.";
         }, () => IsAdmin && _review is not null && _state?.Lease.Mode == LeaseMode.RecoveryRequired);
         InitializeLighting();
+        InitializeHandover();
         _timer.Tick += async (_, _) => await Poll();
         _timer.Start();
     }
@@ -443,6 +445,7 @@ public sealed partial class MainViewModel : Bindable
             nameof(UserSummary), nameof(LeaseSummary), nameof(PreviousSummary), nameof(ConnectionSummary), nameof(PendingSummary),
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
         RefreshLighting();
+        RefreshHandover();
         Hiperwall.Generation = Generation;
         Hiperwall.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
             IsAdmin, CanConfigure, _state?.HiperwallReadSupported ?? false, _state?.HiperwallConfigurationVersion ?? 0, CanControl && (_state?.CanControlHiperwall ?? false), _state?.HiperwallWriteSupported ?? false);

@@ -134,7 +134,7 @@ public sealed partial class ControlService
         return Change(s =>
         {
             var session = Owner(s, token, request.Generation);
-            Require(CanControl(User(s, session), target.Id) && s.Devices.Single(x => x.Id == target.Id).Version == target.Version &&
+            Require(CanControl(User(s, session), target.Id) && s.Devices.Any(x => x.MatchesExecutionTarget(target)) &&
                 !s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target.Id == target.Id)),
                 "reconcile_changed", "대상/권한/작업이 변경되었습니다. 다시 대조하세요.");
             Require(reading.Available, "read_failed", reading.Detail);
@@ -154,9 +154,7 @@ public sealed partial class ControlService
         var user = s.Accounts.SingleOrDefault(a => a.Id == job.Snapshot.RequestedBy);
         if (user is null || !CanControl(user, step.Target.Id)) return "원 요청자 계정/대상 권한 회수";
         var device = s.Devices.SingleOrDefault(d => d.Id == step.Target.Id);
-        if (device is null || !device.Enabled || device.Version != step.Target.Version ||
-            device.PcId != step.Target.PcId || device.ModelId != step.Target.ModelId ||
-            device.ConnectionId != step.Target.ConnectionId) return "장비 대상/설정 버전 변경";
+        if (device is null || !device.Enabled || !device.MatchesExecutionTarget(step.Target)) return "장비 대상/설정 버전 변경";
         var role = s.Roles.SingleOrDefault(r => r.Id == step.Role.Id);
         if (role is null || role.Version != step.Role.Version || role.DeviceId != step.Target.Id) return "역할 배정 변경";
         if (job.Snapshot.ScenarioId is { } scenarioId &&

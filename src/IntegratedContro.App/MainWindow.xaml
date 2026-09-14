@@ -73,14 +73,27 @@
      </DataGrid.Columns></DataGrid>
     </Grid>
    </TabItem>
-   <TabItem Header="작업 · 교대">
-    <Grid Margin="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="2*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <TabItem x:Name="HandoverTab" Header="작업 · 교대">
+    <Grid Margin="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MaxHeight="120"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MaxHeight="150"/></Grid.RowDefinitions>
      <StackPanel><TextBlock Text="{Binding PreviousSummary}" Style="{StaticResource SectionTitle}"/><TextBlock Text="원 요청자·세션·snapshot을 유지합니다. 다음 사용권자는 자신의 권한 범위에서 이전 작업을 선택 취소할 수 있습니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,0,0,12"/></StackPanel>
      <DataGrid Grid.Row="1" ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}" AutomationProperties.AutomationId="JobGrid"><DataGrid.Columns>
       <DataGridCheckBoxColumn Header="이전 세션" Binding="{Binding PreviousSession}" Width="75"/><DataGridTextColumn Header="접수 시각" Binding="{Binding AcceptedAt}" Width="120"/><DataGridTextColumn Header="원 요청자 / PC" Binding="{Binding Requester}" Width="220"/><DataGridTextColumn Header="종류" Binding="{Binding Kind}" Width="85"/><DataGridTextColumn Header="작업" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="대상 / PC" Binding="{Binding Targets}" Width="250"/><DataGridTextColumn Header="단계" Binding="{Binding Progress}" Width="60"/><DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="150"/>
      </DataGrid.Columns></DataGrid>
      <WrapPanel Grid.Row="2" Margin="0,10"><Button Content="선택 작업 취소" Command="{Binding CancelCommand}"/><Button Content="시나리오 중단 후 수동 전환…" Command="{Binding ManualSwitchCommand}"/><TextBlock Text="취소는 미전송 부분에 적용됩니다. 물리 정지나 롤백을 뜻하지 않습니다." VerticalAlignment="Center" Foreground="#8B5824"/></WrapPanel>
      <TextBox Grid.Row="3" Text="{Binding JobDetails, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0"/>
+     <TextBlock Grid.Row="4" Text="{Binding HiperwallJobsSummary}" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,8"/>
+     <DataGrid x:Name="HiperwallJobGrid" Grid.Row="5" ItemsSource="{Binding HiperwallJobs}" SelectedItem="{Binding SelectedHiperwallJob}" AutomationProperties.AutomationId="HiperwallJobGrid"><DataGrid.Columns>
+      <DataGridCheckBoxColumn Header="이전 세션" Binding="{Binding PreviousSession}" Width="75"/>
+      <DataGridTextColumn Header="접수 시각" Binding="{Binding AcceptedAt}" Width="120"/>
+      <DataGridTextColumn Header="원 요청자 / PC" Binding="{Binding Requester}" Width="170"/>
+      <DataGridTextColumn Header="원 세션" Binding="{Binding OriginSession}" Width="85"/>
+      <DataGridTextColumn Header="작업" Binding="{Binding Name}" Width="130"/>
+      <DataGridTextColumn Header="대상 Controller / 인스턴스" Binding="{Binding Targets}" Width="*"/>
+      <DataGridTextColumn Header="진행·결과" Binding="{Binding Progress}" Width="230"/>
+      <DataGridTextColumn Header="취소 가능 범위" Binding="{Binding Cancellation}" Width="210"/>
+     </DataGrid.Columns></DataGrid>
+     <WrapPanel Grid.Row="6" Margin="0,8"><Button x:Name="CancelHiperwallJob" Content="선택 Hiperwall 미전송 부분 취소" Command="{Binding CancelHiperwallJobCommand}"/><TextBlock Text="이미 전송된 명령은 취소되지 않습니다. 불확실 결과는 Controller 목록과 대조하세요." VerticalAlignment="Center" Foreground="#8B5824"/></WrapPanel>
+     <TextBox Grid.Row="7" Text="{Binding HiperwallJobDetails, Mode=OneWay}" IsReadOnly="True" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0"/>
     </Grid>
    </TabItem>
    <TabItem x:Name="AdminTab" Header="관리자 설정" Visibility="{Binding IsAdmin, Converter={StaticResource BoolVisibility}}">
