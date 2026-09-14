@@ -144,11 +144,12 @@ public sealed partial class ControlService
             if (lease.Mode == LeaseMode.Held)
                 lease.LastSeenAt = _sessions.Values.FirstOrDefault(x => x.Info.Id == lease.SessionId)?.LastSeen;
             return JsonDefaults.Copy(new StateView(s.SiteId, s.SiteName, s.Revision, lease, session.Info,
-                s.Devices.ToArray(), s.DeviceStates, s.Roles.ToArray(), s.Scenarios.ToArray(), s.Jobs.ToArray(),
+                s.Devices.ToArray(), s.DeviceStates, s.Roles.ToArray(), s.Scenarios.ToArray(), s.Jobs.Where(j => j.Active || j.Status == JobStatus.NeedsReview).Union(s.Jobs.TakeLast(100)).ToArray(),
                 s.UncertainDevices.ToArray(), User(s, session).Role == AccountRole.Administrator
                     ? s.Accounts.Select(a => new AccountView(a.Id, a.Name, a.Role, a.Enabled, a.AllDevices, a.DeviceIds.ToArray())).ToArray() : [],
                 s.Audit.TakeLast(200).Select(a => AuditPresentation.Enrich(a, s)).ToArray(), _driver.Models, (int)_heartbeatTimeout.TotalSeconds)
                 { HiperwallWriteSupported = _hiperwall is IHiperwallWriter, CanControlHiperwall = HiperwallPermission(User(s, session)), HiperwallReadSupported = _hiperwall is not null, HiperwallConfigurationVersion = s.Hiperwall?.Version ?? 0,
+                    HistorySupported = _store is IHistoryStore, BackupSupported = _store is IBackupStore,
                     OutstandingHiperwallEdits = s.HiperwallEdits.Where(r => r.NeedsAttention).OrderByDescending(r => r.AcceptedAt).ToArray(),
                     LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = CurrentLightLayout(s),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(User(s, session), d.Id)).Select(d => d.Id).ToArray() });

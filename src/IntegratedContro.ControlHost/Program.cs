@@ -14,7 +14,8 @@ if (!OperatingSystem.IsWindows())
 var dataPath = HostSetup.Option(args, "--data");
 if (string.IsNullOrWhiteSpace(dataPath))
 {
-    Console.Error.WriteLine("사용법: IntegratedContro.ControlHost.exe setup|run --data <로컬 절대 폴더>");
+    Console.Error.WriteLine("사용법: IntegratedContro.ControlHost.exe setup|run|backup|verify-backup --data <로컬 절대 폴더>");
+    Console.Error.WriteLine("복원: IntegratedContro.ControlHost.exe restore --from <백업 폴더> --data <새 빈 로컬 폴더>");
     Console.Error.WriteLine("setup 옵션: --site <현장> --admin <계정> --bind <수신 IP> --port <포트> --heartbeat-timeout <초>");
     return 2;
 }
@@ -24,7 +25,26 @@ try
     {
         HostSetup.Initialize(args, dataPath); return 0;
     }
-    if (args.FirstOrDefault() != "run") throw new ArgumentException("setup 또는 run을 명시하세요.");
+    if (args.FirstOrDefault() == "verify-backup")
+    {
+        var manifest = SqliteStateStore.VerifyBackup(dataPath);
+        Console.WriteLine($"백업 검증 완료: 현장 {manifest.SiteId}, DB v{manifest.DatabaseVersion}, revision {manifest.Revision}");
+        return 0;
+    }
+    if (args.FirstOrDefault() == "restore")
+    {
+        var source = HostSetup.Option(args, "--from") ?? throw new ArgumentException("--from 백업 폴더를 지정하세요.");
+        SqliteStateStore.RestoreBackup(source, dataPath);
+        Console.WriteLine("새 폴더 복원 완료. 원 호스트를 중지한 뒤 이 폴더로 run하고 관리자 복구 검토·대상 상태 대조를 수행하세요.");
+        return 0;
+    }
+    if (args.FirstOrDefault() == "backup")
+    {
+        using var backupStore = new SqliteStateStore(dataPath);
+        Console.WriteLine($"백업 검증 완료: {backupStore.CreateBackup("manual").Directory}");
+        return 0;
+    }
+    if (args.FirstOrDefault() != "run") throw new ArgumentException("setup, run, backup, verify-backup 또는 restore를 명시하세요.");
     using var store = new SqliteStateStore(dataPath);
     var config = JsonSerializer.Deserialize<HostConfiguration>(
         File.ReadAllText(Path.Combine(store.DataPath, "host.json")), JsonDefaults.Options)
@@ -92,6 +112,10 @@ try
     app.MapPost("/api/hiperwall/refresh", (Func<HttpContext, Task<HiperwallView>>)(c => service.RefreshHiperwallAsync(Token(c), false, c.RequestAborted)));
     app.MapPost("/api/hiperwall/test", (Func<HttpContext, Task<HiperwallView>>)(c => service.RefreshHiperwallAsync(Token(c), true, c.RequestAborted)));
     app.MapGet("/api/state", (HttpContext c) => service.GetState(Token(c)));
+    app.MapPost("/api/history/jobs", (HttpContext c, HistoryRequest r) => service.GetJobHistory(Token(c), r));
+    app.MapPost("/api/history/hiperwall", (HttpContext c, HistoryRequest r) => service.GetHiperwallHistory(Token(c), r));
+    app.MapPost("/api/history/audit", (HttpContext c, HistoryRequest r) => service.GetAuditHistory(Token(c), r));
+    app.MapPost("/api/backups", (HttpContext c) => service.CreateBackup(Token(c)));
     app.MapPost("/api/lease/acquire", (HttpContext c) => service.Acquire(Token(c)));
     app.MapPost("/api/lease/heartbeat", (HttpContext c, LeaseRequest r) => service.Heartbeat(Token(c), r.Generation));
     app.MapPost("/api/lease/release", (HttpContext c, LeaseRequest r) => service.Release(Token(c), r.Generation));

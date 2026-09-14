@@ -7,6 +7,16 @@ public interface IStateStore : IDisposable
     HostState Load();
     void Save(HostState state);
 }
+public interface IHistoryStore
+{
+    HistoryPage<Job> Jobs(HistoryRequest request);
+    HistoryPage<HiperwallEditReceipt> HiperwallEdits(HistoryRequest request);
+    HistoryPage<AuditEntry> Audit(HistoryRequest request);
+}
+public interface IBackupStore
+{
+    BackupResult CreateBackup(string purpose);
+}
 public interface ICredentialStore
 {
     Guid Save(string secret);
@@ -36,8 +46,27 @@ public interface IDeviceDriver
     Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken cancellationToken);
     Task<DriverReading> ReadAsync(DeviceConfig device, CancellationToken cancellationToken);
 }
-public sealed record DriverResult(StepStatus Status, string Detail, IReadOnlyDictionary<DeviceOperation, int>? Values = null);
-public sealed record DriverReading(bool Available, IReadOnlyDictionary<DeviceOperation, int> Values, string Detail);
+public sealed record DriverResult(StepStatus Status, string Detail, IReadOnlyDictionary<DeviceOperation, int>? Values = null)
+{
+    public CommandOutcome Outcome { get; init; } = Status switch
+    {
+        StepStatus.Simulated or StepStatus.Succeeded => CommandOutcome.Succeeded,
+        StepStatus.Failed => CommandOutcome.Failed, StepStatus.Skipped => CommandOutcome.Cancelled,
+        _ => CommandOutcome.Unknown
+    };
+    public ConfirmationLevel Confirmation { get; init; } = Status == StepStatus.Simulated
+        ? ConfirmationLevel.Simulated : ConfirmationLevel.None;
+    public IReadOnlyDictionary<DeviceOperation, DeviceObservation> Observations { get; init; } =
+        new Dictionary<DeviceOperation, DeviceObservation>();
+    public DeviceConstraint[] Constraints { get; init; } = [];
+}
+public sealed record DriverReading(bool Available, IReadOnlyDictionary<DeviceOperation, int> Values, string Detail)
+{
+    // Existing virtual adapters keep their semantics; physical adapters must explicitly identify observed evidence.
+    public ConfirmationLevel Confirmation { get; init; } = ConfirmationLevel.Simulated;
+    public IReadOnlyDictionary<DeviceOperation, DeviceObservation> Observations { get; init; } =
+        new Dictionary<DeviceOperation, DeviceObservation>();
+}
 public sealed class InitialAdministratorPolicy(IPasswordHasher hasher) : IInitialAdministratorPolicy
 {
     public Account Create(string name, string password)

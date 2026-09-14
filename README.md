@@ -10,6 +10,8 @@ Windows 11 25H2 Pro·Enterprise / x64용 통합 제어 앱의 첫 구현입니�
 - 한 앱 세션의 배타적 사용권, 교대 후 이전 사용자 작업 보존·선택 취소
 - 불변 실행 snapshot, 대상 예약, 명시적 시나리오 중단 및 가상 상태 대조 후 수동 전환
 - SQLite 복구, 오래된 세션 차단, 관리자 복구 인계, 불확실 명령 자동 재전송 금지
+- 실제 관측·ACK·장비 제약의 공통 계약, 관측 근거를 보존하는 단계별 이력
+- SQLite v1→v2 자동 이전, 이력 페이지 조회, 관리자 온라인 백업·검증·새 폴더 복원
 
 실제 두 PC 검증·Enterprise 검증·실장비/영상 연동은 아직 완료하지 않았습니다.
 
@@ -53,4 +55,4 @@ WPF 스모크 검증에는 로그인된 Windows 데스크톱이 필요하며 테
 | Tests / UiSmoke | 공통 규칙·SQLite·실제 EXE 통합 테스트 / WPF 실행·렌더링 검증 |
 
 [프로젝트 기준](docs/PROJECT_GUIDE.md), [첫 구현 검증 기록](docs/FIRST_IMPLEMENTATION_VALIDATION.md)을 참고하세요.
-기존 사용자 설정에 따라 `docs/`는 Git ignore 대상입니다. 문서 파일은 로컬에서 갱신되었으며 자동으로 stage/commit하지 않았습니다.
+저장 v2·백업·복원·이력 조회 방법과 현재 한계는 [운영 절차](OPERATIONS.md)에 정리했습니다.

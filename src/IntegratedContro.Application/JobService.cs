@@ -130,7 +130,7 @@ public sealed partial class ControlService
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
         DriverReading reading;
         try { reading = await _driver.ReadAsync(target, timeout.Token); }
-        catch (OperationCanceledException) { throw new DomainException("read_timeout", "가상 상태 조회 제한시간 초과"); }
+        catch (OperationCanceledException) { throw new DomainException("read_timeout", "대상 상태 조회 제한시간 초과"); }
         return Change(s =>
         {
             var session = Owner(s, token, request.Generation);
@@ -139,11 +139,23 @@ public sealed partial class ControlService
                 "reconcile_changed", "대상/권한/작업이 변경되었습니다. 다시 대조하세요.");
             Require(reading.Available, "read_failed", reading.Detail);
             var state = s.DeviceStates[target.Id];
-            state.Simulated = reading.Values.ToDictionary(x => x.Key, x => new StateValue(x.Value, Now));
-            state.Connection = "가상 연결됨";
-            state.LastResult = "가상 상태 대조 완료 / 과거 불확실 명령의 성공 판정 아님";
+            if (reading.Confirmation == ConfirmationLevel.Simulated)
+                state.Simulated = reading.Values.ToDictionary(x => x.Key, x => new StateValue(x.Value, Now));
+            else
+            {
+                var observed = ValidObservations(target, reading.Observations);
+                var readable = _driver.Models.Single(m => m.Id == target.ModelId).Capabilities.Where(c => c.CanRead).ToArray();
+                Require(reading.Confirmation == ConfirmationLevel.Observed && readable.Length > 0 &&
+                    readable.All(c => observed.TryGetValue(c.Operation, out var value) && value.IsFresh(Now)),
+                    "read_unconfirmed", "최신 실제 관측값이 부족합니다. ACK만으로 상태 대조를 완료할 수 없습니다.");
+                state.Observed = observed;
+            }
+            state.ConnectionStatus = DeviceConnectionStatus.Connected;
+            state.Connection = reading.Confirmation == ConfirmationLevel.Simulated ? "가상 연결됨" : "장비 상태 관측";
+            state.LastResult = "상태 대조 완료 / 과거 불확실 명령의 성공 판정 아님";
             s.UncertainDevices.Remove(target.Id);
-            Audit(s, session.Info.UserId, "VirtualStateReconciled", $"device={target.Id}; 과거 작업 상태는 보존");
+            Audit(s, session.Info.UserId, reading.Confirmation == ConfirmationLevel.Simulated ? "VirtualStateReconciled" : "ObservedStateReconciled",
+                $"device={target.Id}; 과거 작업 상태는 보존");
             return state;
         });
     }
@@ -155,6 +167,15 @@ public sealed partial class ControlService
         if (user is null || !CanControl(user, step.Target.Id)) return "원 요청자 계정/대상 권한 회수";
         var device = s.Devices.SingleOrDefault(d => d.Id == step.Target.Id);
         if (device is null || !device.Enabled || !device.MatchesExecutionTarget(step.Target)) return "장비 대상/설정 버전 변경";
+        var currentCapability = _driver.Models.SingleOrDefault(m => m.Id == device.ModelId)?.Capabilities.SingleOrDefault(c => c.Operation == step.Operation);
+        if (currentCapability is null || (step.Capability is not null && step.Capability != currentCapability))
+            return "드라이버 기능/실행 제약 변경";
+        if (step.ConditionOperation is { } condition)
+        {
+            var currentCondition = _driver.Models.Single(m => m.Id == device.ModelId).Capabilities.SingleOrDefault(c => c.Operation == condition);
+            if (currentCondition is not { CanRead: true } || (step.ConditionCapability is not null && step.ConditionCapability != currentCondition))
+                return "드라이버 상태 확인 조건/관측 제약 변경";
+        }
         var role = s.Roles.SingleOrDefault(r => r.Id == step.Role.Id);
         if (role is null || role.Version != step.Role.Version || role.DeviceId != step.Target.Id) return "역할 배정 변경";
         if (job.Snapshot.ScenarioId is { } scenarioId &&

@@ -40,7 +40,7 @@ public sealed record JobRow(Job Job, bool PreviousSession)
     public string Status => Job.Status switch
     {
         JobStatus.Queued => "접수·대기", JobStatus.Running => "실행 중", JobStatus.StopRequested => "취소 요청·결과 대기",
-        JobStatus.Completed => "가상 실행 종료", JobStatus.Cancelled => "미전송 부분 취소", JobStatus.Interrupted => "중단",
+        JobStatus.Completed => Job.Steps.Any(s => s.Status == StepStatus.Succeeded) ? "명령 처리 종료" : "가상 실행 종료", JobStatus.Cancelled => "미전송 부분 취소", JobStatus.Interrupted => "중단",
         _ => "불확실·대조 필요"
     };
     public string AcceptedAt => Job.Snapshot.AcceptedAt.ToLocalTime().ToString("MM-dd HH:mm:ss");
@@ -148,7 +148,9 @@ public sealed partial class MainViewModel : Bindable
                     $"   동작: {step.Operation} = {step.Value} {step.Unit} | 대기 {step.DelayBeforeMs}ms / 제한 {step.TimeoutMs}ms / 실패 정책 {step.OnFailure}\n" +
                     $"   고정 PC ID: {step.Target.PcId} / 장비 ID: {step.Target.Id}\n" +
                     $"   모델: {step.Target.ModelId} / 연결: {step.Target.ConnectionId} / 장비 설정 v{step.Target.Version} / 역할 v{step.Role.Version}\n" +
-                    $"   확인 조건: {step.ConditionOperation} = {step.ConditionValue} | 단계: {job.Steps[i].Status} / {job.Steps[i].Result}"));
+                    $"   확인 조건: {step.ConditionOperation} = {step.ConditionValue} | 단계: {job.Steps[i].Status} / {job.Steps[i].Result}\n" +
+                    $"   확인 근거: {DeviceEvidence.Label(job.Steps[i].Evidence?.Confirmation ?? ConfirmationLevel.None)} | 결과: {job.Steps[i].Evidence?.Outcome}\n" +
+                    $"   {DeviceEvidence.RecordedObservations(job.Steps[i].Evidence)}"));
         }
     }
     public ScenarioDefinition? SelectedScenario { get; set; }
@@ -298,6 +300,7 @@ public sealed partial class MainViewModel : Bindable
         }, () => IsAdmin && _review is not null && _state?.Lease.Mode == LeaseMode.RecoveryRequired);
         InitializeLighting();
         InitializeHandover();
+        InitializeStorage();
         _timer.Tick += async (_, _) => await Poll();
         _timer.Start();
     }
@@ -372,8 +375,9 @@ public sealed partial class MainViewModel : Bindable
         {
             var value = state.DeviceStates[d.Id];
             var reserved = state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(x => x.Target.Id == d.Id));
-            var row = new DeviceRow(d, string.Join(" / ", value.Simulated.Select(x => $"{x.Key}={x.Value.Value} ({x.Value.At.ToLocalTime():HH:mm:ss})")),
-                string.Join(" / ", value.Desired.Select(x => $"{x.Key}={x.Value}")), value.Connection, value.LastResult,
+            var row = new DeviceRow(d, string.Join(" / ", value.Simulated.Select(x => $"{x.Key}={x.Value.Value} (가상 · {x.Value.At.ToLocalTime():HH:mm:ss})").Concat(
+                    value.Observed.Count == 0 ? [] : new[] { DeviceEvidence.Observations(value, DateTimeOffset.UtcNow) })),
+                string.Join(" / ", value.Desired.Select(x => $"{x.Key}={x.Value}")), value.Connection, value.LastCommand is { } evidence ? $"{DeviceEvidence.Label(evidence.Confirmation)} · {value.LastResult}" : value.LastResult,
                 state.UncertainDevices.Contains(d.Id) ? "대조 필요" : reserved ? "시나리오 예약" : "사용 가능");
             var existing = Devices.SingleOrDefault(x => x.Id == d.Id);
             if (existing is null) Devices.Add(row); else existing.Update(row);
@@ -446,6 +450,7 @@ public sealed partial class MainViewModel : Bindable
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
         RefreshLighting();
         RefreshHandover();
+        RefreshStorageContext();
         Hiperwall.Generation = Generation;
         Hiperwall.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
             IsAdmin, CanConfigure, _state?.HiperwallReadSupported ?? false, _state?.HiperwallConfigurationVersion ?? 0, CanControl && (_state?.CanControlHiperwall ?? false), _state?.HiperwallWriteSupported ?? false);

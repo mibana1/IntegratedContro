@@ -202,3 +202,14 @@ FixtureSecret은 코드에 명시한 가짜 서버 검증값이며 현장 자격
 - 토큰 교체로 남은 보호 파일 정리·Windows 실행 계정 변경/이관 도구는 후속 운영 범위.
 
 가짜 서버 성공을 실제 Hiperwall 연결 성공으로 보고하지 않는다. 영상벽 표시 상태를 바꾸는 요청은 구현·실행하지 않았다.
+
+## 공통 저장 기반 v2 회귀 (2026-09-14)
+
+- Hiperwall 편집 접수·개별 결과를 별도 hiperwall_edits 테이블로 이전하고 일반 작업·설정·감사와 원자적으로 저장한다.
+  최근 이력과 별개로 모든 미완료·불확실 편집은 기존 교대 화면에 계속 표시한다.
+- 새 **이력 · 백업** 화면에서 영속 Hiperwall 편집의 커서 페이지와 상세를 조회한다.
+  백업은 현재 설정이 참조하는 Hiperwall DPAPI 파일을 포함하며, 복원된 미전송/전송 중 편집은 자동 실행하지 않는다.
+- 전체 서비스·저장·실제 EXE 통합 테스트 178개와 WPF 로그인·조명·Hiperwall 편집·포인터·Zone·교대·이력/백업 회귀 통과.
+  근거: artifacts/test-results/foundation-regression.trx, artifacts/ui-smoke/storage-foundation-result.txt.
+- 이 검증은 격리된 HTTPS 호스트와 가짜 Controller에서 수행했다. 실제 Controller·두 PC·Enterprise 검증은 포함하지 않는다.
+  이번 작업에서 운영 Current 교체·운영 호스트 재시작·실제 장비 명령은 수행하지 않았다.

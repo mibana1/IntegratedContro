@@ -18,11 +18,13 @@ public sealed partial class ControlService
             {
                 if (run.Status != StepStatus.Dispatching) continue;
                 run.Status = StepStatus.Unknown; run.Result = "호스트 중단: 전송/결과 불확실. 자동 재전송 금지.";
+                run.Evidence = new(CommandOutcome.Unknown, ConfirmationLevel.None, run.Result, Now);
                 var target = job.Snapshot.Steps[index].Target;
                 if (next.Devices.Any(d => d.MatchesExecutionTarget(target)) &&
                     next.DeviceStates.TryGetValue(target.Id, out var recoveredDevice))
                 {
-                    recoveredDevice.Connection = "호스트 중단 / 가상 상태 대조 필요";
+                    recoveredDevice.ConnectionStatus = DeviceConnectionStatus.RecoveryRequired;
+                    recoveredDevice.Connection = "호스트 중단 / 대상 상태 대조 필요";
                     recoveredDevice.LastResult = run.Result;
                     if (!next.UncertainDevices.Contains(target.Id)) next.UncertainDevices.Add(target.Id);
                 }
@@ -71,6 +73,13 @@ public sealed partial class ControlService
                     Audit(next, null, "DispatchRejected", $"job={job.Id}; {invalid}");
                     Persist(next); return true; // Never honor Continue for authorization/configuration failures.
                 }
+                var notBefore = DispatchNotBefore(next, snapshot);
+                if (notBefore > Now)
+                {
+                    job.ReadyAt = notBefore;
+                    job.Result = "장비 제약·공유 연결 전송 간격 대기";
+                    Persist(next); return true;
+                }
                 var run = job.Steps[stepIndex];
                 run.Status = StepStatus.Dispatching; run.SentAt = Now; run.Result = "전송 의도 영속화 / 결과 대기";
                 job.Status = JobStatus.Running;
@@ -87,16 +96,17 @@ public sealed partial class ControlService
                 {
                     var reading = await _driver.ReadAsync(snapshot.Target, timeout.Token);
                     if (!reading.Available)
-                        result = new(StepStatus.Failed, "가상 조건 상태 조회 실패");
-                    else if (!reading.Values.TryGetValue(condition, out var value) || value != snapshot.ConditionValue)
-                        result = new(StepStatus.Failed, "최신 가상 상태 확인 조건 불충족");
+                        result = new(StepStatus.Failed, "조건 상태 조회 실패");
+                    else if (!ConditionSatisfied(snapshot, reading))
+                        result = new(StepStatus.Failed, "최신 상태 확인 조건 불충족 · 관측 신선도/근거 확인");
                     else
                         result = await ExecuteIfStillAllowedAsync(jobId, stepIndex, snapshot, timeout.Token);
                 }
                 else result = await ExecuteIfStillAllowedAsync(jobId, stepIndex, snapshot, timeout.Token);
             }
             catch (OperationCanceledException)
-            { result = new(StepStatus.Unknown, "제한시간 또는 호스트 종료: 결과 불확실. 자동 재전송 없음."); }
+            { result = new(StepStatus.Unknown, "제한시간 또는 호스트 종료: 결과 불확실. 자동 재전송 없음.")
+                { Outcome = hostStopping.IsCancellationRequested ? CommandOutcome.Cancelled : CommandOutcome.TimedOut }; }
             catch (Exception)
             { result = new(StepStatus.Unknown, "드라이버 예외: 결과 불확실. 자동 재전송 없음."); }
             lock (_gate)
@@ -105,21 +115,20 @@ public sealed partial class ControlService
                 var next = JsonDefaults.Copy(_state);
                 var job = FindJob(next, jobId);
                 var run = job.Steps[stepIndex];
+                result = ValidateResult(snapshot, result);
                 run.Status = result.Status; run.Result = result.Detail; run.FinishedAt = Now;
+                run.Evidence = EvidenceFor(snapshot, result);
                 // Keep the original result in the job, but never attribute it to a replacement target.
                 if (next.Devices.Any(d => d.MatchesExecutionTarget(snapshot.Target)) &&
                     next.DeviceStates.TryGetValue(snapshot.Target.Id, out var device))
                 {
-                    device.LastResult = result.Detail;
-                    device.Connection = result.Status == StepStatus.Simulated ? "가상 연결됨" : "가상 오류/대조 필요";
-                    if (result.Values is not null)
-                        foreach (var pair in result.Values) device.Simulated[pair.Key] = new(pair.Value, Now);
+                    ApplyDriverState(device, snapshot, result);
                     if (result.Status == StepStatus.Unknown && !next.UncertainDevices.Contains(snapshot.Target.Id))
                         next.UncertainDevices.Add(snapshot.Target.Id);
                 }
                 var cancelled = job.CancelRequestedAt is not null;
                 var stop = cancelled || result.Status is StepStatus.Unknown or StepStatus.Skipped ||
-                    (result.Status != StepStatus.Simulated && snapshot.OnFailure == FailurePolicy.Stop);
+                    (result.Status is not (StepStatus.Simulated or StepStatus.Succeeded) && snapshot.OnFailure == FailurePolicy.Stop);
                 if (stop)
                 {
                     foreach (var pending in job.Steps.Where(x => x.Status == StepStatus.Pending))
@@ -133,8 +142,9 @@ public sealed partial class ControlService
                     var nextIndex = job.Steps.FindIndex(x => x.Status == StepStatus.Pending);
                     job.Status = nextIndex < 0 ? JobStatus.Completed : JobStatus.Running;
                     job.Result = nextIndex < 0
-                        ? (job.Steps.Any(x => x.Status == StepStatus.Failed) ? "가상 순차 실행 종료 / 실패 단계 포함" : "가상 순차 실행 완료 / 실측 아님")
-                        : $"가상 단계 {stepIndex + 1}/{job.Steps.Count} 종료";
+                        ? (job.Steps.Any(x => x.Status == StepStatus.Failed) ? "순차 실행 종료 / 실패 단계 포함" :
+                            job.Steps.All(x => x.Status == StepStatus.Simulated) ? "가상 순차 실행 완료 / 실측 아님" : "명령 처리 종료 / 단계별 확인 근거를 확인하세요.")
+                        : $"단계 {stepIndex + 1}/{job.Steps.Count} 종료";
                     if (nextIndex >= 0) job.ReadyAt = Now.AddMilliseconds(job.Snapshot.Steps[nextIndex].DelayBeforeMs);
                 }
                 Audit(next, null, "DispatchResult", $"job={job.Id}; step={stepIndex}; result={run.Status}");
@@ -152,6 +162,11 @@ public sealed partial class ControlService
             var invalid = Revalidate(_state, job, step);
             if (_stopping || job.CancelRequestedAt is not null || invalid is not null)
                 return Task.FromResult(new DriverResult(StepStatus.Skipped, invalid ?? "전송 진입 전 취소/호스트 종료 확인"));
+            // A slow condition read must not consume the interval before the command is actually invoked.
+            var next = JsonDefaults.Copy(_state);
+            next.ConnectionLastDispatchAt[step.Target.ConnectionId] = Now;
+            next.ConnectionNotBefore[step.Target.ConnectionId] = Now.AddMilliseconds(CapabilityFor(step).MinimumCommandIntervalMs);
+            Persist(next);
             // Invocation starts within the same coordination boundary as cancellation/configuration changes.
             return _driver.ExecuteAsync(step, ct);
         }

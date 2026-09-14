@@ -1,7 +1,7 @@
 # IntegratedContro 통합 제어 앱 — 구현 기준 문서
 
 작성일: 2026-09-09
-상태: 가상 장비 운영 및 Hiperwall LIVE 편집 구현 / 로컬 가짜 서버 검증 / 실제 Controller·두 PC·Enterprise 검증 대기
+상태: 가상 장비 운영·Hiperwall LIVE 편집·공통 장비 계약·저장 v2/백업 구현 / 로컬 검증 / 실제 장비·Controller·두 PC·Enterprise 검증 대기
 용도: 이후 구현 작업을 맡은 개발자와 Codex가 먼저 읽는 프로젝트 기준 문서
 
 ## 1. 목적과 문서 적용 기준
@@ -535,6 +535,54 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 참고: [Windows 서비스 구성](https://learn.microsoft.com/en-us/dotnet/core/extensions/windows-service), [서비스와 사용자 세션 분리](https://learn.microsoft.com/en-us/windows/win32/services/interactive-services), [Windows 보호 저장](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection).
 
 ## 10. 구현 단계와 완료 기준
+
+### 공통 장비 계약·저장 기반 보완 (2026-09-14)
+
+- Core에 ConfirmationLevel(가상·전송·프로토콜 ACK·실제 관측), CommandOutcome(성공·실패·시간 초과·취소·미지원·불확실),
+  DeviceObservation(값·단위·관측 시각·유효 시각), DeviceConnectionStatus, DeviceConstraint를 추가했다.
+  요청값·가상값·실제 관측값을 따로 저장하며 ACK/전송 완료를 현재값이나 물리 동작 완료로 승격하지 않는다.
+  단계별 결과에는 확인 근거와 검증된 관측값을 보존한다. 현재 관측이 만료되어도 과거 이력의 근거를 변경하지 않는다.
+- Capability에 읽기 지원·관측 최대 수명·최소 전송 간격·안정화 대기·재시도 안전성 메타데이터를 추가하고
+  접수 snapshot에 고정한다. 전송 전에 현재 기능 계약과 비교하며 기존 기록의 누락 필드는 호환 기본값으로 읽는다.
+  기존 snapshot·현장/계정/작업 ID·장비 ExecutionVersion을 새 값으로 덮어쓰지 않는다.
+- 실제 관측은 지원 동작·범위·단위·시각을 검사하고 기능의 최대 수명으로 제한한다.
+  조건 확인과 불확실 장비의 대조 완료에는 최신 실제 관측이 필요하다. ACK·오래된 관측으로 통과하지 않는다.
+  결과와 근거가 모순되거나 누락되면 NeedsReview로 보존하고 자동 재전송하지 않는다.
+  기존 가상 드라이버의 결과는 계속 가상으로 표시한다. 실제 장비 어댑터는 아직 연결하지 않았다.
+- Worker는 장비별 시간 제약·공유 연결의 최소 간격을 영속 저장하고 ReadyAt으로 대기한다.
+  조건 조회가 지연되어도 실제 드라이버 호출 시점부터 간격을 계산한다. 조건 기능의 관측 계약도 snapshot에 고정·재검증한다.
+  대기만으로 접수 작업을 취소하지 않으며 다른 실행 가능 작업을 처리할 수 있다.
+  지원 STOP은 장비 안정화 대기를 우회하되 연결 전송 간격은 유지한다.
+  RetrySafety는 이후 어댑터용 메타데이터이며 이 값만으로 자동 재시도를 활성화하지 않는다.
+- SQLite 저장 스키마를 v2로 올렸다. 설정·현재 상태 checkpoint와 jobs·hiperwall_edits·audit_history를 분리하고
+  한 트랜잭션에 변경된 작업 행과 새 감사 기록만 반영한다. 기존 감사 기록 수정·이력 삭제·중복 ID를 거부한다.
+  SQL user_version/host_state.schema_version은 2이며 도메인 JSON HostState.SchemaVersion은 호환성을 위해 1을 유지한다.
+- v1을 열 때 먼저 검증된 pre-migration-v1 백업을 완성한 뒤 스키마와 이력을 한 트랜잭션으로 이전한다.
+  실패 시 이전 DB 변경을 롤백하며, 알 수 없는 버전·무결성 실패·보호 저장 파일 누락은 진단 후 중지한다.
+  자동 새 DB 생성이나 다른 경로로의 대체는 하지 않는다. v2 DB를 이전 실행 파일로 열 수 없으므로 App·ControlHost를 함께 업데이트한다.
+- IHistoryStore와 /api/history/jobs·hiperwall·audit에 sequence 기반 커서 조회(기본 50, 최대 200)를 추가했다.
+  최신 상태 응답은 최근 100개 일반 작업과 모든 미완료·불확실 작업을 유지한다.
+  WPF **이력 · 백업**에서 종류 선택·최신/이전 50건·개별 상세 조회를 제공하고 로그아웃 시 내용을 비운다.
+  인증된 조회 계정도 이력을 볼 수 있으며 백업 생성은 관리자만 할 수 있다.
+- IBackupStore는 SQLite BackupDatabase로 WAL까지 포함한 일관된 DB를 생성한다. 별도 읽기 연결을 사용하고
+  서비스 사용권 잠금 밖에서 실행하므로 백업 중에도 생존 확인이 진행된다.
+  host.json·호스트 인증서·현재 Hiperwall 보호 저장 참조 파일을 함께 보관하고 manifest의 크기·SHA-256·현장/DB 버전과 무결성을 검증한다.
+  manifest를 마지막에 기록하며 미완료 백업 폴더는 복원 대상으로 인정하지 않는다.
+- 실행 중 관리자 UI 백업, 중지된 호스트의 backup, verify-backup, 새 빈 폴더 대상 restore CLI를 제공한다.
+  복원은 기존 데이터 폴더를 덮어쓰지 않고 접수·전송 중 작업을 자동 실행 금지/불확실로 격리한다.
+  복원 마커는 복사 전에 기록하고 격리 저장 성공 후 제거한다. 사용권은 관리자 복구 검토가 필요한 상태로 시작하며
+  저장된 장비 관측을 현재값으로 재사용하지 않는다. 원본과 복원본 호스트를 동시에 운영하지 않는다.
+  DPAPI 보호 파일의 다른 Windows 계정/PC 이관 도구는 포함하지 않는다. 자세한 명령은 OPERATIONS.md를 따른다.
+- 저장 행과 네트워크 조회를 분리했지만 현재 서비스는 호환 aggregate와 전체 이력을 메모리에 로드한다.
+  장기 운영의 메모리 상한·완료 이력 보존 기간·아카이브/삭제·정기 백업·백업 외부 반출·서비스 계정 이관은 후속 항목이다.
+  현재는 활성/불확실 작업과 기존 이력을 자동 삭제하지 않는다.
+- 검증: 신규 회귀 29개 포함 전체 서비스·통합 테스트 **178개 통과**, 전체 빌드 **경고 0/오류 0**.
+  v1 원자적 이전/실패 롤백, 기존 ID·이력 보존, 실제 HTTPS 호스트의 온라인 백업→CLI 검증·복원→동일 계정 재로그인,
+  과거 접수 작업 재실행 차단과 백업 중 생존 확인을 확인했다. 근거: artifacts/test-results/foundation-regression.trx.
+  WPF 로그인·운영·조명·Hiperwall·포인터·Zone·교대 전체 회귀와 새 이력/백업 검증을 통과했다.
+  이력 50건 커서/상세/빈 목록, 관리자 백업, 조회 계정의 백업 차단, 로그아웃 시 내용 초기화,
+  1180×860 최소 창 렌더링을 확인했다. 근거: artifacts/ui-smoke/storage-foundation-result.txt, storage-foundation.png.
+  실제 장비·Controller·두 PC·Enterprise 검증과 구분한다. 소스 변경이며 운영 배포본 교체나 운영 호스트 재시작은 수행하지 않았다.
 
 ### F2·F3·F4 대상 상태·설정 변경·교대 표시 수정 (2026-09-14)
 

@@ -35,11 +35,12 @@ public static partial class Program
         {
             try
             {
-                if (args.Contains("--handover-only")) await RunHandover();
+                if (args.Contains("--storage-only")) await RunStorage();
+                else if (args.Contains("--handover-only")) await RunHandover();
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await Run(); await RunLighting(); }
-                    await RunHiperwall(); await RunHiperwallEditing(); await RunHandover();
+                    await RunHiperwall(); await RunHiperwallEditing(); await RunHandover(); await RunStorage();
                 }
                 result = 0;
             }

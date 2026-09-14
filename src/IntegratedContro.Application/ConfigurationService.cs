@@ -101,13 +101,18 @@ public sealed partial class ControlService
         Require(step.DelayBeforeMs is >= 0 and <= 3600000 && step.TimeoutMs is >= 100 and <= 30000 &&
             Enum.IsDefined(step.OnFailure), "invalid_timing", "대기는 0~3600000ms, 제한시간은 100~30000ms입니다.", 400);
         Require((step.ConditionOperation is null) == (step.ConditionValue is null), "invalid_condition", "확인 조건의 동작과 값을 함께 지정하세요.", 400);
+        Require(capability.MinimumCommandIntervalMs is >= 0 and <= 3600000 && capability.SettleAfterMs is >= 0 and <= 3600000 &&
+            capability.ObservationMaxAgeMs is > 0 and <= 3600000 && Enum.IsDefined(capability.RetrySafety),
+            "invalid_capability", "드라이버의 전송·관측 제약을 확인하세요.", 400);
+        Capability? conditionCapability = null;
         if (step.ConditionOperation is { } condition)
         {
-            var c = _driver.Models.Single(m => m.Id == device.ModelId).Capabilities.SingleOrDefault(x => x.Operation == condition);
-            Require(c is not null && step.ConditionValue >= c.Minimum && step.ConditionValue <= c.Maximum,
-                "invalid_condition", "지원되는 가상 상태 확인 조건을 지정하세요.", 400);
+            conditionCapability = _driver.Models.Single(m => m.Id == device.ModelId).Capabilities.SingleOrDefault(x => x.Operation == condition);
+            Require(conditionCapability is { CanRead: true, ObservationMaxAgeMs: > 0 and <= 3600000 } &&
+                step.ConditionValue >= conditionCapability.Minimum && step.ConditionValue <= conditionCapability.Maximum,
+                "invalid_condition", "읽기를 지원하는 유효한 상태 확인 조건을 지정하세요.", 400);
         }
         return new(role!, device, step.Operation, step.Value, capability.Unit, step.DelayBeforeMs, step.TimeoutMs,
-            step.OnFailure, step.ConditionOperation, step.ConditionValue);
+            step.OnFailure, step.ConditionOperation, step.ConditionValue) { Capability = capability, ConditionCapability = conditionCapability };
     }
 }

@@ -17,9 +17,16 @@ public enum VirtualFault { None, Failure, Disconnected, NoResponse, ResponseLost
 public enum FailurePolicy { Stop, Continue }
 public enum JobKind { Manual, Scenario, LightBatch }
 public enum JobStatus { Queued, Running, StopRequested, Completed, Cancelled, Interrupted, NeedsReview }
-public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped }
+public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped, Succeeded }
 
-public sealed record Capability(DeviceOperation Operation, int Minimum, int Maximum, string Unit);
+public sealed record Capability(DeviceOperation Operation, int Minimum, int Maximum, string Unit)
+{
+    public bool CanRead { get; init; } = true;
+    public int ObservationMaxAgeMs { get; init; } = 5000;
+    public int MinimumCommandIntervalMs { get; init; }
+    public int SettleAfterMs { get; init; }
+    public RetrySafety RetrySafety { get; init; } = RetrySafety.Never;
+}
 public sealed record DeviceModel(string Id, string Name, Capability[] Capabilities, DeviceCategory Category = DeviceCategory.Other);
 public sealed record LightGroup(Guid Id, string Name, Guid[] DeviceIds);
 public sealed record LightLayout(int Version, Guid[] DeviceIds)
@@ -45,6 +52,10 @@ public sealed class DeviceState
     public Dictionary<DeviceOperation, StateValue> Simulated { get; set; } = [];
     public string Connection { get; set; } = "가상 / 아직 조회하지 않음";
     public string LastResult { get; set; } = "없음";
+    public Dictionary<DeviceOperation, DeviceObservation> Observed { get; set; } = [];
+    public DeviceCommandResult? LastCommand { get; set; }
+    public DeviceConnectionStatus ConnectionStatus { get; set; } = DeviceConnectionStatus.NotChecked;
+    public List<DeviceConstraint> Constraints { get; set; } = [];
 }
 public sealed record ScenarioStep(string RoleId, DeviceOperation Operation, int Value,
     int DelayBeforeMs = 0, int TimeoutMs = 3000, FailurePolicy OnFailure = FailurePolicy.Stop,
@@ -52,7 +63,11 @@ public sealed record ScenarioStep(string RoleId, DeviceOperation Operation, int 
 public sealed record ScenarioDefinition(Guid Id, string Name, int Version, ScenarioStep[] Steps);
 public sealed record StepSnapshot(RoleBinding Role, DeviceConfig Target, DeviceOperation Operation,
     int Value, string Unit, int DelayBeforeMs, int TimeoutMs, FailurePolicy OnFailure,
-    DeviceOperation? ConditionOperation, int? ConditionValue);
+    DeviceOperation? ConditionOperation, int? ConditionValue)
+{
+    public Capability? Capability { get; init; }
+    public Capability? ConditionCapability { get; init; }
+}
 public sealed record ExecutionSnapshot(Guid SiteId, string Mode, Guid RequestId, Guid RequestedBy,
     string RequesterName, Guid SessionId, Guid ClientPcId, string ClientPcName, long LeaseGeneration,
     DateTimeOffset AcceptedAt, DateTimeOffset ExpiresAt, Guid? ScenarioId, int? ScenarioVersion,
@@ -63,6 +78,7 @@ public sealed class StepRun
     public DateTimeOffset? SentAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
     public string Result { get; set; } = "미전송";
+    public DeviceCommandResult? Evidence { get; set; }
 }
 public sealed class Job
 {
@@ -112,6 +128,12 @@ public sealed record AuditEntry(DateTimeOffset At, Guid? UserId, string Action, 
 }
 public sealed class HostState
 {
+    public HostState WithoutHistory()
+    {
+        var checkpoint = (HostState)MemberwiseClone();
+        checkpoint.Jobs = []; checkpoint.HiperwallEdits = []; checkpoint.Audit = [];
+        return checkpoint;
+    }
     public int SchemaVersion { get; set; } = 1;
     public Guid SiteId { get; set; } = Guid.NewGuid();
     public string SiteName { get; set; } = "";
@@ -128,6 +150,8 @@ public sealed class HostState
     public List<RoleBinding> Roles { get; set; } = [];
     public List<ScenarioDefinition> Scenarios { get; set; } = [];
     public List<Job> Jobs { get; set; } = [];
+    public Dictionary<string, DateTimeOffset> ConnectionNotBefore { get; set; } = [];
+    public Dictionary<string, DateTimeOffset> ConnectionLastDispatchAt { get; set; } = [];
     public List<Guid> UncertainDevices { get; set; } = [];
     public List<AuditEntry> Audit { get; set; } = [];
 }
@@ -139,6 +163,8 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     AuditEntry[] Audit, DeviceModel[] Models, int HeartbeatTimeoutSeconds)
 {
     public LightLayout LightLayout { get; init; } = new(0, []);
+    public bool HistorySupported { get; init; }
+    public bool BackupSupported { get; init; }
     public bool LightCardsSupported { get; init; }
     public bool HiperwallReadSupported { get; init; }
     public bool HiperwallWriteSupported { get; init; }
