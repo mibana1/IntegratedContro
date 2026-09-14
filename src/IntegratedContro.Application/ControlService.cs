@@ -184,16 +184,24 @@ public sealed partial class ControlService
         Audit(s, session.Info.UserId, "ReleasePreservingJobs", $"session={session.Info.Id}");
         return s.Lease;
     });
-    public bool Logout(string token) => Change(s =>
+    public bool Logout(string token)
     {
-        var session = Authenticate(token);
-        CancelHiperwallSession(session.Info.Id);
-        if (s.Lease.Mode == LeaseMode.Held && s.Lease.SessionId == session.Info.Id)
-            s.Lease = new Lease { Mode = LeaseMode.Free, Generation = s.Lease.Generation + 1 };
-        if (!s.FencedSessions.Contains(session.Info.Id)) s.FencedSessions.Add(session.Info.Id);
-        Audit(s, session.Info.UserId, "LogoutPreservingJobs", $"session={session.Info.Id}");
-        return true;
-    });
+        lock (_gate)
+        {
+            Healthy(); CheckConnectionUnsafe();
+            var session = Authenticate(token);
+            var next = JsonDefaults.Copy(_state);
+            if (next.Lease.Mode == LeaseMode.Held && next.Lease.SessionId == session.Info.Id)
+                next.Lease = new Lease { Mode = LeaseMode.Free, Generation = next.Lease.Generation + 1 };
+            if (!next.FencedSessions.Contains(session.Info.Id)) next.FencedSessions.Add(session.Info.Id);
+            Audit(next, session.Info.UserId, "LogoutPreservingJobs", $"session={session.Info.Id}");
+            Persist(next);
+            // Commit and revoke under the same lock. Accepted jobs retain their requester snapshots.
+            _sessions.Remove(Digest(token));
+            CancelHiperwallSession(session.Info.Id);
+            return true;
+        }
+    }
     public RecoveryReview ReviewRecovery(string token)
     {
         lock (_gate)

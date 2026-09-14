@@ -203,8 +203,8 @@ public sealed class HiperwallTests
         var viewer = rig.Operator("viewer", AccountRole.Viewer);
         var pending = rig.Service.RefreshHiperwallAsync(viewer.Token, false, default); await reader.Started.Task;
         rig.Service.Logout(viewer.Token); reader.Finish.SetResult(Success());
-        Assert.Equal("session_fenced", (await Assert.ThrowsAsync<DomainException>(() => pending)).Code);
-        Rig.Reject("session_fenced", () => rig.Service.GetHiperwallStatus(viewer.Token));
+        Assert.Equal("unauthorized", (await Assert.ThrowsAsync<DomainException>(() => pending)).Code);
+        Rig.Reject("unauthorized", () => rig.Service.GetHiperwallStatus(viewer.Token));
         var fresh = rig.Login("viewer");
         Assert.Equal(HiperwallConnectionState.Connected, (await rig.Service.RefreshHiperwallAsync(fresh.Token, false, default)).State);
     }

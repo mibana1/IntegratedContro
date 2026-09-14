@@ -96,6 +96,32 @@ public sealed class PersistenceTests
         Assert.Empty(store.Load().Jobs);
         Rig.Reject("host_unavailable", () => service.Submit(login.Token, new(Guid.NewGuid(), lease.Generation, "light")));
     }
+    [Fact]
+    public void Failed_logout_commit_does_not_acknowledge_logout_or_change_durable_work()
+    {
+        var hasher = new TestHasher();
+        var initial = new HostState { Initialized = true, Accounts = [new InitialAdministratorPolicy(hasher).Create("admin", Rig.Password)] };
+        using var store = new FailingStore(initial);
+        var service = new ControlService(store, hasher, new GateDriver(), new TestClock());
+        var login = service.Login(new("admin", Rig.Password, Guid.NewGuid(), Environment.MachineName));
+        var lease = service.Acquire(login.Token);
+        var device = service.SaveDevice(login.Token, new(lease.Generation, Guid.NewGuid(), Guid.NewGuid(),
+            Environment.MachineName, "light", "shared", "test"));
+        service.SaveRole(login.Token, new(lease.Generation, "light", device.Id));
+        var job = service.Submit(login.Token, new(Guid.NewGuid(), lease.Generation, "light"));
+        var before = store.Load();
+
+        store.FailNext = true;
+        Assert.Throws<IOException>(() => service.Logout(login.Token));
+        var durable = store.Load();
+        Assert.Equal(before.Revision, durable.Revision);
+        Assert.Equal(lease.SessionId, durable.Lease.SessionId);
+        Assert.Equal(LeaseMode.Held, durable.Lease.Mode);
+        Assert.DoesNotContain(login.Session.Id, durable.FencedSessions);
+        Assert.DoesNotContain(durable.Audit, a => a.Action == "LogoutPreservingJobs");
+        Assert.Equal(JobStatus.Queued, durable.Jobs.Single(j => j.Id == job.Id).Status);
+        Rig.Reject("host_unavailable", () => service.GetState(login.Token));
+    }
     private sealed class FailingStore(HostState state) : IStateStore
     {
         private HostState _state = JsonDefaults.Copy(state);

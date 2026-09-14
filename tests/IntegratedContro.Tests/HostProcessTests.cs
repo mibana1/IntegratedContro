@@ -68,7 +68,15 @@ public sealed class HostProcessTests
         lease = await HostProcess.Post<Lease>(a, "/api/lease/acquire");
         // Losing all client connections must not stop the separate EXE or its already accepted work.
         var unattended = await HostProcess.Post<Job>(a, "/api/jobs", request with { RequestId = Guid.NewGuid(), Generation = lease.Generation, Value = 48, DelayBeforeMs = 500 });
-        await HostProcess.Post<bool>(a, "/api/logout"); a.Dispose(); b.Dispose();
+        await HostProcess.Post<bool>(a, "/api/logout");
+        using (var loggedOutState = await a.GetAsync("/api/state"))
+            Assert.Equal(HttpStatusCode.Unauthorized, loggedOutState.StatusCode);
+        using (var loggedOutReview = await a.PostAsync("/api/recovery/review", null))
+            Assert.Equal(HttpStatusCode.Unauthorized, loggedOutReview.StatusCode);
+        using (var loggedOutApproval = await a.PostAsJsonAsync("/api/recovery/approve",
+            new RecoveryApprovalRequest(review.ReviewId), JsonDefaults.Options))
+            Assert.Equal(HttpStatusCode.Unauthorized, loggedOutApproval.StatusCode);
+        a.Dispose(); b.Dispose();
         await Task.Delay(900);
         Assert.False(host.Process!.HasExited);
         var (observer, _) = await host.Login();
