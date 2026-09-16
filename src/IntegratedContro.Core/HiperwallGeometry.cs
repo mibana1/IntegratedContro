@@ -12,7 +12,7 @@ public readonly record struct HiperwallRectangle(double Left, double Top, double
 }
 public static class HiperwallGeometry
 {
-    // Shared by editing, slot capture and restore verification. Explicit metadata wins,
+    // Shared by editing, LIVE draft/slot capture and restore verification. Explicit metadata wins,
     // including its failure: an unknown supplied ID must not be replaced with a guess.
     public static HiperwallItem? ResolveInstanceZone(HiperwallItem instance, IEnumerable<HiperwallItem> zones)
     {

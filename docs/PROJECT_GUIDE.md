@@ -536,6 +536,25 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 
 ## 10. 구현 단계와 완료 기준
 
+### Hiperwall LIVE → 배치 초안 복사의 Zone 누락 대응 (2026-09-16)
+
+- LIVE 초안 복사도 슬롯 저장과 같은 Core의 ResolveInstanceZone을 사용한다.
+  유효한 응답 Zone을 우선하며, Zone 정보가 생략되거나 비어 있으면 콘텐츠 중심을 포함하는 유일한 Zone을 적용한다.
+  콘텐츠 크기·음수/소수 좌표·UUID/원문 이름·소리 상태를 유지하고 Zone에 맞춰 축소하지 않는다.
+- 중첩·공유 경계·Zone 밖·잘못된 명시적 Zone ID와 확인 불가능한 위치/회전은 복사를 거부한다.
+  수동 선택 Zone으로 대신 채우지 않으며 오류에 콘텐츠 이름과 인스턴스 ID를 표시한다.
+  한 항목이라도 실패하면 기존 초안 전체·선택 항목·배치 이름·표시 시간·버전을 보존한다.
+  복사는 사용권 없이 가능하며 저장이나 LIVE 명령을 자동 실행하지 않는다.
+- 검증: 수정 전 Zone 누락 복사 실패를 재현했고, 수정 후 격리 HTTPS 호스트·가짜 Controller의 WPF 회귀를 통과했다.
+  같은 목록의 슬롯 저장과 초안 복사 결과 일치, 복사한 배치 저장/불러오기, 잘못된 Zone의 전체 초안 보존,
+  기존 표시·교대·선택 종료·15초 테스트와 자동 정리를 확인했다.
+  scripts/verify.ps1 -SkipUiSmoke의 잠금 복원·배포 규칙·빌드(경고/오류 0)·서비스/통합 테스트 246개도 통과했다.
+  근거: artifacts/layout-zone-reproduction.log, layout-zone-layouts-ui.log, layout-zone-verify.log,
+  artifacts/ui-smoke/hiperwall-layouts-result.txt. 현장 Controller 검수는 별도다.
+- 이번 동작 변경은 App 전용이다. 새 앱 재실행으로 적용하며 호스트 API·운영 DB 형식은 변경하지 않는다.
+- 배포: artifacts/publish/Build-20260916-173139-941. 작업 공간 IntegratedContro.lnk의 최신 App 대상을 확인했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 실행 중인 운영 프로세스는 종료하지 않았다.
+
 ### 숫자 입력 오류 시 명령 접수 차단 (2026-09-16)
 
 - 장비 상세 조작의 숫자·대기·제한시간 입력은 입력 문자열을 그대로 보관하고 정수 여부·허용 범위를 검사한다.

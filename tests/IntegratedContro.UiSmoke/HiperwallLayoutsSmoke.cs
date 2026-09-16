@@ -34,6 +34,7 @@ public static partial class Program
             var view = (IntegratedContro.App.HiperwallView)window.FindName("HiperwallInventory");
             ((TabControl)view.FindName("HiperwallWorkTabs")).SelectedItem = view.FindName("LayoutsTab");
             window.UpdateLayout();
+            await RunHiperwallLayoutCapture(vm, fixture, Hiper);
             h.DraftContent = h.Contents[0]; h.DraftZone = h.Zones[0]; h.DraftX = "-25.5"; h.DraftY = "0"; h.DraftWidth = "640"; h.DraftHeight = "360";
             await Hiper(h.AddPlacementCommand); h.LayoutName = "운영 배치"; h.DurationMode = DisplayDurationMode.Continuous;
             await Hiper(h.SaveLayoutCommand);

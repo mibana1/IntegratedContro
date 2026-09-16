@@ -109,11 +109,12 @@ public sealed partial class HiperwallViewModel
         CaptureLayoutCommand = new(() =>
         {
             var captured = new List<HiperwallPlacement>();
+            var zones = Zones.Select(row => row.Item).ToArray();
             foreach (var row in Instances)
             {
-                var item = row.Item; var uuid = item.Fields.GetValueOrDefault("content.uuid"); var zone = item.Fields.GetValueOrDefault("content.zone");
+                var item = row.Item; var uuid = item.Fields.GetValueOrDefault("content.uuid"); var zone = HiperwallGeometry.ResolveInstanceZone(item, zones)?.Id;
                 if (!row.TryRectangle(out var rect, out _) || string.IsNullOrEmpty(zone))
-                { LayoutMessage = "위치·크기·Zone을 확인할 수 없는 인스턴스가 있습니다. LIVE에서 확인하거나 초안에 직접 추가하세요."; return Task.CompletedTask; }
+                { LayoutMessage = $"위치·크기·Zone을 확인할 수 없는 콘텐츠: {item.Name} (인스턴스 ID: {item.Id ?? "없음"}). LIVE에서 확인하거나 초안에 직접 추가하세요."; return Task.CompletedTask; }
                 var audio = HiperwallEditing.TryAudio(item, out var volume, out var muted);
                 captured.Add(new(uuid is null ? "name" : "uuid", uuid ?? item.Name, zone, HiperwallLayout.From(rect), audio ? volume : null, audio ? muted : null));
             }
