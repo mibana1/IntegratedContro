@@ -181,7 +181,7 @@ public sealed partial class ControlService
         }
         finally { _hiperwallWrites.Release(); }
     }
-    private bool CanOpenDisplay(HiperwallDisplayJob j) => !_stopping && !_storageFailed &&
+    private bool CanOpenDisplay(HiperwallDisplayJob j) => !_stopping && !_storageFailed && ScenarioAllowsDisplay(j) &&
         _state.Hiperwall?.Version == j.Request.ConfigurationVersion &&
         _state.Accounts.Any(a => a.Id == j.Requester.UserId && HiperwallPermission(a));
     private void UpdateDisplay(Guid id, int index, Action<HiperwallDisplayTarget> update)
@@ -192,6 +192,19 @@ public sealed partial class ControlService
         update(target);
         if (!wasClosed && !target.Outstanding || target.CleanupState == DisplayCleanupState.NeedsReview)
             Audit(next, job.Requester.UserId, "HiperwallDisplayCleanup", $"request={id}; target={index}; state={target.CleanupState}");
+        // Latch the scenario outcome in the same transaction as the first open result.
+        // Inventory reconciliation may later resolve an unknown open, but must not resume its parent.
+        if (job.ScenarioJobId is { } parentId && job.ScenarioStepIndex is { } stepIndex &&
+            next.Jobs.SingleOrDefault(j => j.Id == parentId) is { Active: true } parent &&
+            parent.Steps[stepIndex].Status == StepStatus.Waiting &&
+            target.OpenState is HiperwallSendState.Unknown or HiperwallSendState.Rejected)
+        {
+            var invalid = Revalidate(next, parent, parent.Snapshot.Steps[stepIndex]);
+            var status = target.OpenState == HiperwallSendState.Unknown ? StepStatus.Unknown :
+                invalid is not null ? StepStatus.Skipped : Now >= parent.Steps[stepIndex].DeadlineAt ? StepStatus.Failed :
+                !target.OpenAttempted ? StepStatus.Skipped : StepStatus.Failed;
+            FinishStep(next, parent, stepIndex, new(status, invalid ?? target.Message));
+        }
         // Reconciled LIVE opens no longer remain unknown in handover history.
         if (next.HiperwallEdits.SingleOrDefault(e => e.Request.RequestId == id) is { } edit &&
             edit.Steps[0].State == HiperwallSendState.Unknown && (target.OpenState == HiperwallSendState.Acknowledged || !target.Outstanding))

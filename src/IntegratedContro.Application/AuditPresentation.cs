@@ -45,7 +45,7 @@ public static class AuditPresentation
             _ => "기타 기록"
         };
         var deviceName = device is null ? $"장비 {Short(Id("device"))}" : $"{device.Name} / {device.PcName}";
-        string Step(StepSnapshot s) => $"{s.Target.Name} / {s.Target.PcName}: {Operation(s.Operation, s.Value, s.Unit)}";
+        string Step(StepSnapshot s) => $"{s.KindLabel} · {s.TargetLabel}" + (s.Kind == ScenarioStepKind.DisplayLayout ? "" : $": {Operation(s.Operation, s.Value, s.Unit)}");
         var work = job is null ? $"작업 {Short(Id("job"))}" :
             $"{job.Snapshot.RequesterName} 요청 · " + (job.IsLightBatch || job.Kind == JobKind.Scenario
                 ? $"{job.Snapshot.Name} · {job.Snapshot.Steps.Length}단계"
@@ -56,6 +56,7 @@ public static class AuditPresentation
         string State(string value) => value switch
         {
             "Simulated" => "가상 실행 완료", "Unknown" => "결과 불확실 · 상태 대조 필요",
+            "Waiting" => "조건·표시 응답 대기", "ConditionMet" => "조건 충족", "Acknowledged" => "Controller 응답 확인",
             "Failed" => "실패", "Skipped" => "미전송 · 차단", "Dispatching" => "전송 결과 대기",
             _ => "결과 확인 필요"
         };
@@ -86,7 +87,7 @@ public static class AuditPresentation
             "LightBatchAccepted" or "JobAccepted" => $"{work} · 접수 완료, 실행 결과는 별도로 확인하세요.",
             "JobCancellation" => $"{work} · 미전송 부분 취소 요청. 이미 전송한 동작의 정지·롤백은 아닙니다.",
             "VirtualStateReconciled" => $"{deviceName}의 가상 상태를 대조했습니다. 과거 작업 결과는 변경하지 않았습니다.",
-            "DispatchIntent" => $"{stage} · 전송 준비를 기록했습니다. 동작 완료를 뜻하지 않습니다.",
+            "DispatchIntent" => $"{stage} · 단계 시작을 기록했습니다. 조건 충족·동작 완료를 뜻하지 않습니다.",
             "DispatchResult" => $"{stage} · {State(Field("result"))}.",
             "DispatchRejected" => $"{work} · {string.Join("; ", entry.Detail.Split(';').Skip(1)).Trim()}",
             "RecoveryReviewed" => "관리자가 진행 중 작업·예약·불확실 장비를 확인했습니다.",

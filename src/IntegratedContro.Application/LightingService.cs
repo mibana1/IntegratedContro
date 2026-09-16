@@ -1,4 +1,4 @@
-﻿using IntegratedContro.Core;
+using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
 
 namespace IntegratedContro.Application;
@@ -47,12 +47,12 @@ public sealed partial class ControlService
         Require(request.ScenarioId is null && request.Operation == DeviceOperation.Power && request.DelayBeforeMs == 0,
             "invalid_card_request", "조명 카드는 즉시 전원 명령만 접수합니다.", 400);
         var step = snapshots.Single();
-        Require(step.Target.Id == expected.DeviceId && step.Target.PcId == expected.PcId &&
-            step.Target.Version == expected.DeviceVersion && step.Role.Version == expected.RoleVersion,
+        Require(step.Target!.Id == expected.DeviceId && step.Target!.PcId == expected.PcId &&
+            step.Target!.Version == expected.DeviceVersion && step.Role!.Version == expected.RoleVersion,
             "card_target_changed", "조명의 대상 또는 역할이 변경되었습니다. 현재 상태를 확인하고 다시 누르세요.");
-        Require(_driver.Models.Any(m => m.Id == step.Target.ModelId && m.Category == DeviceCategory.Lighting),
+        Require(_driver.Models.Any(m => m.Id == step.Target!.ModelId && m.Category == DeviceCategory.Lighting),
             "light_required", "조명 장비를 선택하세요.", 400);
-        Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target.Id == expected.DeviceId)),
+        Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == expected.DeviceId)),
             "device_busy", "이 조명의 접수 작업이 남아 있습니다. 작업 결과를 먼저 확인하세요.");
         var actual = s.DeviceStates[expected.DeviceId].Simulated.GetValueOrDefault(DeviceOperation.Power);
         Require(expected.Power is 0 or 1 && actual is not null && actual.Value == expected.Power &&

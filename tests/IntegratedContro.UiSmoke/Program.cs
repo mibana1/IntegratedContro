@@ -41,12 +41,13 @@ public static partial class Program
                 else if (args.Contains("--camera-input-only")) await RunCameraInput();
                 else if (args.Contains("--media-only")) { await RunRelay(); await RunMedia(); await RunPreview(); }
                 else if (args.Contains("--preview-only")) { await RunRelay(); await RunPreview(); }
+                else if (args.Contains("--scenarios-only")) await RunScenarioExtensions();
                 else if (args.Contains("--layouts-only")) await RunHiperwallLayouts();
                 else if (args.Contains("--handover-only")) await RunHandover();
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); }
-                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallLayouts(); await RunHandover(); await RunRelay(); await RunPreview();
+                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallLayouts(); await RunScenarioExtensions(); await RunHandover(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }
@@ -202,8 +203,8 @@ public static partial class Program
             a.CommandValue = 26; a.DelayMs = 1200;
             await Execute(a, a.SubmitCommand);
             Require(a.Jobs.Count == 1, a.Message);
-            Require(a.Jobs.Single().Job.Snapshot.Steps[0].Target.Id == firstDevice.Id
-                && a.Jobs.Single().Job.Snapshot.Steps[0].Target.PcId == firstDevice.Config.PcId, "First command targeted a different device/PC");
+            Require(a.Jobs.Single().Job.Snapshot.Steps[0].Target!.Id == firstDevice.Id
+                && a.Jobs.Single().Job.Snapshot.Steps[0].Target!.PcId == firstDevice.Config.PcId, "First command targeted a different device/PC");
             a.CommandValue = 90; a.DelayMs = 60000;
             await Execute(a, a.SubmitCommand); Require(a.Jobs.Count == 2, a.Message);
             var longJobId = a.Jobs.Single(j => j.Job.Snapshot.Steps[0].Value == 90).Id;
@@ -307,7 +308,7 @@ public static partial class Program
             await Click(vm, button);
             Require(!light.PowerCommand.CanExecute(null), "Repeated toggle enabled while its job is pending");
             await Wait(() => light.Power == 1 && light.PowerCommand.CanExecute(null));
-            Require(vm.Jobs.Count == 1 && vm.Jobs.Single().Job.Snapshot.Steps[0].Target.Id == light.Id, "Card click targeted another light");
+            Require(vm.Jobs.Count == 1 && vm.Jobs.Single().Job.Snapshot.Steps[0].Target!.Id == light.Id, "Card click targeted another light");
             await Click(vm, button);
             await Wait(() => light.Power == 0 && light.PowerCommand.CanExecute(null));
             Require(vm.Jobs.Count == 2 && vm.Jobs.All(j => j.Job.Status == JobStatus.Completed), "ON then OFF did not complete");
@@ -390,7 +391,7 @@ public static partial class Program
         Button GroupButton(string name) => FindAll<Button>(board).Single(b => b.Name == name && ReferenceEquals(b.DataContext, group));
         await Click(vm, GroupButton("GroupOn")); await WaitBatch(1, group.Cards);
         Require(vm.Lights.Except(group.Cards).All(c => c.Power == 0), "Group command changed an outside light");
-        Require(vm.Jobs.First().Job.Snapshot.Steps.Select(s => s.Target.Id).SequenceEqual(group.Cards.Select(c => c.Id)), "Group snapshot mismatch");
+        Require(vm.Jobs.First().Job.Snapshot.Steps.Select(s => s.Target!.Id).SequenceEqual(group.Cards.Select(c => c.Id)), "Group snapshot mismatch");
         await Click(vm, GroupButton("GroupOff")); await WaitBatch(0, group.Cards);
         await Execute(vm, vm.EditLightOrderCommand);
         Require(!vm.AllLightsOnCommand.CanExecute(null) && !group.OnCommand.CanExecute(null), "Layout edit allowed bulk power");

@@ -35,12 +35,12 @@ public sealed record JobRow(Job Job, bool PreviousSession)
     public string Requester => $"{Job.Snapshot.RequesterName} / {Job.Snapshot.ClientPcName}";
     public string OriginSession => Job.Snapshot.SessionId.ToString()[..8];
     public string Kind => Job.IsLightBatch ? "일괄 조명" : Job.Kind == JobKind.Scenario ? "시나리오" : "일반 명령";
-    public string Targets => string.Join(", ", Job.Snapshot.Steps.Select(x => $"{x.Target.Name} ({x.Target.PcName})").Distinct());
-    public string Progress => $"{Job.Steps.Count(x => x.Status != StepStatus.Pending && x.Status != StepStatus.Dispatching)}/{Job.Steps.Count}";
+    public string Targets => string.Join(", ", Job.Snapshot.Steps.Select(x => x.TargetLabel).Distinct());
+    public string Progress => $"{Job.Steps.Count(x => x.Status is not (StepStatus.Pending or StepStatus.Dispatching or StepStatus.Waiting))}/{Job.Steps.Count}";
     public string Status => Job.Status switch
     {
         JobStatus.Queued => "접수·대기", JobStatus.Running => "실행 중", JobStatus.StopRequested => "취소 요청·결과 대기",
-        JobStatus.Completed => "가상 실행 종료", JobStatus.Cancelled => "미전송 부분 취소", JobStatus.Interrupted => "중단",
+        JobStatus.Completed => Job.Snapshot.Mode == "Mixed" ? "시나리오 실행 종료" : "가상 실행 종료", JobStatus.Cancelled => "미전송 부분 취소", JobStatus.Interrupted => "중단",
         _ => "불확실·대조 필요"
     };
     public string AcceptedAt => Job.Snapshot.AcceptedAt.ToLocalTime().ToString("MM-dd HH:mm:ss");
@@ -145,13 +145,8 @@ public sealed partial class MainViewModel : Bindable
             return $"작업: {snapshot.Name} | {SelectedJob.Status}\n원 요청자: {snapshot.RequesterName} / {snapshot.ClientPcName} / 접수 {snapshot.AcceptedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}\n" +
                 $"원 세션: {snapshot.SessionId} | 사용권 세대: {snapshot.LeaseGeneration}\n작업 ID: {job.Id} | 요청 ID: {snapshot.RequestId}\n" +
                 $"취소 요청자: {job.CancellerName ?? "없음"} | 취소 시각: {job.CancelRequestedAt?.ToLocalTime():yyyy-MM-dd HH:mm:ss}\n" +
-                $"실행 결과: {job.Result}\n만료: {snapshot.ExpiresAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} | 가상 모드 | 시나리오 버전: {snapshot.ScenarioVersion}\n\n" +
-                string.Join("\n\n", snapshot.Steps.Select((step, i) =>
-                    $"{i + 1}. {step.Role.Id} → {step.Target.Name} / PC: {step.Target.PcName}\n" +
-                    $"   동작: {step.Operation} = {step.Value} {step.Unit} | 대기 {step.DelayBeforeMs}ms / 제한 {step.TimeoutMs}ms / 실패 정책 {step.OnFailure}\n" +
-                    $"   고정 PC ID: {step.Target.PcId} / 장비 ID: {step.Target.Id}\n" +
-                    $"   모델: {step.Target.ModelId} / 연결: {step.Target.ConnectionId} / 장비 설정 v{step.Target.Version} / 역할 v{step.Role.Version}\n" +
-                    $"   확인 조건: {step.ConditionOperation} = {step.ConditionValue} | 단계: {job.Steps[i].Status} / {job.Steps[i].Result}"));
+                $"실행 결과: {job.Result}\n만료: {snapshot.ExpiresAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} | {snapshot.Mode} 모드 | 시나리오 버전: {snapshot.ScenarioVersion}\n\n" +
+                string.Join("\n\n", snapshot.Steps.Select((step, i) => FormatScenarioStep(step, job.Steps[i], i)));
         }
     }
     public ScenarioDefinition? SelectedScenario { get; set; }
@@ -226,9 +221,9 @@ public sealed partial class MainViewModel : Bindable
             () => CanControl && SelectedJob is not null && (SelectedJob.Job.Active || SelectedJob.Job.Status == JobStatus.NeedsReview));
         ManualSwitchCommand = Command(async () =>
         {
-            if (!ConfirmManualSwitch($"'{SelectedJob!.Name}' 전체의 후속 단계를 중단합니다.\n전송된 동작은 되돌리지 않습니다. 대상 가상 상태를 대조한 후 새 수동 명령을 선택하세요.\n\n대상: {SelectedJob.Targets}")) return;
+            if (!ConfirmManualSwitch($"'{SelectedJob!.Name}' 전체의 후속 단계를 중단합니다.\n전송된 동작은 되돌리지 않습니다. 장비 상태를 대조하고 Hiperwall의 남은 전송·불확실 표시를 확인한 뒤 새 조작을 선택하세요.\n\n대상: {SelectedJob.Targets}")) return;
             await Client.Post<Job>("/api/jobs/manual-switch", new JobActionRequest(Generation, SelectedJob.Id));
-            Message = "시나리오 후속 단계를 차단했습니다. 처리 종료 후 대상별 '가상 상태 조회·대조'를 수행하고 새 명령을 선택하세요.";
+            Message = "시나리오 후속 단계를 차단했습니다. 처리 종료 후 장비 상태를 대조하고 Hiperwall의 남은 전송·불확실 표시를 확인하세요.";
         }, () => CanControl && SelectedJob?.Job.Kind == JobKind.Scenario && SelectedJob.Job.Active);
         ReconcileCommand = Command(async () => { await Client.Post<DeviceState>("/api/devices/reconcile", new ReconcileRequest(Generation, SelectedDevice!.Id)); Message = "가상 상태 대조 완료. 과거 불확실 명령의 이력은 그대로 유지됩니다."; }, () => CanControl && SelectedDevice is not null);
         SaveDeviceCommand = Command(SaveDevice, () => CanConfigure);
@@ -244,17 +239,11 @@ public sealed partial class MainViewModel : Bindable
             SelectedRole = Roles.SingleOrDefault(r => r.Id == saved.Id);
             Message = $"역할 배정 완료: {saved.Id} → {target.Name} / {target.PcName}. 장비 제어에서 기능·값을 선택해 명령을 접수하세요.";
         }, () => CanConfigure && SelectedDevice is not null && !string.IsNullOrWhiteSpace(RoleName));
-        AddStepCommand = Command(() =>
-        {
-            if (SelectedRole is null || SelectedCapability is null) throw new ArgumentException("장비 제어 탭에서 역할과 기능을 선택하세요.");
-            DeviceOperation? condition = string.IsNullOrWhiteSpace(ConditionOperationText) ? null : Enum.Parse<DeviceOperation>(ConditionOperationText, true);
-            int? expected = string.IsNullOrWhiteSpace(ConditionValueText) ? null : int.Parse(ConditionValueText);
-            DraftSteps.Add(new(SelectedRole.Id, SelectedCapability.Operation, CommandValue, DelayMs, TimeoutMs, DraftFailurePolicy, condition, expected));
-            return Task.CompletedTask;
-        });
+        AddStepCommand = Command(AddScenarioStep);
         RemoveStepCommand = Command(() => { if (SelectedDraftStep is not null) DraftSteps.Remove(SelectedDraftStep); return Task.CompletedTask; });
         SaveScenarioCommand = Command(async () =>
         {
+            RequireScenarioExtensions(DraftSteps);
             var saved = await Client.Post<ScenarioDefinition>("/api/scenarios", new ScenarioRequest(Generation, _scenarioId, ScenarioName, DraftSteps.ToArray(), _scenarioVersion));
             _scenarioVersion = saved.Version; Message = "시나리오 정의를 저장했습니다.";
         }, () => CanConfigure);
@@ -291,7 +280,7 @@ public sealed partial class MainViewModel : Bindable
             _review = await Client.Post<RecoveryReview>("/api/recovery/review");
             ReviewText = $"확인 시각: {_review.ReviewedAt:O}\n사용권 세대: {_review.Generation}\n불확실 장비: {string.Join(", ", _review.UncertainDevices)}\n\n" +
                 string.Join("\n\n", _review.Jobs.Select(j => $"{j.Id} | {j.Snapshot.RequesterName} | {j.Snapshot.Name}\n{j.Status} | {j.Result}\n" +
-                    string.Join(", ", j.Snapshot.Steps.Select(x => $"{x.Target.PcName}/{x.Target.Name}").Distinct())));
+                    string.Join(", ", j.Snapshot.Steps.Select(x => x.TargetLabel).Distinct())));
             ReviewText += "\n\nHiperwall 편집 · 진행/결과 확인 필요\n" + string.Join("\n\n", _review.HiperwallEdits.Select(r =>
                 $"{r.Requester.UserName} / {r.Requester.PcName} · {r.Summary}\n요청 {r.Request.RequestId}\n" + string.Join("\n", r.Steps.Select(s => $"{s.Command.InstanceId}: {s.Message}"))));
             ReviewText += "\n\nHiperwall 표시·정리\n" + string.Join("\n\n", _review.HiperwallDisplays.Select(j => $"{j.Requester.UserName} / {j.Requester.PcName} · {j.Summary}\n{j.Schedule}\n{j.Endpoint}\n" + string.Join("\n", j.Targets.Select(t => $"{t.Command.InstanceId}: {t.Message}"))));
@@ -351,7 +340,7 @@ public sealed partial class MainViewModel : Bindable
         finally
         {
             _login = null; _connected = false; _state = null; _review = null;
-            _pending = null; _pendingLightBatch = null; _editingLightOrder = false; Lights.Clear(); Devices.Clear(); Roles.Clear(); Jobs.Clear(); Scenarios.Clear(); Accounts.Clear(); Audit.Clear();
+            _pending = null; _pendingLightBatch = null; _editingLightOrder = false; Lights.Clear(); Devices.Clear(); Roles.Clear(); Jobs.Clear(); Scenarios.Clear(); ScenarioLayouts.Clear(); SelectedScenarioLayout = null; Accounts.Clear(); Audit.Clear();
         }
     }
     private async Task Poll()
@@ -384,7 +373,7 @@ public sealed partial class MainViewModel : Bindable
         foreach (var d in state.Devices)
         {
             var value = state.DeviceStates[d.Id];
-            var reserved = state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(x => x.Target.Id == d.Id));
+            var reserved = state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(x => x.Target?.Id == d.Id));
             var row = new DeviceRow(d, string.Join(" / ", value.Simulated.Select(x => $"{x.Key}={x.Value.Value} ({x.Value.At.ToLocalTime():HH:mm:ss})")),
                 string.Join(" / ", value.Desired.Select(x => $"{x.Key}={x.Value}")), value.Connection, value.LastResult,
                 state.UncertainDevices.Contains(d.Id) ? "대조 필요" : reserved ? "시나리오 예약" : "사용 가능");
@@ -394,6 +383,7 @@ public sealed partial class MainViewModel : Bindable
         _selectedDevice = Devices.FirstOrDefault(x => x.Id == selectedDeviceId);
         Replace(Roles, state.Roles); _selectedRole = Roles.FirstOrDefault(x => x.Id == selectedRoleId);
         Replace(Models, state.Models); SelectedModel = Models.FirstOrDefault(x => x.Id == modelId) ?? Models.FirstOrDefault();
+        RefreshScenarioLayouts(state);
         Replace(Scenarios, state.Scenarios); SelectedScenario = Scenarios.FirstOrDefault(x => x.Id == scenarioId);
         Replace(Accounts, state.Accounts); SelectedAccount = Accounts.FirstOrDefault(x => x.Id == selectedAccountId);
         Replace(Jobs, state.Jobs.OrderByDescending(j => j.Snapshot.AcceptedAt).Select(j => new JobRow(j, j.Snapshot.SessionId != _login?.Session.Id)));
@@ -417,6 +407,7 @@ public sealed partial class MainViewModel : Bindable
     {
         if (scenario && SelectedScenario is null) throw new ArgumentException("실행할 시나리오를 선택하세요.");
         if (!scenario && SelectedCapability is null) throw new ArgumentException("지원 기능을 선택하세요.");
+        if (scenario) RequireScenarioExtensions(SelectedScenario!.Steps);
         _pending = new(Guid.NewGuid(), Generation, scenario ? null : SelectedRole!.Id,
             SelectedCapability?.Operation ?? DeviceOperation.Power, CommandValue, scenario ? SelectedScenario!.Id : null, DelayMs, TimeoutMs);
         Notify(); await SendPending();

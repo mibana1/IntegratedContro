@@ -55,22 +55,47 @@
    </TabItem>
    <TabItem x:Name="HiperwallTab" Header="Hiperwall 편집"><local:HiperwallView x:Name="HiperwallInventory" DataContext="{Binding Hiperwall}"/></TabItem>
    <TabItem x:Name="CameraTab" Header="카메라 · 영상"><local:CameraView x:Name="CameraWorkspace" DataContext="{Binding Cameras}"/></TabItem>
-   <TabItem Header="시나리오">
-    <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <TabItem x:Name="ScenarioTab" Header="시나리오">
+    <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="330"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
      <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,18,0"><StackPanel>
-      <TextBlock Text="순차 시나리오" Style="{StaticResource SectionTitle}"/><ComboBox ItemsSource="{Binding Scenarios}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedScenario}"/>
+      <TextBlock Text="순차 시나리오" Style="{StaticResource SectionTitle}"/>
+      <ComboBox ItemsSource="{Binding Scenarios}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedScenario}"/>
       <WrapPanel><Button Content="실행" Command="{Binding RunScenarioCommand}" Style="{StaticResource Primary}"/><Button Content="편집에 불러오기" Command="{Binding LoadScenarioCommand}"/><Button Content="새 정의" Command="{Binding NewScenarioCommand}"/></WrapPanel>
-      <TextBlock Text="정의 이름" Margin="0,14,0,0"/><TextBox Text="{Binding ScenarioName, UpdateSourceTrigger=PropertyChanged}"/>
-      <TextBlock Text="추가할 단계의 역할·기능·값·대기·제한시간은 장비 제어 탭의 선택값을 사용합니다." TextWrapping="Wrap" Foreground="#65778E"/>
-      <TextBlock Text="실패 정책" Margin="0,12,0,0"/><ComboBox ItemsSource="{Binding FailurePolicies}" SelectedItem="{Binding DraftFailurePolicy}"/>
-      <TextBlock Text="가상 상태 확인 조건 (선택)"/><TextBox Text="{Binding ConditionOperationText}" ToolTip="Power, Brightness, Volume, Mute, Input, Lift 중 지원 기능. 빈 값은 조건 없음."/>
-      <TextBlock Text="조건 값 (선택)"/><TextBox Text="{Binding ConditionValueText}"/>
-      <Button Content="현재 조작을 마지막 단계로 추가" Command="{Binding AddStepCommand}"/><Button Content="선택 단계 삭제" Command="{Binding RemoveStepCommand}"/>
+      <TextBlock Text="정의 이름" Margin="0,10,0,0"/><TextBox Text="{Binding ScenarioName, UpdateSourceTrigger=PropertyChanged}"/>
+      <TextBlock Text="추가할 단계" FontWeight="SemiBold" Margin="0,8,0,0"/>
+      <ComboBox x:Name="ScenarioKindPicker" ItemsSource="{Binding ScenarioKinds}" DisplayMemberPath="Label" SelectedValuePath="Kind" SelectedValue="{Binding DraftStepKind}"/>
+      <TextBlock Text="{Binding ScenarioStepHint}" TextWrapping="Wrap" Foreground="#65778E" Margin="0,4,0,8"/>
+      <StackPanel Visibility="{Binding IsDeviceScenarioStep, Converter={StaticResource BoolVisibility}}">
+       <TextBlock Text="역할 / 기능"/><ComboBox ItemsSource="{Binding Roles}" DisplayMemberPath="Id" SelectedItem="{Binding SelectedRole}"/>
+       <ComboBox ItemsSource="{Binding Capabilities}" DisplayMemberPath="Operation" SelectedItem="{Binding SelectedCapability}"/>
+       <TextBlock Text="{Binding CommandRange}"/><TextBox Text="{Binding CommandValue, ValidatesOnExceptions=True}"/>
+      </StackPanel>
+      <StackPanel Visibility="{Binding IsDisplayScenarioStep, Converter={StaticResource BoolVisibility}}">
+       <TextBlock Text="저장 배치"/><ComboBox x:Name="ScenarioLayoutPicker" ItemsSource="{Binding ScenarioLayouts}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedScenarioLayout}"/>
+       <TextBlock Text="배치는 Hiperwall 편집 → 저장 배치에서 먼저 저장하세요." TextWrapping="Wrap" Foreground="#65778E"/>
+      </StackPanel>
+      <TextBlock Text="시작 전 대기 / 제한시간 (ms)"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <TextBox Text="{Binding DelayMs, ValidatesOnExceptions=True}" ToolTip="단계 시작 전 대기: 0~3600000ms"/>
+       <TextBox Grid.Column="1" Text="{Binding TimeoutMs, ValidatesOnExceptions=True}" ToolTip="장비 명령: 100~30000ms / 조건 대기·표시: 100~3600000ms"/>
+      </Grid>
+      <TextBlock Text="실패 정책 (Stop: 중단 / Continue: 다음 단계)"/><ComboBox ItemsSource="{Binding FailurePolicies}" SelectedItem="{Binding DraftFailurePolicy}"/>
+      <StackPanel Visibility="{Binding IsCommandScenarioStep, Converter={StaticResource BoolVisibility}}">
+       <TextBlock Text="전송 직전 한 번 확인할 조건 (선택)"/><TextBox Text="{Binding ConditionOperationText}" ToolTip="Power, Brightness, Volume, Mute, Input, Lift 중 지원 기능. 빈 값은 조건 없음."/>
+       <TextBox Text="{Binding ConditionValueText}" ToolTip="조건 값"/>
+      </StackPanel>
+      <Button x:Name="AddScenarioStep" Content="마지막 단계로 추가" Command="{Binding AddStepCommand}"/>
+      <Button Content="선택 단계 삭제" Command="{Binding RemoveStepCommand}"/>
       <Button Content="시나리오 정의 저장 (관리자)" Command="{Binding SaveScenarioCommand}" Style="{StaticResource Primary}"/>
-      <TextBlock Text="모든 단계 대상을 시작 시 고정·예약합니다. 권한/설정 변경·불확실 결과는 Continue 정책으로 우회하지 않습니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,12,0,0"/>
+      <TextBlock Text="시작 시 모든 대상과 저장 배치를 고정·예약합니다. 권한·설정 변경과 불확실 결과는 실패 정책과 관계없이 후속 단계를 차단합니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,10,0,0"/>
      </StackPanel></ScrollViewer>
-     <DataGrid Grid.Column="1" ItemsSource="{Binding DraftSteps}" SelectedItem="{Binding SelectedDraftStep}"><DataGrid.Columns>
-      <DataGridTextColumn Header="역할" Binding="{Binding RoleId}" Width="*"/><DataGridTextColumn Header="기능" Binding="{Binding Operation}" Width="110"/><DataGridTextColumn Header="값" Binding="{Binding Value}" Width="60"/><DataGridTextColumn Header="대기 ms" Binding="{Binding DelayBeforeMs}" Width="85"/><DataGridTextColumn Header="제한 ms" Binding="{Binding TimeoutMs}" Width="85"/><DataGridTextColumn Header="실패 정책" Binding="{Binding OnFailure}" Width="90"/><DataGridTextColumn Header="확인 조건" Binding="{Binding ConditionOperation}" Width="100"/><DataGridTextColumn Header="조건 값" Binding="{Binding ConditionValue}" Width="70"/>
+     <DataGrid x:Name="ScenarioStepGrid" Grid.Column="1" ItemsSource="{Binding DraftSteps}" SelectedItem="{Binding SelectedDraftStep}"><DataGrid.Columns>
+      <DataGridTextColumn Header="단계 종류" Binding="{Binding KindLabel}" Width="140"/>
+      <DataGridTextColumn Header="역할 / 배치 ID" Binding="{Binding TargetLabel}" Width="200"/>
+      <DataGridTextColumn Header="동작·조건" Binding="{Binding ActionLabel}" Width="125"/>
+      <DataGridTextColumn Header="시작 전 ms" Binding="{Binding DelayBeforeMs}" Width="85"/>
+      <DataGridTextColumn Header="제한 ms" Binding="{Binding TimeoutMs}" Width="85"/>
+      <DataGridTextColumn Header="실패 정책" Binding="{Binding OnFailure}" Width="80"/>
      </DataGrid.Columns></DataGrid>
     </Grid>
    </TabItem>

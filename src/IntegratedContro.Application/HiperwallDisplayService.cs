@@ -75,7 +75,7 @@ public sealed partial class ControlService
             HiperwallConfiguration config; HiperwallPlacement[] placements; DisplayDuration duration; string name;
             lock (_gate)
             {
-                DisplayOwner(token, request.Generation, request.ConfigurationVersion); config = _state.Hiperwall!;
+                DisplayOwner(token, request.Generation, request.ConfigurationVersion); RequireHiperwallScenarioAvailable(_state); config = _state.Hiperwall!;
                 Require(_state.HiperwallDisplays.Count(j => j.Outstanding) < 100, "display_limit", "남은 표시 작업을 먼저 정리하세요.");
                 if (request.LayoutId is { } id)
                 {
@@ -104,7 +104,7 @@ public sealed partial class ControlService
             lock (_gate)
             {
                 ct.ThrowIfCancellationRequested();
-                var session = DisplayOwner(token, request.Generation, request.ConfigurationVersion);
+                var session = DisplayOwner(token, request.Generation, request.ConfigurationVersion); RequireHiperwallScenarioAvailable(_state);
                 if (request.LayoutId is { } id) Require(_state.HiperwallLayouts.Any(l => l.Id == id && l.Version == request.LayoutVersion),
                     "layout_changed", "확인 중 배치가 변경되었습니다. 다시 선택하세요.");
                 var next = JsonDefaults.Copy(_state);
@@ -125,7 +125,9 @@ public sealed partial class ControlService
         Require(HiperwallPermission(User(s, session)), "hiperwall_scope", "전체 장비 제어 권한이 필요합니다.", 403);
         var job = s.HiperwallDisplays.SingleOrDefault(j => j.Request.RequestId == request.JobId);
         Require(job is not null, "request_not_found", "표시 작업이 없습니다.", 404);
-        job!.StopRequested = true; job.StoppedBy = session.Info.UserId; job.StopperName = session.Info.UserName;
+        if (job!.ScenarioJobId is { } parentId && s.Jobs.SingleOrDefault(j => j.Id == parentId) is { Active: true } parent)
+            StopJob(s, parent, session, "시나리오 표시 종료 요청");
+        job.StopRequested = true; job.StoppedBy = session.Info.UserId; job.StopperName = session.Info.UserName;
         foreach (var t in job.Targets.Where(t => t.Outstanding))
         { t.CleanupAttempts = 0; t.NextAttemptAt = Now; t.CleanupState = DisplayCleanupState.Tracking; }
         Audit(s, session.Info.UserId, "HiperwallDisplayStop", $"request={request.JobId}; 미전송 차단·열린 표시 정리");

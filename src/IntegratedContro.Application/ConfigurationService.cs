@@ -89,6 +89,26 @@ public sealed partial class ControlService
     });
     private StepSnapshot Resolve(HostState s, Account user, ScenarioStep step, RoleBinding? overrideRole = null)
     {
+        Require(step is not null && Enum.IsDefined(step.Kind), "invalid_step", "단계 종류를 확인하세요.", 400);
+        Require(step!.DelayBeforeMs is >= 0 and <= 3600000 && step.TimeoutMs >= 100 &&
+            step.TimeoutMs <= (step.Kind == ScenarioStepKind.DeviceCommand ? 30000 : 3600000) && Enum.IsDefined(step.OnFailure),
+            "invalid_timing", "단계 전 대기는 최대 1시간, 제한시간은 명령 0.1~30초 / 조건·표시 0.1초~1시간입니다.", 400);
+        if (step.Kind == ScenarioStepKind.DisplayLayout)
+        {
+            Require(string.IsNullOrEmpty(step.RoleId) && step.ConditionOperation is null && step.ConditionValue is null &&
+                step.LayoutId is not null, "invalid_step", "배치 표시에는 저장 배치만 지정하세요.", 400);
+            Require(HiperwallPermission(user), "hiperwall_scope", "배치 표시에는 전체 장비 제어 권한이 필요합니다.", 403);
+            Require(_hiperwall is IHiperwallWriter && _credentials is not null && s.Hiperwall is not null,
+                "hiperwall_unavailable", "Hiperwall 연결 설정이 필요합니다.");
+            var layout = s.HiperwallLayouts.SingleOrDefault(l => l.Id == step.LayoutId);
+            Require(layout is not null && layout.ConfigurationVersion == s.Hiperwall!.Version, "layout_changed",
+                "저장 배치가 없거나 연결 설정이 변경되었습니다. 배치를 검토·저장하세요.");
+            ValidatePlacements(layout!.Placements);
+            Require(layout.Duration.IsValid, "invalid_duration", "배치 표시 시간을 확인하세요.", 400);
+            return new(null, null, default, 0, "", step.DelayBeforeMs, step.TimeoutMs, step.OnFailure, null, null)
+            { Kind = step.Kind, Display = new(JsonDefaults.Copy(layout), s.Hiperwall!.Endpoint, Guid.NewGuid()) };
+        }
+        Require(step.LayoutId is null, "invalid_step", "장비 단계에 배치를 지정할 수 없습니다.", 400);
         var role = overrideRole ?? s.Roles.SingleOrDefault(r => r.Id == step.RoleId);
         Require(role is not null, "role_missing", $"역할을 찾을 수 없습니다: {step.RoleId}", 400);
         var device = s.Devices.SingleOrDefault(d => d.Id == role!.DeviceId);
@@ -98,9 +118,10 @@ public sealed partial class ControlService
         Require(capability is not null, "unsupported", "이 모델은 해당 기능을 지원하지 않습니다.", 400);
         Require(step.Value >= capability!.Minimum && step.Value <= capability.Maximum, "value_range",
             $"허용 범위: {capability.Minimum}~{capability.Maximum} {capability.Unit}", 400);
-        Require(step.DelayBeforeMs is >= 0 and <= 3600000 && step.TimeoutMs is >= 100 and <= 30000 &&
-            Enum.IsDefined(step.OnFailure), "invalid_timing", "대기는 0~3600000ms, 제한시간은 100~30000ms입니다.", 400);
         Require((step.ConditionOperation is null) == (step.ConditionValue is null), "invalid_condition", "확인 조건의 동작과 값을 함께 지정하세요.", 400);
+        if (step.Kind == ScenarioStepKind.WaitUntil)
+            Require(step.Operation != DeviceOperation.Stop && step.ConditionOperation is null,
+                "invalid_condition", "조건 대기는 읽을 기능·기대값만 지정합니다. STOP은 상태 조건이 아닙니다.", 400);
         if (step.ConditionOperation is { } condition)
         {
             var c = _driver.Models.Single(m => m.Id == device.ModelId).Capabilities.SingleOrDefault(x => x.Operation == condition);
@@ -108,6 +129,6 @@ public sealed partial class ControlService
                 "invalid_condition", "지원되는 가상 상태 확인 조건을 지정하세요.", 400);
         }
         return new(role!, device, step.Operation, step.Value, capability.Unit, step.DelayBeforeMs, step.TimeoutMs,
-            step.OnFailure, step.ConditionOperation, step.ConditionValue);
+            step.OnFailure, step.ConditionOperation, step.ConditionValue) { Kind = step.Kind };
     }
 }

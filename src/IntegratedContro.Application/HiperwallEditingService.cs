@@ -59,7 +59,7 @@ public sealed partial class ControlService
             HiperwallConfiguration config;
             lock (_gate)
             {
-                HiperwallOwner(token, request);
+                HiperwallOwner(token, request); RequireHiperwallScenarioAvailable(_state);
                 Require(!_state.HiperwallEdits.Any(r => r.Active), "hiperwall_busy", "접수된 Hiperwall 명령을 처리 중입니다.");
                 config = _state.Hiperwall!;
             }
@@ -75,7 +75,7 @@ public sealed partial class ControlService
             lock (_gate)
             {
                 ct.ThrowIfCancellationRequested();
-                var session = HiperwallOwner(token, request);
+                var session = HiperwallOwner(token, request); RequireHiperwallScenarioAvailable(_state);
                 var next = JsonDefaults.Copy(_state);
                 var receipt = new HiperwallEditReceipt { Request = request, Requester = session.Info, Endpoint = config.Endpoint,
                     AcceptedAt = Now, Steps = commands.Select(c => new HiperwallEditStep { Command = c,

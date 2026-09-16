@@ -35,6 +35,8 @@ public sealed class HiperwallDisplayTarget
 public sealed class HiperwallDisplayJob
 {
     public required HiperwallDisplayRequest Request { get; init; }
+    public Guid? ScenarioJobId { get; init; }
+    public int? ScenarioStepIndex { get; init; }
     public required SessionInfo Requester { get; init; }
     public required string Name { get; init; }
     public required string Endpoint { get; init; }

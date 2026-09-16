@@ -17,7 +17,8 @@ public enum VirtualFault { None, Failure, Disconnected, NoResponse, ResponseLost
 public enum FailurePolicy { Stop, Continue }
 public enum JobKind { Manual, Scenario, LightBatch }
 public enum JobStatus { Queued, Running, StopRequested, Completed, Cancelled, Interrupted, NeedsReview }
-public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped }
+public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped, Waiting, ConditionMet, Acknowledged }
+public enum ScenarioStepKind { DeviceCommand, WaitUntil, DisplayLayout }
 
 public sealed record Capability(DeviceOperation Operation, int Minimum, int Maximum, string Unit);
 public sealed record DeviceModel(string Id, string Name, Capability[] Capabilities, DeviceCategory Category = DeviceCategory.Other);
@@ -48,11 +49,24 @@ public sealed class DeviceState
 }
 public sealed record ScenarioStep(string RoleId, DeviceOperation Operation, int Value,
     int DelayBeforeMs = 0, int TimeoutMs = 3000, FailurePolicy OnFailure = FailurePolicy.Stop,
-    DeviceOperation? ConditionOperation = null, int? ConditionValue = null);
+    DeviceOperation? ConditionOperation = null, int? ConditionValue = null,
+    ScenarioStepKind Kind = ScenarioStepKind.DeviceCommand, Guid? LayoutId = null)
+{
+    public string KindLabel => Kind switch { ScenarioStepKind.WaitUntil => "조건 충족까지 대기", ScenarioStepKind.DisplayLayout => "저장 배치 표시", _ => "장비 명령" };
+    [JsonIgnore] public string ActionLabel => Kind == ScenarioStepKind.DisplayLayout ? "표시 응답 대기" : $"{Operation} = {Value}";
+    [JsonIgnore] public string TargetLabel => Kind == ScenarioStepKind.DisplayLayout ? LayoutId?.ToString() ?? "배치 미선택" : RoleId;
+}
 public sealed record ScenarioDefinition(Guid Id, string Name, int Version, ScenarioStep[] Steps);
-public sealed record StepSnapshot(RoleBinding Role, DeviceConfig Target, DeviceOperation Operation,
+public sealed record ScenarioDisplaySnapshot(SavedHiperwallLayout Layout, string Endpoint, Guid RequestId);
+public sealed record StepSnapshot(RoleBinding? Role, DeviceConfig? Target, DeviceOperation Operation,
     int Value, string Unit, int DelayBeforeMs, int TimeoutMs, FailurePolicy OnFailure,
-    DeviceOperation? ConditionOperation, int? ConditionValue);
+    DeviceOperation? ConditionOperation, int? ConditionValue)
+{
+    public ScenarioStepKind Kind { get; init; }
+    public ScenarioDisplaySnapshot? Display { get; init; }
+    [JsonIgnore] public string TargetLabel => Display is { } d ? $"{d.Layout.Name} / {d.Endpoint}" : $"{Target?.Name} ({Target?.PcName})";
+    [JsonIgnore] public string KindLabel => Kind switch { ScenarioStepKind.WaitUntil => "조건 충족까지 대기", ScenarioStepKind.DisplayLayout => "저장 배치 표시", _ => "장비 명령" };
+}
 public sealed record ExecutionSnapshot(Guid SiteId, string Mode, Guid RequestId, Guid RequestedBy,
     string RequesterName, Guid SessionId, Guid ClientPcId, string ClientPcName, long LeaseGeneration,
     DateTimeOffset AcceptedAt, DateTimeOffset ExpiresAt, Guid? ScenarioId, int? ScenarioVersion,
@@ -61,6 +75,8 @@ public sealed class StepRun
 {
     public StepStatus Status { get; set; }
     public DateTimeOffset? SentAt { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? DeadlineAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
     public string Result { get; set; } = "미전송";
 }
@@ -156,6 +172,8 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public HiperwallDisplayJob[] OutstandingHiperwallDisplays { get; init; } = [];
     public HiperwallDisplayJob[] HiperwallDisplayJobs { get; init; } = [];
     public bool HiperwallLayoutsSupported { get; init; }
+    public bool ScenarioExtensionsSupported { get; init; }
+    public SavedHiperwallLayout[] SavedHiperwallLayouts { get; init; } = [];
     public bool LightGroupsSupported { get; init; }
     public bool LightBatchSupported { get; init; }
     public Guid[] ControllableDeviceIds { get; init; } = [];

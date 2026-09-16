@@ -10,15 +10,15 @@ public sealed record HiperwallJobRow(HiperwallEditReceipt? Receipt, bool Previou
     public string Requester => $"{Owner.UserName} / {Owner.PcName}";
     public string OriginSession => Owner.Id.ToString()[..8];
     public string AcceptedAt => (Display?.AcceptedAt ?? Receipt!.AcceptedAt).ToLocalTime().ToString("MM-dd HH:mm:ss");
-    public string Name => Display?.Name ?? HiperwallEditing.ActionName(Receipt!.Request.Action);
+    public string Name => Display is { } d ? (d.ScenarioJobId is null ? "" : "시나리오 · ") + d.Name : HiperwallEditing.ActionName(Receipt!.Request.Action);
     public string Targets => Display is { } j ? $"{j.Endpoint} · " + string.Join(", ", j.Targets.Select(t => t.Command.InstanceId)) :
         $"{Receipt!.Endpoint} · " + string.Join(", ", Receipt.Steps.Select(s => s.Command.InstanceId ?? "Hiperwall 전체").Distinct());
     public string Progress => Display is { } j ? $"{j.Summary} · {j.Schedule}" :
         $"응답 {Receipt!.Steps.Count(s => s.State == HiperwallSendState.Acknowledged)} / 대기 {Receipt.Steps.Count(s => s.State == HiperwallSendState.Pending)} / 전송 {Receipt.Steps.Count(s => s.State == HiperwallSendState.Sending)} / 불확실 {Receipt.Steps.Count(s => s.State == HiperwallSendState.Unknown)}";
-    public string Cancellation => Display is not null ? CanCancel ? "미전송 중단·열린 표시 종료 가능" : "사용권·전체 장비 제어 권한 필요" :
+    public string Cancellation => Display is not null ? CanCancel ? Display.ScenarioJobId is null ? "미전송 중단·열린 표시 종료 가능" : "시나리오 후속 중단·열린 표시 종료" : "사용권·전체 장비 제어 권한 필요" :
         !Receipt!.Steps.Any(s => s.State == HiperwallSendState.Pending) ? "취소할 미전송 단계 없음" : CanCancel ? "미전송 부분 선택 취소 가능" : "사용권·전체 장비 제어 권한 필요";
     public string Details => Display is { } j ?
-        $"작업: {Name}\n원 요청자: {Requester}\n원 세션: {Owner.Id} | 사용권 세대: {j.Request.Generation}\n요청: {Id}\n{Targets}\n{Progress}\n종료 요청자: {j.StopperName ?? "-"}\n" +
+        $"작업: {Name}\n원 요청자: {Requester}\n원 세션: {Owner.Id} | 사용권 세대: {j.Request.Generation}\n요청: {Id}\n연결 시나리오: {j.ScenarioJobId?.ToString() ?? "-"} / 단계: {j.ScenarioStepIndex + 1}\n{Targets}\n{Progress}\n종료 요청자: {j.StopperName ?? "-"}\n" +
             string.Join("\n", j.Targets.Select(t => $"{t.Command.InstanceId} · {t.Command.ContentValue} · {t.Command.ZoneId}\n{t.Message}")) :
         $"작업: {Name}\n원 요청자: {Requester}\n원 세션: {Owner.Id} | 사용권 세대: {Receipt!.Request.Generation}\n" +
         $"접수: {Receipt.AcceptedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} | 요청 ID: {Id}\nController: {Receipt.Endpoint} | 설정 v{Receipt.Request.ConfigurationVersion}\n{Receipt.Summary}\n{Cancellation}\n\n" +
