@@ -127,9 +127,7 @@ public sealed partial class MainViewModel : Bindable
         set { Set(ref _selectedCapability, value); if (value is not null) { CommandValue = value.Minimum; Changed(nameof(CommandValue)); } NotifyCommandInput(); }
     }
     public string CommandRange => SelectedCapability is null ? "역할을 선택하세요." : IsPowerCommand ? "전원 상태를 선택한 뒤 명령을 접수하세요." : $"{SelectedCapability.Minimum}~{SelectedCapability.Maximum} {SelectedCapability.Unit}";
-    private int _commandValue = 1; public int CommandValue { get => _commandValue; set => Set(ref _commandValue, value); }
-    private int _delayMs; public int DelayMs { get => _delayMs; set => Set(ref _delayMs, value); }
-    private int _timeoutMs = 3000; public int TimeoutMs { get => _timeoutMs; set => Set(ref _timeoutMs, value); }
+
     public FailurePolicy DraftFailurePolicy { get; set; }
     private JobRow? _selectedJob;
     public JobRow? SelectedJob { get => _selectedJob; set { Set(ref _selectedJob, value); Changed(nameof(JobDetails)); Notify(); } }
@@ -213,7 +211,7 @@ public sealed partial class MainViewModel : Bindable
         AcquireCommand = Command(async () => { await Client.Post<Lease>("/api/lease/acquire"); }, () => _connected && IsLoggedIn && _state?.Lease.Mode == LeaseMode.Free);
         ReleaseCommand = Command(async () => { await Client.Post<Lease>("/api/lease/release", new LeaseRequest(Generation)); Message = "사용 종료 완료. 접수 작업과 예약은 호스트에서 유지됩니다."; }, () => CanControl);
         RefreshCommand = Command(Refresh, () => IsLoggedIn);
-        SubmitCommand = Command(() => Submit(false), () => CanControl && SelectedRole is not null && !HasPending);
+        SubmitCommand = Command(() => Submit(false), () => CanControl && SelectedRole is not null && SelectedCapability is not null && !HasPending && ManualInputError.Length == 0);
         RetryCommand = Command(SendPending, () => _connected && HasPending);
         CancelCommand = Command(async () => { await Client.Post<Job>("/api/jobs/cancel", new JobActionRequest(Generation, SelectedJob!.Id)); Message = "선택 취소 요청을 처리했습니다. 전송된 동작의 물리 정지·롤백은 아닙니다."; },
             () => CanControl && SelectedJob is not null && (SelectedJob.Job.Active || SelectedJob.Job.Status == JobStatus.NeedsReview));
@@ -238,7 +236,7 @@ public sealed partial class MainViewModel : Bindable
             _roleNameEdited = false; Set(ref _roleName, saved.Id, nameof(RoleName));
             Message = $"역할 배정 완료: {saved.Id} → {target.Name} / {target.PcName}. 장비 제어에서 기능·값을 선택해 명령을 접수하세요.";
         }, () => CanConfigure && SelectedDevice is not null && !string.IsNullOrWhiteSpace(RoleName));
-        AddStepCommand = Command(AddScenarioStep);
+        AddStepCommand = Command(AddScenarioStep, () => ScenarioTimingError.Length == 0);
         InitializeScenarioEditor();
         RemoveStepCommand = ScenarioEditCommand(RemoveSelectedDraftStep, () => HasSelectedDraftStep);
         SaveScenarioCommand = Command(async () =>
@@ -416,9 +414,18 @@ public sealed partial class MainViewModel : Bindable
     {
         if (scenario && SelectedScenario is null) throw new ArgumentException("실행할 시나리오를 선택하세요.");
         if (!scenario && SelectedCapability is null) throw new ArgumentException("지원 기능을 선택하세요.");
-        if (scenario) RequireScenarioExtensions(SelectedScenario!.Steps);
-        _pending = new(Guid.NewGuid(), Generation, scenario ? null : SelectedRole!.Id,
-            SelectedCapability?.Operation ?? DeviceOperation.Power, CommandValue, scenario ? SelectedScenario!.Id : null, DelayMs, TimeoutMs);
+        if (scenario)
+        {
+            RequireScenarioExtensions(SelectedScenario!.Steps);
+            // A saved scenario uses its stored steps, not the unrelated manual/step-editor inputs.
+            _pending = new(Guid.NewGuid(), Generation, null, ScenarioId: SelectedScenario.Id);
+        }
+        else
+        {
+            if (ManualInputError.Length > 0) throw new ArgumentException(ManualInputError);
+            _pending = new(Guid.NewGuid(), Generation, SelectedRole!.Id, SelectedCapability!.Operation, CommandValue,
+                DelayBeforeMs: DelayMs, TimeoutMs: TimeoutMs);
+        }
         Notify(); await SendPending();
     }
     private async Task SendPending()

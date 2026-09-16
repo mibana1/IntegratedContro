@@ -11,6 +11,7 @@ public sealed partial class MainViewModel
     private void NotifyCommandInput()
     {
         Changed(nameof(IsPowerCommand)); Changed(nameof(IsNumericCommand)); Changed(nameof(CommandRange));
+        NotifyNumericInput();
     }
     public ConditionOperationChoice[] ConditionOperations =>
         [new("", "조건 없음"), .. (SelectedScenarioTarget?.Capabilities ?? [])

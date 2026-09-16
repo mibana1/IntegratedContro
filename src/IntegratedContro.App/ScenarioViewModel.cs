@@ -21,6 +21,7 @@ public sealed partial class MainViewModel
             if (!Set(ref _draftStepKind, value)) return;
             Changed(nameof(IsDeviceScenarioStep)); Changed(nameof(IsDisplayScenarioStep));
             Changed(nameof(IsCommandScenarioStep)); Changed(nameof(ScenarioStepHint)); RefreshScenarioSettings(reset: false);
+            NotifyNumericInput();
         }
     }
     public bool IsDeviceScenarioStep => DraftStepKind != ScenarioStepKind.DisplayLayout;
@@ -50,6 +51,7 @@ public sealed partial class MainViewModel
     }
     private Task AddScenarioStep()
     {
+        if (ScenarioTimingError.Length > 0) throw new ArgumentException(ScenarioTimingError);
         if (DraftStepKind != ScenarioStepKind.DeviceCommand && _state?.ScenarioExtensionsSupported != true)
             throw new ArgumentException("호스트를 최신 버전으로 시작한 뒤 다시 연결하세요.");
         ScenarioStep[] steps;
