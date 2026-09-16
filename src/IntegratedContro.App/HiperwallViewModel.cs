@@ -85,12 +85,12 @@ public sealed partial class HiperwallViewModel : Bindable
 
     public HiperwallViewModel()
     {
-        InitializeWorkspace(); InitializeEditing();
+        InitializeWorkspace(); InitializeEditing(); InitializeLayouts();
         RefreshCommand = new(() => Run(async (client, ct) =>
         {
             InvalidateLists("최신 콘텐츠와 인스턴스를 조회합니다.");
             var view = await client.Post<HiperwallSnapshot>("/api/hiperwall/refresh", cancellationToken: ct, timeoutMs: 35000);
-            await LoadEditHistory(client, ct); return view;
+            await LoadEditHistory(client, ct); await LoadLayouts(client, ct); return view;
         }), () => Ready);
         TestCommand = new(() => Run(async (client, ct) =>
         {
@@ -100,6 +100,15 @@ public sealed partial class HiperwallViewModel : Bindable
         LoadSettingsCommand = new(LoadSettings, () => Ready && _admin);
         SaveCommand = new(SaveSettings, () => Ready && _canConfigure);
     }
+    public long PreviewEpoch => _epoch;
+    public bool CanPreview => _client is not null && _session is not null && _view?.Contents.State == HiperwallListState.Available;
+    public async Task<MediaPayload> ReadPreview(string selector, string value, CancellationToken ct)
+    {
+        if (!CanPreview) throw new InvalidOperationException("현재 Contents 목록이 필요합니다.");
+        return await _client!.Post<MediaPayload>("/api/hiperwall/preview",
+            new HiperwallPreviewRequest(ConfigurationVersion, selector, value), ct, 10000);
+    }
+    public int ConfigurationVersion => _view?.ConfigurationVersion ?? 0;
     private bool Ready => _client is not null && _session is not null && _supported && !_busy;
     public void UpdateContext(HostClient? client, Guid? session, bool admin, bool canConfigure, bool supported, int version, bool canOperate = false, bool writeSupported = false)
     {
@@ -112,7 +121,7 @@ public sealed partial class HiperwallViewModel : Bindable
             Cancel();
             if (sessionChanged)
             {
-                _pendingEditId = null; EditHistory.Clear(); SelectedEdit = null;
+                _pendingEditId = null; EditHistory.Clear(); SelectedEdit = null; ClearLayouts();
                 _editorVersion = 0; Name = ""; Endpoint = ""; User = ""; TimeoutText = "3000";
                 AppliedSettings = "적용 설정 조회 전"; SecretStatus = "적용 설정을 불러오세요.";
                 foreach (var propertyName in new[] { nameof(Name), nameof(Endpoint), nameof(User), nameof(TimeoutText) }) Changed(propertyName);
@@ -126,7 +135,7 @@ public sealed partial class HiperwallViewModel : Bindable
         if (!supported && session is not null) Message = "현재 호스트가 Hiperwall 조회를 지원하지 않습니다. 호스트 배포본을 확인하세요.";
         Notify();
     }
-    private async Task LoadStatus() => await Run(async (client, ct) => await client.Get<HiperwallSnapshot>("/api/hiperwall/status", ct));
+    private async Task LoadStatus() => await Run(async (client, ct) => { await LoadLayouts(client, ct); return await client.Get<HiperwallSnapshot>("/api/hiperwall/status", ct); });
     private async Task Run(Func<HostClient, CancellationToken, Task<HiperwallSnapshot?>> action)
     {
         if (_client is null || _busy) return;
@@ -229,12 +238,12 @@ public sealed partial class HiperwallViewModel : Bindable
     {
         _epoch++; _operation?.Cancel(); _operation = null; _busy = false; ClearSecret();
     }
-    public void Close() { Cancel(); _client = null; _session = null; _view = null; InvalidateLists("조회가 종료되었습니다."); }
+    public void Close() { Cancel(); ClearLayouts(); _client = null; _session = null; _view = null; InvalidateLists("조회가 종료되었습니다."); }
     private void Notify()
     {
         foreach (var name in new[] { nameof(IsBusy), nameof(CanEdit), nameof(Status), nameof(CurrentConnection), nameof(ControllerInfo),
             nameof(LastSuccess), nameof(WallState), nameof(ZoneState), nameof(ContentState), nameof(InstanceState), nameof(InstanceBrief), nameof(ZoneBrief), nameof(WallBrief), nameof(ContentCount), nameof(CanvasSummary), nameof(AppliedSettings), nameof(SecretStatus) }) Changed(name);
-        NotifyEditing();
+        NotifyEditing(); NotifyLayouts();
         RefreshCommand?.Raise(); LoadSettingsCommand?.Raise(); SaveCommand?.Raise(); TestCommand?.Raise();
     }
 }

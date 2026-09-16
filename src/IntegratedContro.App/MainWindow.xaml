@@ -54,6 +54,7 @@
     </TabControl>
    </TabItem>
    <TabItem x:Name="HiperwallTab" Header="Hiperwall 편집"><local:HiperwallView x:Name="HiperwallInventory" DataContext="{Binding Hiperwall}"/></TabItem>
+   <TabItem x:Name="CameraTab" Header="카메라 · 영상"><local:CameraView x:Name="CameraWorkspace" DataContext="{Binding Cameras}"/></TabItem>
    <TabItem Header="시나리오">
     <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
      <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,18,0"><StackPanel>
@@ -92,7 +93,7 @@
       <DataGridTextColumn Header="진행·결과" Binding="{Binding Progress}" Width="230"/>
       <DataGridTextColumn Header="취소 가능 범위" Binding="{Binding Cancellation}" Width="210"/>
      </DataGrid.Columns></DataGrid>
-     <WrapPanel Grid.Row="6" Margin="0,8"><Button x:Name="CancelHiperwallJob" Content="선택 Hiperwall 미전송 부분 취소" Command="{Binding CancelHiperwallJobCommand}"/><TextBlock Text="이미 전송된 명령은 취소되지 않습니다. 불확실 결과는 Controller 목록과 대조하세요." VerticalAlignment="Center" Foreground="#8B5824"/></WrapPanel>
+     <WrapPanel Grid.Row="6" Margin="0,8"><Button x:Name="CancelHiperwallJob" Content="{Binding HiperwallCancelLabel}" Command="{Binding CancelHiperwallJobCommand}"/><TextBlock Text="표시 종료는 열린 인스턴스 정리를 요청합니다. 불확실 결과와 정리 결과를 확인하세요." VerticalAlignment="Center" Foreground="#8B5824"/></WrapPanel>
      <TextBox Grid.Row="7" Text="{Binding HiperwallJobDetails, Mode=OneWay}" IsReadOnly="True" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0"/>
     </Grid>
    </TabItem>

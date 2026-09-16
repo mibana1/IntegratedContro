@@ -76,7 +76,7 @@ public static partial class Program
             release.TrySetResult();
             await HostProcess.Until(client, s => s.OutstandingHiperwallEdits.Single().Steps.Any(x => x.State == HiperwallSendState.Unknown));
             // The regular state poll must pick up the uncertainty without a manual refresh.
-            await Wait(() => vm.HiperwallJobs.Single().Receipt.Steps.Any(s => s.State == HiperwallSendState.Unknown));
+            await Wait(() => vm.HiperwallJobs.Single().Receipt!.Steps.Any(s => s.State == HiperwallSendState.Unknown));
             Require(vm.PreviousSummary.StartsWith("이전 사용자 작업 1건"), "Unknown disappeared from handover count");
             Require(!vm.CancelHiperwallJobCommand.CanExecute(null), "Unknown-only work advertised cancellable");
             await Execute(vm, vm.LogoutCommand);

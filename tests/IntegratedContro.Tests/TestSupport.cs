@@ -55,13 +55,16 @@ internal sealed class Rig : IDisposable
     public long Generation { get; set; }
     private readonly IHiperwallReader? _hiperwall;
     private readonly ICredentialStore? _credentials;
-    public Rig(IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null)
+    private readonly IMediaMtxClient? _media;
+    private readonly IMediaSecretStore? _mediaSecrets;
+    public Rig(IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null,
+        IMediaMtxClient? media = null, IMediaSecretStore? mediaSecrets = null)
     {
-        _hiperwall = hiperwall; _credentials = credentials;
+        _hiperwall = hiperwall; _credentials = credentials; _media = media; _mediaSecrets = mediaSecrets;
         Store = new(DirectoryPath, true);
         var admin = new InitialAdministratorPolicy(Hasher).Create("admin", Password);
         Store.Save(new HostState { Initialized = true, SiteName = "Test site", Accounts = [admin] });
-        Service = new(Store, Hasher, Driver, Clock, hiperwall: _hiperwall, credentials: _credentials);
+        Service = new(Store, Hasher, Driver, Clock, hiperwall: _hiperwall, credentials: _credentials, media: _media, mediaSecrets: _mediaSecrets);
         Admin = Login(); Generation = Service.Acquire(Admin.Token).Generation;
     }
     public LoginResult Login(string name = "admin", string? pc = null) =>
@@ -88,7 +91,7 @@ internal sealed class Rig : IDisposable
     public void Restart()
     {
         Store.Dispose(); Store = new(DirectoryPath);
-        Service = new(Store, Hasher, Driver, Clock, hiperwall: _hiperwall, credentials: _credentials);
+        Service = new(Store, Hasher, Driver, Clock, hiperwall: _hiperwall, credentials: _credentials, media: _media, mediaSecrets: _mediaSecrets);
         Admin = Login();
     }
     public void Dispose()

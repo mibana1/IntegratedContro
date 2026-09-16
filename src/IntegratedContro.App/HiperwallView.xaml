@@ -28,7 +28,7 @@
   </Style>
   <Style TargetType="TabItem"><Setter Property="Foreground" Value="#182F47"/><Setter Property="Padding" Value="10,6"/></Style>
  </UserControl.Resources>
- <Grid Margin="14">
+ <TabControl x:Name="HiperwallWorkTabs" Margin="8" Background="#0B111A" BorderThickness="0"><TabItem Header="LIVE 편집"><Grid Margin="10">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
   <DockPanel Margin="2,0,2,10">
    <Button DockPanel.Dock="Right" VerticalAlignment="Top" Content="목록 새로 고침" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HiperwallRefresh" Background="#20695E"/>
@@ -78,14 +78,14 @@
    </Border>
    <Border Grid.Column="2" Style="{StaticResource Panel}">
     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="2*" MinHeight="90"/><RowDefinition Height="Auto"/><RowDefinition Height=".6*" MinHeight="85" MaxHeight="160"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-     <TextBlock Text="Wall · Zone 캔버스" ToolTip="{Binding CanvasSummary}" FontSize="19" FontWeight="SemiBold" Margin="0,4"/>
+     <TextBlock Text="Wall · Zone · 이미지 프리뷰" ToolTip="{Binding CanvasSummary}" FontSize="19" FontWeight="SemiBold" Margin="0,4"/>
      <WrapPanel Grid.Row="1" Margin="0,6,0,8">
       <Button Content="−" Click="ZoomOut" AutomationProperties.Name="캔버스 축소"/><TextBlock Text="{Binding ZoomLabel, ElementName=WallCanvas}" VerticalAlignment="Center" MinWidth="54" TextAlignment="Center"/>
       <Button Content="+" Click="ZoomIn" AutomationProperties.Name="캔버스 확대"/><Button Content="전체 맞춤" Click="FitAll"/><Button Content="선택 맞춤" Click="FitSelected"/>
      </WrapPanel>
      <Border Grid.Row="2" BorderBrush="#38536D" BorderThickness="1" CornerRadius="6" ClipToBounds="True">
       <local:HiperwallCanvas x:Name="WallCanvas" Items="{Binding CanvasItems}" Selected="{Binding Selected}" CanManipulate="{Binding CanMove}" LockAspect="{Binding LockAspect}" SnapToGrid="{Binding SnapToGrid}" TargetZone="{Binding TargetZone}"
-       AllowDrop="True" DragOver="CanvasDragOver" Drop="CanvasDrop" AutomationProperties.Name="Hiperwall 편집 캔버스"/>
+       AllowDrop="True" DragOver="CanvasDragOver" Drop="CanvasDrop" AutomationProperties.Name="Hiperwall 편집 캔버스" ToolTip="노란 테두리와 !는 프리뷰 갱신 실패입니다. 이전 이미지를 유지하며 편집할 수 있습니다."/>
      </Border>
      <StackPanel Grid.Row="3" Margin="0,6,0,5">
       <ScrollViewer x:Name="ZoneShortcutScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" PanningMode="HorizontalOnly" MaxHeight="56">
@@ -184,5 +184,5 @@
     </ScrollViewer>
    </Border>
   </Grid>
- </Grid>
+ </Grid></TabItem><TabItem x:Name="LayoutsTab" Header="저장 배치 · 표시 · 복구"><local:HiperwallLayoutsView/></TabItem></TabControl>
 </UserControl>

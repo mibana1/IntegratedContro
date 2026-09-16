@@ -28,6 +28,7 @@ public static partial class Program
             Console.Error.WriteLine("Use --profile-dir with a folder under repository artifacts; user preferences must not be overwritten.");
             return 2;
         }
+        if (args.Contains("--login-close-child")) return RunLoginCloseChild();
         var app = new System.Windows.Application();
         app.Resources = new ResourceDictionary { Source = new Uri("/IntegratedContro.App;component/Theme.xaml", UriKind.Relative) }; app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         var result = 1;
@@ -35,11 +36,17 @@ public static partial class Program
         {
             try
             {
-                if (args.Contains("--handover-only")) await RunHandover();
+                if (args.Contains("--login-only")) { await RunLogin(); await RunLoginClose(); }
+                else if (args.Contains("--camera-status-only")) await RunCameraStatus();
+                else if (args.Contains("--camera-input-only")) await RunCameraInput();
+                else if (args.Contains("--media-only")) { await RunRelay(); await RunMedia(); await RunPreview(); }
+                else if (args.Contains("--preview-only")) { await RunRelay(); await RunPreview(); }
+                else if (args.Contains("--layouts-only")) await RunHiperwallLayouts();
+                else if (args.Contains("--handover-only")) await RunHandover();
                 else
                 {
-                    if (!args.Contains("--hiperwall-only")) { await RunLogin(); await Run(); await RunLighting(); }
-                    await RunHiperwall(); await RunHiperwallEditing(); await RunHandover();
+                    if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); }
+                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallLayouts(); await RunHandover(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }

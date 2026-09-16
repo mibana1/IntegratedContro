@@ -121,6 +121,14 @@ public sealed partial class HiperwallCanvas : FrameworkElement
             pivot.Y - ActualHeight / 2 - (pivot.Y - ActualHeight / 2 - _pan.Y) * ratio);
         InvalidateVisual();
     }
+    public Func<HiperwallItemRow, WallPreview?>? Preview { get; set; }
+    public HiperwallItemRow[] VisibleInstances()
+    {
+        EnsureGeometry();
+        return _shapes.Where(s => s.Item.Kind == HiperwallRowKind.Instance &&
+            new Rect(ToScreen(s.Rect.Left, s.Rect.Top), new Size(Math.Max(.5, s.Rect.Width * ViewScale),
+                Math.Max(.5, s.Rect.Height * ViewScale))).IntersectsWith(new Rect(RenderSize))).Select(s => s.Item).ToArray();
+    }
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc); EnsureGeometry();
@@ -149,6 +157,14 @@ public sealed partial class HiperwallCanvas : FrameworkElement
             dc.DrawRectangle(Brush(instance ? "#C02B4668" : "#482D8075"),
                 new Pen(Brush(selected ? "#FFD58A" : instance ? "#7EBCFF" : "#48BDA7"), selected ? 3 : 1.5), rect);
             dc.PushClip(new RectangleGeometry(rect));
+            var frame = instance ? Preview?.Invoke(item) : null;
+            if (frame?.Image is { } image)
+            {
+                dc.DrawImage(image, rect);
+                dc.DrawRectangle(Brush("#B0080F18"), null, new Rect(rect.Left, rect.Top, rect.Width, Math.Min(54, rect.Height * .45)));
+            }
+            if (instance && frame?.Failed == true && rect.Width > 65 && rect.Height > 75)
+                DrawText(dc, frame.Message, new(rect.Left + 8, rect.Bottom - 23), 11, "#FFD58A", rect.Width - 16);
             if (rect.Width > 45 && rect.Height > 30)
             {
                 DrawText(dc, item.Name, new(rect.Left + 10, rect.Top + 8), 13, "#F1F6FC", rect.Width - 20);
@@ -156,6 +172,16 @@ public sealed partial class HiperwallCanvas : FrameworkElement
                     DrawText(dc, $"{item.KindName} · {item.Identity}", new(rect.Left + 10, rect.Top + 31), 10, "#B7CBDC", rect.Width - 20);
             }
             dc.Pop();
+            if (frame?.Failed == true)
+            {
+                dc.DrawRectangle(null, new Pen(Brush("#FFD58A"), 2), rect);
+                if (rect.Width >= 18 && rect.Height >= 18)
+                {
+                    var badge = new Rect(rect.Right - 18, rect.Top, 18, 18);
+                    dc.DrawRectangle(Brush("#FFD58A"), null, badge);
+                    DrawText(dc, "!", new(badge.Left + 5, badge.Top), 13, "#080F18", 12);
+                }
+            }
             if (selected && instance && CanManipulate)
                 dc.DrawRectangle(Brush("#FFD58A"), new Pen(Brush("#152333"), 1), new Rect(rect.Right - 10, rect.Bottom - 10, 20, 20));
         }

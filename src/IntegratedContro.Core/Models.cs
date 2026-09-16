@@ -122,7 +122,13 @@ public sealed class HostState
     public List<Account> Accounts { get; set; } = [];
     public List<DeviceConfig> Devices { get; set; } = [];
     public HiperwallConfiguration? Hiperwall { get; set; }
+    public MediaConfiguration? Media { get; set; }
+    public List<CameraRegistration> Cameras { get; set; } = [];
+    public List<CameraCleanup> CameraCleanup { get; set; } = [];
+    public List<Guid> MediaSecretsToDelete { get; set; } = [];
     public List<HiperwallEditReceipt> HiperwallEdits { get; set; } = [];
+    public List<SavedHiperwallLayout> HiperwallLayouts { get; set; } = [];
+    public List<HiperwallDisplayJob> HiperwallDisplays { get; set; } = [];
     public LightLayout LightLayout { get; set; } = new(0, []);
     public Dictionary<Guid, DeviceState> DeviceStates { get; set; } = [];
     public List<RoleBinding> Roles { get; set; } = [];
@@ -141,10 +147,15 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public LightLayout LightLayout { get; init; } = new(0, []);
     public bool LightCardsSupported { get; init; }
     public bool HiperwallReadSupported { get; init; }
+    public bool CameraSupported { get; init; }
+    public int MediaConfigurationVersion { get; init; }
     public bool HiperwallWriteSupported { get; init; }
     public bool CanControlHiperwall { get; init; }
     public int HiperwallConfigurationVersion { get; init; }
     public HiperwallEditReceipt[] OutstandingHiperwallEdits { get; init; } = [];
+    public HiperwallDisplayJob[] OutstandingHiperwallDisplays { get; init; } = [];
+    public HiperwallDisplayJob[] HiperwallDisplayJobs { get; init; } = [];
+    public bool HiperwallLayoutsSupported { get; init; }
     public bool LightGroupsSupported { get; init; }
     public bool LightBatchSupported { get; init; }
     public Guid[] ControllableDeviceIds { get; init; } = [];
@@ -152,6 +163,7 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
 public sealed record RecoveryReview(Guid ReviewId, long Generation, DateTimeOffset ReviewedAt, Job[] Jobs, Guid[] UncertainDevices)
 {
     public HiperwallEditReceipt[] HiperwallEdits { get; init; } = [];
+    public HiperwallDisplayJob[] HiperwallDisplays { get; init; } = [];
 }
 public sealed class DomainException(string code, string message, int status = 409) : Exception(message)
 {

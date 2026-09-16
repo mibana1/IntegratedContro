@@ -38,6 +38,7 @@ public sealed partial class ControlService
                 job.Result = "재시작 복구: 기록 보존, 중단 작업 자동 재실행 없음";
             }
         }
+        RecoverHiperwallDisplays(next);
         Audit(next, null, "HostStarted", "전송 중 명령 대조 및 중단 시나리오 자동 재개 차단");
         Persist(next);
     }

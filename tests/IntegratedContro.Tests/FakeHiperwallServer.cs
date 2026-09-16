@@ -11,7 +11,8 @@ namespace IntegratedContro.Testing;
 public sealed class FakeHiperwallServer : IAsyncDisposable
 {
     public sealed record Request(string Method, string Path, string Body);
-    public sealed record Response(string Body, int Status = 200, int DelayMs = 0, bool Disconnect = false);
+    public sealed record Response(string Body, int Status = 200, int DelayMs = 0, bool Disconnect = false)
+    { public byte[]? Bytes { get; init; } public string ContentType { get; init; } = "application/xml; charset=utf-8"; }
     public const string FixtureSecret = "fixture-only-토큰<&>";
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _stop = new();
@@ -67,8 +68,8 @@ public sealed class FakeHiperwallServer : IAsyncDisposable
                 var response = Handler is null ? Default(request) : await Handler(request);
                 if (response.DelayMs > 0) await Task.Delay(response.DelayMs, _stop.Token);
                 if (response.Disconnect) return;
-                var payload = Encoding.UTF8.GetBytes(response.Body);
-                var prefix = Encoding.ASCII.GetBytes($"HTTP/1.1 {response.Status} Fixture\r\nContent-Type: application/xml; charset=utf-8\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n");
+                var payload = response.Bytes ?? Encoding.UTF8.GetBytes(response.Body);
+                var prefix = Encoding.ASCII.GetBytes($"HTTP/1.1 {response.Status} Fixture\r\nContent-Type: {response.ContentType}\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n");
                 await stream.WriteAsync(prefix, _stop.Token); await stream.WriteAsync(payload, _stop.Token);
             }
             catch (Exception e) when (e is IOException or OperationCanceledException or ObjectDisposedException) { }
@@ -80,6 +81,8 @@ public sealed class FakeHiperwallServer : IAsyncDisposable
         { Operations.Enqueue("GET /hello"); return new(Hello); }
         if (request.Method != "POST" || request.Path != "/xmlcommand") throw new InvalidOperationException("Unexpected fixture path/method");
         var xml = XElement.Parse(request.Body);
+        if (xml.Element("command")?.Attribute("type")?.Value == "preview")
+            return new Response("", 404);
         var action = xml.Element("action")?.Attribute("type")?.Value;
         if (xml.Name != "Commands" || xml.Elements("command").Any() || action is not ("list" or "walls") ||
             xml.Elements("action").Count() != 1 || xml.Element("action")!.Elements().Any(e =>

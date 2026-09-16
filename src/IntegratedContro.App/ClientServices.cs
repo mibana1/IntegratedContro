@@ -58,6 +58,30 @@ public sealed class HostClient : IDisposable
         }
         return await response.Content.ReadFromJsonAsync<T>(JsonDefaults.Options, ct) ?? throw new InvalidDataException("호스트 응답이 비어 있습니다.");
     }
+    public async Task<MediaPayload> GetMedia(Guid camera, int version, string asset, CancellationToken cancellationToken)
+    {
+        if (!MediaLimits.ValidAsset(asset)) throw MediaLimits.Invalid();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(17000);
+        using var response = await _http.GetAsync($"/api/cameras/{camera}/hls/{asset}?version={version}",
+            HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode) _ = await Read<MediaPayload>(response, timeout.Token).ConfigureAwait(false);
+        var limit = asset.EndsWith(".m3u8", StringComparison.Ordinal) ? MediaLimits.PlaylistBytes : MediaLimits.SegmentBytes;
+        if (response.Content.Headers.ContentLength > limit) throw MediaLimits.Invalid();
+        await using var source = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+        using var memory = new MemoryStream(); var buffer = new byte[64 * 1024];
+        while (true)
+        {
+            var count = await source.ReadAsync(buffer, timeout.Token).ConfigureAwait(false);
+            if (count == 0) break;
+            if (memory.Length + count > limit) throw MediaLimits.Invalid();
+            memory.Write(buffer, 0, count);
+        }
+        var bytes = memory.ToArray();
+        if (asset.EndsWith(".m3u8", StringComparison.Ordinal)) MediaLimits.ValidatePlaylist(bytes);
+        return new(bytes, asset.EndsWith(".m3u8", StringComparison.Ordinal) ? "application/vnd.apple.mpegurl" :
+            asset.EndsWith(".ts", StringComparison.Ordinal) ? "video/mp2t" : "video/mp4");
+    }
     public void Dispose() => _http.Dispose();
 }
 public sealed record ClientPreferences(Guid PcId, string Endpoint, string Fingerprint)

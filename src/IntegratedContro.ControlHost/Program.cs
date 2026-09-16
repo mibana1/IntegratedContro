@@ -36,9 +36,11 @@ try
         DateTime.UtcNow > certificate.NotAfter.ToUniversalTime())
         throw new InvalidDataException("인증서 지문 또는 유효기간을 확인하세요.");
     using var hiperwallReader = new HiperwallHttpReader();
+    using var media = new MediaMtxHttpClient();
     var service = new ControlService(store, new Pbkdf2PasswordHasher(), new VirtualDeviceDriver(store.ConnectionString),
         heartbeatTimeoutSeconds: config.HeartbeatTimeoutSeconds, hiperwall: hiperwallReader,
-        credentials: new HiperwallCredentialStore(store.DataPath));
+        credentials: new HiperwallCredentialStore(store.DataPath), media: media,
+        mediaSecrets: new MediaCredentialStore(store.DataPath));
     var builder = WebApplication.CreateBuilder(Array.Empty<string>());
     builder.Logging.ClearProviders(); builder.Logging.AddConsole(); builder.Logging.SetMinimumLevel(LogLevel.Warning);
     builder.WebHost.ConfigureKestrel(server =>
@@ -55,7 +57,7 @@ try
         options.RejectionStatusCode = 429;
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
             RateLimitPartition.GetFixedWindowLimiter(
-                $"{context.Connection.RemoteIpAddress}:{(context.Request.Path == "/api/login" ? "login" : "api")}",
+                $"{context.Connection.RemoteIpAddress}:{(context.Request.Path == "/api/login" ? "login" : context.Request.Path.Value?.Contains("/hls/", StringComparison.Ordinal) == true ? "video" : "api")}",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = context.Request.Path == "/api/login" ? 10 : 600,
                     Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     });
@@ -88,9 +90,33 @@ try
     app.MapGet("/api/hiperwall/edits", (HttpContext c) => service.GetHiperwallEdits(Token(c)));
     app.MapGet("/api/hiperwall/edits/{id:guid}", (HttpContext c, Guid id) => service.GetHiperwallEdit(Token(c), id));
     app.MapPost("/api/hiperwall/edits/cancel", (HttpContext c, JobActionRequest r) => service.CancelHiperwallEdit(Token(c), r));
+    app.MapGet("/api/hiperwall/displays", (HttpContext c) => service.GetHiperwallDisplays(Token(c)));
+    app.MapPost("/api/hiperwall/layouts/save", (HttpContext c, SaveHiperwallLayoutRequest r) => service.SaveHiperwallLayout(Token(c), r));
+    app.MapPost("/api/hiperwall/layouts/delete", (HttpContext c, DeleteHiperwallLayoutRequest r) => service.DeleteHiperwallLayout(Token(c), r));
+    app.MapPost("/api/hiperwall/displays/show", (HttpContext c, HiperwallDisplayRequest r) => service.DisplayHiperwallAsync(Token(c), r, c.RequestAborted));
+    app.MapPost("/api/hiperwall/displays/stop", (HttpContext c, JobActionRequest r) => service.StopHiperwallDisplay(Token(c), r));
     app.MapGet("/api/hiperwall/status", (HttpContext c) => service.GetHiperwallStatus(Token(c)));
     app.MapPost("/api/hiperwall/refresh", (Func<HttpContext, Task<HiperwallView>>)(c => service.RefreshHiperwallAsync(Token(c), false, c.RequestAborted)));
     app.MapPost("/api/hiperwall/test", (Func<HttpContext, Task<HiperwallView>>)(c => service.RefreshHiperwallAsync(Token(c), true, c.RequestAborted)));
+    app.MapGet("/api/cameras", (HttpContext c) => service.GetCameras(Token(c)));
+    app.MapPost("/api/media/settings", (HttpContext c, SaveMediaSettingsRequest r) => service.SaveMediaSettings(Token(c), r));
+    app.MapPost("/api/cameras/save", (HttpContext c, SaveCameraRequest r) => service.SaveCamera(Token(c), r));
+    app.MapPost("/api/cameras/sync", (HttpContext c, CameraActionRequest r) => service.SyncCamera(Token(c), r));
+    app.MapPost("/api/cameras/delete", (HttpContext c, CameraActionRequest r) => service.DeleteCamera(Token(c), r));
+    app.MapPost("/api/cameras/cleanup", (HttpContext c, LeaseRequest r) => service.RetryCameraCleanup(Token(c), r.Generation));
+    app.MapGet("/api/cameras/{id:guid}/status", (HttpContext c, Guid id, int version) => service.GetCameraStatusAsync(Token(c), id, version, c.RequestAborted));
+    app.MapGet("/api/cameras/{id:guid}/hls/{asset}", async (HttpContext c, Guid id, string asset, int version) =>
+    {
+        var result = await service.ReadCameraHlsAsync(Token(c), id, version, asset, c.RequestAborted);
+        c.Response.Headers.CacheControl = "no-store";
+        return Results.Bytes(result.Bytes, result.ContentType);
+    });
+    app.MapPost("/api/hiperwall/preview", async (HttpContext c, HiperwallPreviewRequest r) =>
+    {
+        var result = await service.ReadHiperwallPreviewAsync(Token(c), r, c.RequestAborted);
+        c.Response.Headers.CacheControl = "no-store";
+        return result;
+    });
     app.MapGet("/api/state", (HttpContext c) => service.GetState(Token(c)));
     app.MapPost("/api/lease/acquire", (HttpContext c) => service.Acquire(Token(c)));
     app.MapPost("/api/lease/heartbeat", (HttpContext c, LeaseRequest r) => service.Heartbeat(Token(c), r.Generation));
@@ -126,7 +152,16 @@ catch (Exception error)
 
 public sealed class ControlWorker(ControlService service) : BackgroundService
 {
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.WhenAll(Dispatch(stoppingToken), Watch(stoppingToken), EditHiperwall(stoppingToken));
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.WhenAll(Dispatch(stoppingToken), Watch(stoppingToken), EditHiperwall(stoppingToken), ReconcileCameras(stoppingToken));
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        service.StopAccepting();
+        await base.StopAsync(cancellationToken);
+        using var cleanup = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cleanup.CancelAfter(TimeSpan.FromSeconds(8));
+        try { await service.CleanupHiperwallOnShutdownAsync(cleanup.Token); }
+        catch (OperationCanceledException) when (cleanup.IsCancellationRequested) { }
+    }
     private async Task Dispatch(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -139,8 +174,17 @@ public sealed class ControlWorker(ControlService service) : BackgroundService
     {
         while (!ct.IsCancellationRequested)
         {
+            await service.ReconcileHiperwallDisplaysAsync(ct);
             await service.DispatchHiperwallNextAsync(ct);
             try { await Task.Delay(100, ct); } catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+        }
+    }
+    private async Task ReconcileCameras(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            await service.ReconcileCamerasAsync(ct);
+            try { await Task.Delay(500, ct); } catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
         }
     }
     private async Task Watch(CancellationToken ct)

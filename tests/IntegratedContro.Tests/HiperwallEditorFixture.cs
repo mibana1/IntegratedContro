@@ -28,6 +28,7 @@ public sealed class HiperwallEditorFixture : IAsyncDisposable
             if (type is "list" or "walls") return Server.Default(request);
             if (xml.Element("auth")?.Element("token")?.Value != FakeHiperwallServer.FixtureSecret)
                 return new("<Error><code>403</code></Error>");
+            if (type == "preview") return new("", 404);
             Commands.Enqueue(new XElement(operation));
             if (CommandResponse?.Invoke(operation) is { } custom) return custom;
             var instances = XElement.Parse(Server.Instances);

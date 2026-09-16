@@ -16,7 +16,6 @@ public partial class LoginWindow : Window
         viewModel.ReadLoginPassword = () => LoginPassword.Password;
         viewModel.ClearLoginPassword = LoginPassword.Clear;
         viewModel.PropertyChanged += ModelChanged;
-        Closing += (_, e) => { if (viewModel.IsBusy) e.Cancel = true; };
         Closed += (_, _) =>
         {
             LoginPassword.Clear();

@@ -2,6 +2,26 @@
   "version": 2,
   "dependencies": {
     "net10.0-windows7.0": {
+      "LibVLCSharp.WPF": {
+        "type": "Direct",
+        "requested": "[3.10.1, )",
+        "resolved": "3.10.1",
+        "contentHash": "aE/yQPT57bYl+xZ7decqS9TtwvWncIFOzyd7yauM4EWTW8XAfjjwp4HPEx/vh9+uE5GpskIM2EtUc7tyyDjoVQ==",
+        "dependencies": {
+          "LibVLCSharp": "3.10.1"
+        }
+      },
+      "VideoLAN.LibVLC.Windows": {
+        "type": "Direct",
+        "requested": "[3.0.23.1, )",
+        "resolved": "3.0.23.1",
+        "contentHash": "yTGNrzj+Q/t72VNKK0d64jZ+8BGu5Vcp2nxpZ2ll350LkRWKSwqShGpZWcVxXVP8TiMbeGML09+Jzz3hNsIcqA=="
+      },
+      "LibVLCSharp": {
+        "type": "Transitive",
+        "resolved": "3.10.1",
+        "contentHash": "6iSrYMk6RU8fyftdXrfR1TW3xpR/WhEmliORuWvAu2N05wECb8k2hykWiU53/1zqx616v/qUlDbJJyqv78MDkQ=="
+      },
       "integratedcontro.core": {
         "type": "Project"
       }

@@ -1,0 +1,36 @@
+# MediaMTX 1.21.0 example for the same PC as ControlHost.
+# Replace both passwords; copy this file outside the repository before operating it.
+# API and HLS addresses entered in the app refer to these listeners from ControlHost.
+logLevel: warn
+logDestinations: [stdout]
+api: yes
+apiAddress: 127.0.0.1:9997
+rtsp: yes
+rtspAddress: 127.0.0.1:8554
+rtspTransports: [tcp]
+rtmp: no
+webrtc: no
+srt: no
+moq: no
+hls: yes
+hlsAddress: 127.0.0.1:8888
+hlsVariant: mpegts
+hlsSegmentCount: 4
+hlsSegmentDuration: 1s
+hlsSegmentMaxSize: 32M
+hlsMuxerCloseAfter: 10s
+hlsDirectory: ''
+authMethod: internal
+authInternalUsers:
+  - user: integrated-api
+    pass: CHANGE_API_PASSWORD
+    ips: ['127.0.0.1']
+    permissions:
+      - action: api
+  - user: integrated-hls
+    pass: CHANGE_HLS_PASSWORD
+    ips: ['127.0.0.1']
+    permissions:
+      - action: read
+        path: '~^ic-'
+paths: {}

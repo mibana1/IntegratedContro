@@ -15,7 +15,7 @@
   <TextBlock Text="비밀번호는 저장하지 않습니다." FontSize="11" Foreground="#596E85"/>
   <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="#375774" Margin="0,18,0,14"/>
   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-   <Button Content="취소" IsCancel="True" IsEnabled="{Binding CanEditLogin}" MinHeight="36"/>
+   <Button Content="취소" IsCancel="True" MinHeight="36"/>
    <Button x:Name="ConnectButton" Content="접속" IsDefault="True" Command="{Binding LoginCommand}" Style="{StaticResource Primary}" MinHeight="36" MinWidth="88" Margin="8,0,0,0"/>
   </StackPanel>
  </StackPanel>

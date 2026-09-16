@@ -49,6 +49,7 @@ public sealed record JobRow(Job Job, bool PreviousSession)
 public sealed partial class MainViewModel : Bindable
 {
     public HiperwallViewModel Hiperwall { get; } = new();
+    public CameraViewModel Cameras { get; }
     private readonly ClientPreferences _preferences = ClientPreferences.Load();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly List<AsyncCommand> _commands = [];
@@ -60,10 +61,11 @@ public sealed partial class MainViewModel : Bindable
     private bool HasPending => _pending is not null || _pendingLightBatch is not null;
     private RecoveryReview? _review;
     private bool _busy, _polling, _closing, _connected;
+    private readonly CancellationTokenSource _lifetime = new();
     private string _message = "호스트의 최초 설정을 완료한 뒤 주소·인증서 지문·앱 계정으로 접속하세요.";
     public string Message { get => _message; private set => Set(ref _message, value); }
     public bool IsBusy => _busy;
-    public bool CanEditLogin => !_busy;
+    public bool CanEditLogin => !_busy && !_closing;
     public bool IsLoggedIn => _login is not null;
     public bool CanControl => _connected && _state?.Lease.Mode == LeaseMode.Held &&
         _state.Lease.SessionId == _login?.Session.Id;
@@ -79,7 +81,8 @@ public sealed partial class MainViewModel : Bindable
     };
     public string PreviousSummary => _state is null ? "이전 사용자 작업 0건" :
         $"이전 사용자 작업 {_state.Jobs.Count(j => j.Snapshot.SessionId != _login?.Session.Id && (j.Active || j.Status == JobStatus.NeedsReview)) +
-            _state.OutstandingHiperwallEdits.Count(r => r.Requester.Id != _login?.Session.Id && r.NeedsAttention)}건 · Hiperwall 포함 · 사용 종료 후에도 호스트에서 유지";
+            _state.OutstandingHiperwallEdits.Where(r => r.Requester.Id != _login?.Session.Id && r.NeedsAttention).Select(r => r.Request.RequestId)
+                .Union(_state.OutstandingHiperwallDisplays.Where(j => j.Requester.Id != _login?.Session.Id).Select(j => j.Request.RequestId)).Count()}건 · Hiperwall 포함 · 사용 종료 후에도 호스트에서 유지";
     public string ConnectionSummary => _connected ? $"HTTPS 연결 · 마지막 확인 {DateTime.Now:HH:mm:ss}" : "미연결 / 표시된 이전 상태를 최신 관측으로 사용하지 마세요.";
     public string PendingSummary => !HasPending ? "" : $"접수 결과 확인 필요: {_pending?.RequestId ?? _pendingLightBatch?.RequestId} · 같은 요청 ID로만 재확인합니다.";
     public string RecoverySummary => _state?.Lease.Mode != LeaseMode.RecoveryRequired ? "복구 인계가 필요한 사용권이 없습니다." :
@@ -209,6 +212,8 @@ public sealed partial class MainViewModel : Bindable
 
     public MainViewModel()
     {
+        Cameras = new CameraViewModel(Hiperwall);
+        Cameras.StatusReported += message => Message = message;
         Endpoint = _preferences.Endpoint; Fingerprint = _preferences.Fingerprint; PcIdText = _preferences.PcId.ToString();
         LoginCommand = Command(Login, () => !IsLoggedIn);
         LogoutCommand = Command(Logout, () => IsLoggedIn);
@@ -289,6 +294,7 @@ public sealed partial class MainViewModel : Bindable
                     string.Join(", ", j.Snapshot.Steps.Select(x => $"{x.Target.PcName}/{x.Target.Name}").Distinct())));
             ReviewText += "\n\nHiperwall 편집 · 진행/결과 확인 필요\n" + string.Join("\n\n", _review.HiperwallEdits.Select(r =>
                 $"{r.Requester.UserName} / {r.Requester.PcName} · {r.Summary}\n요청 {r.Request.RequestId}\n" + string.Join("\n", r.Steps.Select(s => $"{s.Command.InstanceId}: {s.Message}"))));
+            ReviewText += "\n\nHiperwall 표시·정리\n" + string.Join("\n\n", _review.HiperwallDisplays.Select(j => $"{j.Requester.UserName} / {j.Requester.PcName} · {j.Summary}\n{j.Schedule}\n{j.Endpoint}\n" + string.Join("\n", j.Targets.Select(t => $"{t.Command.InstanceId}: {t.Message}"))));
             Changed(nameof(ReviewText)); Message = "진행 작업과 불확실 대상을 확인한 후 관리자 복구 인계를 승인하세요.";
         }, () => IsAdmin && _state?.Lease.Mode == LeaseMode.RecoveryRequired);
         ApproveCommand = Command(async () =>
@@ -307,8 +313,8 @@ public sealed partial class MainViewModel : Bindable
         var command = new AsyncCommand(async () =>
         {
             _busy = true; Notify();
-            try { await action(); if (IsLoggedIn) await Refresh(); }
-            catch (Exception error) { Report(error); }
+            try { await action(); if (IsLoggedIn && !_closing) await Refresh(); }
+            catch (Exception error) { if (!_closing) Report(error); }
             finally { _busy = false; Notify(); }
         }, () => !_busy && !_closing && (available?.Invoke() ?? true));
         _commands.Add(command); return command;
@@ -325,7 +331,14 @@ public sealed partial class MainViewModel : Bindable
     private async Task Login()
     {
         var password = ReadLoginPassword();
-        try { _client?.Dispose(); _client = new(Endpoint, Fingerprint); _login = await Client.Post<LoginResult>("/api/login", new LoginRequest(LoginName, password, _preferences.PcId, Environment.MachineName)); }
+        try
+        {
+            _client?.Dispose(); _client = new(Endpoint, Fingerprint);
+            var login = await Client.Post<LoginResult>("/api/login",
+                new LoginRequest(LoginName, password, _preferences.PcId, Environment.MachineName), _lifetime.Token);
+            _lifetime.Token.ThrowIfCancellationRequested();
+            _login = login;
+        }
         finally { ClearLoginPassword(); }
         Client.SetToken(_login.Token); _state = null; _connected = true;
         (_preferences with { Endpoint = Endpoint, Fingerprint = Fingerprint }).Save();
@@ -333,7 +346,7 @@ public sealed partial class MainViewModel : Bindable
     }
     private async Task Logout()
     {
-        Hiperwall.Close();
+        Hiperwall.Close(); Cameras.UpdateContext(null, null, false, false, 0); await Cameras.StopPlaybackAsync();
         try { await Client.Post<bool>("/api/logout"); Message = "로그아웃 완료. 접수 작업은 호스트에서 계속 처리합니다."; }
         finally
         {
@@ -361,7 +374,7 @@ public sealed partial class MainViewModel : Bindable
     {
         var sessionId = _login?.Session.Id;
         var state = await Client.Get<StateView>("/api/state");
-        if (_login?.Session.Id != sessionId || _login is null || (_state is not null && state.Revision < _state.Revision)) return;
+        if (_closing || _login?.Session.Id != sessionId || _login is null || (_state is not null && state.Revision < _state.Revision)) return;
         _state = state; _connected = true;
         var selectedDeviceId = _selectedDevice?.Id; var selectedRoleId = _selectedRole?.Id;
         var selectedJobId = _selectedJob?.Id; var scenarioId = SelectedScenario?.Id;
@@ -446,6 +459,10 @@ public sealed partial class MainViewModel : Bindable
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
         RefreshLighting();
         RefreshHandover();
+        Hiperwall.UpdateDisplayJobs(_state?.HiperwallDisplayJobs ?? [], _state?.HiperwallLayoutsSupported == true);
+        Cameras.Generation = Generation;
+        Cameras.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
+            CanConfigure, _state?.CameraSupported ?? false, _state?.MediaConfigurationVersion ?? 0);
         Hiperwall.Generation = Generation;
         Hiperwall.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
             IsAdmin, CanConfigure, _state?.HiperwallReadSupported ?? false, _state?.HiperwallConfigurationVersion ?? 0, CanControl && (_state?.CanControlHiperwall ?? false), _state?.HiperwallWriteSupported ?? false);
@@ -453,7 +470,7 @@ public sealed partial class MainViewModel : Bindable
     }
     public async Task CloseAsync()
     {
-        _closing = true; Hiperwall.Close(); _timer.Stop(); Notify();
+        _closing = true; _lifetime.Cancel(); Hiperwall.Close(); _timer.Stop(); Notify(); await Cameras.CloseAsync();
         try { if (IsLoggedIn) await Client.Post<bool>("/api/logout"); }
         catch (Exception) { /* The host fences on missed heartbeat; accepted work remains authoritative. */ }
         finally { _client?.Dispose(); }

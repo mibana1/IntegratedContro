@@ -37,8 +37,10 @@ public partial class MainWindow : Window
     {
         if (_closed || _closing || _viewModel.IsLoggedIn || LoginDialog is not null) return;
         LoginDialog = new LoginWindow(_viewModel) { Owner = this };
-        try { LoginDialog.ShowDialog(); }
+        bool authenticated;
+        try { authenticated = LoginDialog.ShowDialog() == true; }
         finally { LoginDialog = null; }
+        if (!authenticated && !_closed && !_closing) Close();
     }
     private async void OnClosing(object? sender, CancelEventArgs e)
     {

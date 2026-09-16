@@ -11,7 +11,7 @@ namespace IntegratedContro.Infrastructure;
 
 /// <summary>Reference-code compatibility profile: GET /hello and POST /xmlcommand with typed inventory and editing operations.
 /// Never accepts an arbitrary operation, URL path, or caller-provided XML. See docs/HIPERWALL_PROTOCOL.md.</summary>
-public sealed partial class HiperwallHttpReader : IHiperwallReader, IHiperwallWriter, IDisposable
+public sealed partial class HiperwallHttpReader : IHiperwallReader, IHiperwallWriter, IHiperwallPreviewReader, IDisposable
 {
     private readonly HttpClient _http = new(new HttpClientHandler
     {

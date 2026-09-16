@@ -6,9 +6,31 @@ namespace IntegratedContro.App;
 public partial class HiperwallView : UserControl
 {
     private Point _contentDragStart;
+    private Window? _previewWindow;
+    public HiperwallPreviewCoordinator Previews { get; }
     public HiperwallView()
     {
         InitializeComponent();
+        Previews = new(WallCanvas, () => DataContext as HiperwallViewModel);
+        DataContextChanged += (_, e) =>
+        {
+            if (e.OldValue is HiperwallViewModel old) old.PropertyChanged -= PreviewContextChanged;
+            if (e.NewValue is HiperwallViewModel next) next.PropertyChanged += PreviewContextChanged;
+            Previews.RefreshContext();
+        };
+        IsVisibleChanged += (_, _) => UpdatePreviewVisibility();
+        WallCanvas.IsVisibleChanged += (_, _) => UpdatePreviewVisibility();
+        Loaded += (_, _) =>
+        {
+            _previewWindow = Window.GetWindow(this);
+            if (_previewWindow is not null) _previewWindow.StateChanged += PreviewWindowChanged;
+            UpdatePreviewVisibility();
+        };
+        Unloaded += (_, _) =>
+        {
+            if (_previewWindow is not null) _previewWindow.StateChanged -= PreviewWindowChanged;
+            _previewWindow = null; Previews.SetVisible(false);
+        };
         WallCanvas.FindZoneDropTarget = ZoneButtonAt;
         WallCanvas.ZoneDropTargetChanged += HighlightZone;
         WallCanvas.InstanceZoneDropped += async (item, zone) => { if (DataContext is HiperwallViewModel vm) await vm.DropOnZone(item, zone); };
@@ -16,6 +38,9 @@ public partial class HiperwallView : UserControl
         DataContextChanged += (_, e) => { if (e.NewValue is HiperwallViewModel vm) vm.ConfirmCloseAll = text =>
             MessageBox.Show(Window.GetWindow(this), text, "Hiperwall 전체 닫기", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes; };
     }
+    private void PreviewContextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Previews.RefreshContext();
+    private void PreviewWindowChanged(object? sender, EventArgs e) => UpdatePreviewVisibility();
+    private void UpdatePreviewVisibility() => Previews.SetVisible(IsLoaded && IsVisible && WallCanvas.IsVisible && _previewWindow?.WindowState != WindowState.Minimized);
     private void ZoomIn(object sender, RoutedEventArgs e) => WallCanvas.Zoom(1.2);
     private void ZoomOut(object sender, RoutedEventArgs e) => WallCanvas.Zoom(1 / 1.2);
     private void FitAll(object sender, RoutedEventArgs e) => WallCanvas.FitAll();

@@ -21,6 +21,11 @@ public static class AuditPresentation
         var actor = entry.UserId is null ? "호스트" : state.Accounts.SingleOrDefault(a => a.Id == entry.UserId)?.Name ?? $"계정 {Short(entry.UserId.Value)}";
         var title = entry.Action switch
         {
+            "CameraSaved" => "카메라 등록 저장", "CameraSyncRequested" => "카메라 경로 재동기화 접수",
+            "CameraDeleteRequested" => "카메라 삭제 접수", "CameraForceDeleted" => "카메라 강제 삭제",
+            "CameraDeleted" => "카메라 삭제 완료", "CameraPathCleaned" => "영상 경로 정리 완료",
+            "CameraReconciled" => "영상 경로 준비 결과", "CameraCleanupRequested" => "영상 경로 정리 재시도",
+            "MediaSettingsSaved" => "MediaMTX 연결 설정 변경",
             "InitialAdministratorCreated" => "최초 관리자 생성", "HostStarted" => "호스트 시작",
             "Login" => "로그인", "Acquire" => "사용 시작", "ReleasePreservingJobs" => "사용 종료",
             "LogoutPreservingJobs" => "로그아웃", "ConnectionLost" => "연결 이상",
@@ -29,6 +34,9 @@ public static class AuditPresentation
             "RoleAssigned" => "역할 배정", "ScenarioSaved" => "시나리오 저장",
             "HiperwallSettingsSaved" => "Hiperwall 연결 설정 변경", "HiperwallConnectionTest" => "Hiperwall 연결 테스트",
             "HiperwallEditAccepted" => "Hiperwall 편집 접수", "HiperwallEditResult" => "Hiperwall 전송 결과", "HiperwallEditCancelled" => "Hiperwall 미전송 취소",
+            "HiperwallLayoutSaved" => "영상벽 배치 저장", "HiperwallLayoutDeleted" => "영상벽 배치 삭제",
+            "HiperwallDisplayAccepted" => "영상벽 표시 접수", "HiperwallDisplayStop" => "영상벽 표시 종료 요청",
+            "HiperwallDisplayCleanup" => "영상벽 인스턴스 정리",
             "LightOrderSaved" => "조명 배치 저장", "LightBatchAccepted" => "조명 일괄 명령 접수",
             "JobAccepted" => "작업 접수", "JobCancellation" => "작업 취소 요청",
             "VirtualStateReconciled" => "가상 상태 대조", "DispatchIntent" => "전송 준비",
@@ -56,6 +64,11 @@ public static class AuditPresentation
             "HiperwallSettingsSaved" => $"Hiperwall 연결 설정 버전 {Field("version")}을 저장했습니다. 새 연결 확인이 필요합니다.",
             "HiperwallConnectionTest" => $"적용 설정 버전 {Field("version")}의 읽기 전용 연결 테스트: {(Enum.TryParse<HiperwallConnectionState>(Field("result"), out var status) ? HiperwallLabels.State(status) : "결과 확인 필요")}.",
             "HiperwallEditAccepted" or "HiperwallEditResult" or "HiperwallEditCancelled" => entry.Detail,
+            "HiperwallLayoutSaved" => $"배치 버전 {Field("version")}을 저장했습니다. LIVE는 변경하지 않았습니다.",
+            "HiperwallLayoutDeleted" => "저장 배치를 삭제했습니다. 이미 접수한 표시는 원래 배치를 유지합니다.",
+            "HiperwallDisplayAccepted" => $"표시 작업 {Short(Id("request"))}을 접수하고 대상 {Field("targets")}개와 종료 일정을 저장했습니다.",
+            "HiperwallDisplayStop" => $"표시 작업 {Short(Id("request"))}의 미전송 부분 중단과 열린 표시 정리를 요청했습니다.",
+            "HiperwallDisplayCleanup" => $"표시 작업 {Short(Id("request"))}: {(Field("state") == "Closed" ? "인스턴스 없음 또는 미전송 종료 확인" : "자동 정리 중단 · 확인 필요")}.",
             "InitialAdministratorCreated" => "호스트 최초 설정과 관리자 생성을 완료했습니다.",
             "HostStarted" => "호스트를 시작하고 작업을 복구했습니다. 불확실 명령과 중단 시나리오는 자동 재실행하지 않습니다.",
             "Login" => $"{Field("pc")}에서 로그인했습니다.",

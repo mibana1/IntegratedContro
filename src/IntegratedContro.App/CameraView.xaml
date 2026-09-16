@@ -1,0 +1,61 @@
+<UserControl x:Class="IntegratedContro.App.CameraView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF">
+ <Grid Margin="14">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <StackPanel Margin="0,0,0,10"><TextBlock Text="카메라 실시간 영상" Style="{StaticResource SectionTitle}"/>
+   <TextBlock Text="RTSP 등록 → MediaMTX 경로 준비 → HLS 재생 · 영상 조회는 사용권 없이 가능하며 등록 변경에는 관리자 사용권이 필요합니다." TextWrapping="Wrap" Foreground="#65778E"/>
+   <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,6" Foreground="#156D68"/>
+  </StackPanel>
+  <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="245"/><ColumnDefinition Width="*"/><ColumnDefinition Width="320"/></Grid.ColumnDefinitions>
+   <Grid Margin="0,0,12,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <TextBox x:Name="CameraSearch" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" ToolTip="카메라 이름·위치 검색"/>
+    <Button Grid.Row="1" Content="목록 새로 고침" Command="{Binding RefreshCommand}"/>
+    <ListBox Grid.Row="2" x:Name="CameraList" ItemsSource="{Binding FilteredCameras}" SelectedItem="{Binding Selected}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+     <ListBox.ItemTemplate><DataTemplate><StackPanel Margin="5,7"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Location}" Foreground="#65778E" FontSize="11"/><TextBlock Text="{Binding StateLabel}" FontSize="11" TextWrapping="Wrap"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+    </ListBox>
+    <WrapPanel Grid.Row="3"><Button Content="재동기화" Command="{Binding SyncCommand}"/><Button Content="삭제" Command="{Binding DeleteCommand}"/><Button Content="강제 삭제" Command="{Binding ForceDeleteCommand}"/></WrapPanel>
+   </Grid>
+   <Grid Grid.Column="1" Margin="0,0,12,0"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Border Background="#080F18" BorderBrush="#2B4668" BorderThickness="1" MinHeight="220">
+     <vlc:VideoView x:Name="VideoSurface" MediaPlayer="{Binding NativePlayer}"/>
+    </Border>
+    <WrapPanel Grid.Row="1" Margin="0,8"><Button x:Name="PlayCamera" Content="재생 · 다시 연결" Command="{Binding PlayCommand}" Style="{StaticResource Primary}"/><Button Content="재생 중지" Command="{Binding StopCommand}"/><CheckBox Content="영상 음소거" IsChecked="{Binding Muted}" VerticalAlignment="Center" Margin="10,0"/><Button Content="실제 입력 상태" Command="{Binding StatusCommand}"/></WrapPanel>
+    <TextBlock Grid.Row="2" Text="{Binding PlaybackMessage}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,0,8"/>
+    <TextBlock Grid.Row="3" Text="{Binding SelectedDetails}" TextWrapping="Wrap" Foreground="#536C85"/>
+   </Grid>
+   <TabControl x:Name="CameraEditorTabs" Grid.Column="2">
+    <TabItem Header="등록 · 수정"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="8">
+     <WrapPanel><Button Content="새 카메라" Command="{Binding NewCommand}"/><Button Content="선택 불러오기" Command="{Binding LoadCommand}"/></WrapPanel>
+     <TextBlock Text="{Binding DraftSummary}" TextWrapping="Wrap" FontSize="11" Foreground="#65778E" Margin="0,6"/>
+     <StackPanel IsEnabled="{Binding CanConfigure}">
+      <TextBlock Text="이름"/><TextBox x:Name="CameraNameInput" Text="{Binding CameraName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100"/>
+      <TextBlock Text="위치"/><TextBox Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" MaxLength="200"/>
+      <CheckBox Content="활성화" IsChecked="{Binding Enabled}" Margin="0,8"/>
+      <TextBlock Text="RTSP 주소 · 보호 입력"/><PasswordBox x:Name="RtspInput" MaxLength="2048"/>
+      <TextBlock Text="RTSP 사용자 (선택)"/><PasswordBox x:Name="RtspUserInput" MaxLength="256"/>
+      <TextBlock Text="RTSP 비밀번호 (선택)"/><PasswordBox x:Name="RtspPasswordInput" MaxLength="512"/>
+      <TextBlock Text="주소·계정은 조회 응답에 반환하지 않습니다. 수정 시 모두 비워 두면 기존 값을 유지합니다." TextWrapping="Wrap" FontSize="11" Foreground="#65778E" Margin="0,6"/>
+      <TextBlock Text="Hiperwall Contents 매핑 (선택)" Margin="0,8,0,0"/>
+      <ComboBox ItemsSource="{Binding MappingContents}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedMapping}" ToolTip="Hiperwall 탭에서 현재 Contents를 조회하세요."/>
+      <CheckBox Content="기존 매핑 해제" IsChecked="{Binding ClearMapping}" Margin="0,5"/>
+     </StackPanel>
+     <Button x:Name="SaveCamera" Content="카메라 저장 · 경로 준비" Command="{Binding SaveCommand}" Style="{StaticResource Primary}"/>
+    </StackPanel></ScrollViewer></TabItem>
+    <TabItem Header="MediaMTX"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="8">
+     <TextBlock Text="{Binding AppliedMedia}" TextWrapping="Wrap" FontSize="11"/>
+     <Button Content="적용 설정 불러오기" Command="{Binding LoadSettingsCommand}"/>
+     <StackPanel IsEnabled="{Binding CanConfigure}">
+      <TextBlock Text="제어 API 주소"/><TextBox x:Name="ApiEndpointInput" Text="{Binding ApiEndpoint, UpdateSourceTrigger=PropertyChanged}" ToolTip="http(s)://주소:9997"/>
+      <TextBlock Text="HLS 주소 · 호스트에서 접근"/><TextBox Text="{Binding HlsEndpoint, UpdateSourceTrigger=PropertyChanged}" ToolTip="http(s)://주소:8888"/>
+      <TextBlock Text="API 전용 사용자"/><TextBox Text="{Binding ApiUser, UpdateSourceTrigger=PropertyChanged}"/>
+      <TextBlock Text="API 비밀번호"/><PasswordBox x:Name="ApiPasswordInput" MaxLength="512"/>
+      <TextBlock Text="HLS 읽기 전용 사용자"/><TextBox Text="{Binding HlsUser, UpdateSourceTrigger=PropertyChanged}"/>
+      <TextBlock Text="HLS 비밀번호"/><PasswordBox x:Name="HlsPasswordInput" MaxLength="512"/>
+     </StackPanel>
+     <Button Content="영상 연결 설정 저장" Command="{Binding SaveSettingsCommand}" Style="{StaticResource Primary}"/>
+     <TextBlock Text="기존 대상·사용자는 비밀번호를 비워 두면 유지합니다. API 계정과 HLS 계정을 분리하세요. 카메라·정리 큐가 남아 있으면 서버 대상을 변경할 수 없습니다." TextWrapping="Wrap" FontSize="11" Foreground="#65778E"/>
+    </StackPanel></ScrollViewer></TabItem>
+   </TabControl>
+  </Grid>
+  <Expander Grid.Row="2" Header="강제 삭제 경로 정리" Margin="0,12,0,0"><StackPanel><Button Content="정리 큐 다시 시도" Command="{Binding RetryCleanupCommand}" HorizontalAlignment="Left"/><ScrollViewer MaxHeight="110" VerticalScrollBarVisibility="Auto"><TextBlock Text="{Binding CleanupSummary}" TextWrapping="Wrap"/></ScrollViewer></StackPanel></Expander>
+ </Grid>
+</UserControl>
