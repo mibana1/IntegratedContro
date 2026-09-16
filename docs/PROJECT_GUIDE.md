@@ -536,6 +536,20 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 
 ## 10. 구현 단계와 완료 기준
 
+### Zone 콘텐츠 삭제 버튼·키보드 단축키 (2026-09-16)
+
+- LIVE 캔버스 상단에 **선택 삭제** 버튼을 추가했다. 캔버스와 열린 콘텐츠 목록에서 Delete/Backspace로 선택 인스턴스만 닫는다.
+  Contents 원본·다른 인스턴스·저장 배치는 삭제하지 않으며 기존 CloseInstanceCommand와 호스트 권한·revision 검사를 사용한다.
+- 단축키는 캔버스/열린 콘텐츠 목록에 키보드 포커스가 있을 때만 동작한다. 검색·좌표 입력과 저장 배치 편집에는 적용하지 않는다.
+  자동 키 반복과 처리 중 중복 요청을 막으며 미반영 드래그를 취소한 뒤 닫는다. DataGrid의 로컬 행 삭제는 비활성화했다.
+- 검증: 전체 빌드 경고·오류 0, Hiperwall 관련 서비스·통합 테스트 86개 통과.
+  WPF 기존 편집·마우스/터치·Zone 이동 회귀와 삭제 키/버튼·입력 보호·중복 차단·조회 모드·오래된 revision 거부를 확인했다.
+  1180×860 창에서 삭제 버튼 표시를 확인했다. 근거: artifacts/ui-smoke/hiperwall-delete-result.txt,
+  hiperwall-delete.png, hiperwall-delete-small.png, artifacts/test-results/hiperwall-deletion-regression.trx.
+  별도 HTTPS 호스트·테스트 Controller 검증이며 실제 키보드/현장 Controller 검수는 별도다.
+- 배포: scripts/publish.ps1로 artifacts/publish/Build-20260916-101806-246을 생성하고 작업 공간의 최신 앱 바로가기를 갱신했다.
+  운영 호스트는 유지했고 실행 중인 MediaValidation-20260914-162930은 이전 빌드 정리에서 제외했다.
+
 ### 시나리오 확장: 저장 배치 표시·조건 충족까지 대기 (2026-09-16)
 
 - 시나리오 화면에서 **장비 명령 / 조건 충족까지 대기 / 저장 배치 표시**를 선택해 순서대로 추가·저장·실행한다.

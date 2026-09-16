@@ -1,6 +1,18 @@
 # Hiperwall 연결·편집 구현 검증 기록
 
-최근 검증일: 2026-09-14. 구현 완료·가짜 서버 검증·실제 Controller 검증을 구분한다.
+최근 검증일: 2026-09-16. 구현 완료·가짜 서버 검증·실제 Controller 검증을 구분한다.
+
+## 2026-09-16 Zone 콘텐츠 삭제
+
+- LIVE 캔버스의 **선택 삭제** 버튼과 Delete/Backspace를 기존 개별 인스턴스 닫기 명령에 연결했다.
+- 빌드 경고·오류 0. Hiperwall 서비스·통합 회귀 **86개 통과**.
+- WPF 편집·드래그·터치·Zone 이동 회귀와 새 삭제 동작을 테스트 Controller/별도 HTTPS 호스트에서 확인했다.
+  캔버스 Delete, 열린 콘텐츠 목록 Backspace, 실제 버튼 Invoke, 정확한 인스턴스만 닫기·갱신,
+  키 자동 반복·처리 중 중복 차단, 진행 중 드래그 취소, 검색·숫자 입력 보호, 미선택·Zone·Contents·조회 모드 차단,
+  stale revision 거부와 원본 콘텐츠/다른 인스턴스 보존을 검증했다.
+- 근거: artifacts/ui-smoke/hiperwall-delete-result.txt, hiperwall-delete.png, hiperwall-delete-small.png,
+  artifacts/test-results/hiperwall-deletion-regression.trx.
+- 코드로 구동한 WPF 키 이벤트와 버튼 검증이며 물리 키보드·현장 Controller 검증과 구분한다.
 
 ## 2026-09-14 F2·F3·F4 수정 검증 (소스 반영)
 

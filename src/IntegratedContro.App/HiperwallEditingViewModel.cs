@@ -25,7 +25,7 @@ public sealed partial class HiperwallViewModel
         SelectedContent is not null ? "Zone을 선택해 추가하세요. 원본 크기 미제공 시 너비·높이를 입력하세요." :
         SelectedInstance is { } selected && !selected.TryRectangle(out _, out _) ? selected.Geometry :
         SelectedInstance is not null && TargetZone?.Item.Id is null ? "이 인스턴스의 Zone 정보가 없습니다. 오른쪽에서 이동할 Zone을 선택하면 드래그·크기 조절이 활성화됩니다." :
-        SelectedInstance is not null ? "마우스·손가락으로 이동, 오른쪽 아래 손잡이로 크기 조절. 놓으면 LIVE에 반영됩니다." : "Contents 또는 열린 인스턴스를 선택하세요.";
+        SelectedInstance is not null ? "마우스·손가락으로 이동, 오른쪽 아래 손잡이로 크기 조절. 놓으면 LIVE에 반영됩니다. 캔버스·열린 콘텐츠에서 Delete/Backspace 또는 선택 삭제로 제거하세요." : "Contents 또는 열린 인스턴스를 선택하세요.";
     public HiperwallItemRow? TargetZone
     {
         get => _targetZone;

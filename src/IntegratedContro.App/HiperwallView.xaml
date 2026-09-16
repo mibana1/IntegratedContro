@@ -82,9 +82,11 @@
      <WrapPanel Grid.Row="1" Margin="0,6,0,8">
       <Button Content="−" Click="ZoomOut" AutomationProperties.Name="캔버스 축소"/><TextBlock Text="{Binding ZoomLabel, ElementName=WallCanvas}" VerticalAlignment="Center" MinWidth="54" TextAlignment="Center"/>
       <Button Content="+" Click="ZoomIn" AutomationProperties.Name="캔버스 확대"/><Button Content="전체 맞춤" Click="FitAll"/><Button Content="선택 맞춤" Click="FitSelected"/>
+      <Button x:Name="DeleteInstanceButton" Content="선택 삭제" Command="{Binding CloseInstanceCommand}" Background="#733D47"
+       ToolTip="선택한 열린 콘텐츠를 Zone에서 제거합니다. Delete / Backspace" AutomationProperties.AutomationId="HiperwallDeleteInstance"/>
      </WrapPanel>
      <Border Grid.Row="2" BorderBrush="#38536D" BorderThickness="1" CornerRadius="6" ClipToBounds="True">
-      <local:HiperwallCanvas x:Name="WallCanvas" Items="{Binding CanvasItems}" Selected="{Binding Selected}" CanManipulate="{Binding CanMove}" LockAspect="{Binding LockAspect}" SnapToGrid="{Binding SnapToGrid}" TargetZone="{Binding TargetZone}"
+      <local:HiperwallCanvas x:Name="WallCanvas" PreviewKeyDown="RemoveInstanceKeyDown" Items="{Binding CanvasItems}" Selected="{Binding Selected}" CanManipulate="{Binding CanMove}" LockAspect="{Binding LockAspect}" SnapToGrid="{Binding SnapToGrid}" TargetZone="{Binding TargetZone}"
        AllowDrop="True" DragOver="CanvasDragOver" Drop="CanvasDrop" AutomationProperties.Name="Hiperwall 편집 캔버스" ToolTip="노란 테두리와 !는 프리뷰 갱신 실패입니다. 이전 이미지를 유지하며 편집할 수 있습니다."/>
      </Border>
      <StackPanel Grid.Row="3" Margin="0,6,0,5">
@@ -108,13 +110,13 @@
        </ItemsControl>
       </ScrollViewer>
       <TextBlock Text="Zone 버튼: 화면 이동 · 소스를 버튼에 놓기: 크기 유지 이동" Style="{StaticResource Muted}" FontSize="10" Margin="0,4,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-       ToolTip="Zone 버튼을 클릭하면 해당 영역을 봅니다. 열린 소스를 버튼에 놓으면 원래 크기로 Zone 중앙에 이동합니다. Contents를 놓으면 원본 크기로 추가합니다. 마우스·터치 이동 / 모서리 크기 조절 / 휠 확대 / Esc 취소."/>
+       ToolTip="Zone 버튼을 클릭하면 해당 영역을 봅니다. 열린 소스를 버튼에 놓으면 원래 크기로 Zone 중앙에 이동합니다. Contents를 놓으면 원본 크기로 추가합니다. 마우스·터치 이동 / 모서리 크기 조절 / 휠 확대 / Delete·Backspace: 선택 콘텐츠 삭제 / Esc 취소."/>
      </StackPanel>
      <TabControl Grid.Row="4" Background="#101A27" BorderBrush="#2C3D51" Padding="0">
       <TabItem Header="열린 콘텐츠">
        <Grid Margin="6"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <TextBlock Text="{Binding InstanceBrief}" ToolTip="{Binding InstanceState}" Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
-        <DataGrid x:Name="InstanceGrid" Grid.Row="1" ItemsSource="{Binding Instances}" SelectedItem="{Binding SelectedInstance}"><DataGrid.Columns>
+        <DataGrid x:Name="InstanceGrid" PreviewKeyDown="RemoveInstanceKeyDown" CanUserDeleteRows="False" Grid.Row="1" ItemsSource="{Binding Instances}" SelectedItem="{Binding SelectedInstance}"><DataGrid.Columns>
          <DataGridTextColumn Header="콘텐츠 이름" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="인스턴스 ID" Binding="{Binding Identity}" Width="*"/>
         </DataGrid.Columns></DataGrid>
        </Grid>

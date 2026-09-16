@@ -41,13 +41,15 @@ public static partial class Program
                 else if (args.Contains("--camera-input-only")) await RunCameraInput();
                 else if (args.Contains("--media-only")) { await RunRelay(); await RunMedia(); await RunPreview(); }
                 else if (args.Contains("--preview-only")) { await RunRelay(); await RunPreview(); }
+                else if (args.Contains("--editor-only")) { await RunHiperwallEditing(); await RunHiperwallDeletion(); }
+                else if (args.Contains("--deletion-only")) await RunHiperwallDeletion();
                 else if (args.Contains("--scenarios-only")) await RunScenarioExtensions();
                 else if (args.Contains("--layouts-only")) await RunHiperwallLayouts();
                 else if (args.Contains("--handover-only")) await RunHandover();
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); }
-                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallLayouts(); await RunScenarioExtensions(); await RunHandover(); await RunRelay(); await RunPreview();
+                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunScenarioExtensions(); await RunHandover(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }

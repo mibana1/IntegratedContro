@@ -38,6 +38,18 @@ public partial class HiperwallView : UserControl
         DataContextChanged += (_, e) => { if (e.NewValue is HiperwallViewModel vm) vm.ConfirmCloseAll = text =>
             MessageBox.Show(Window.GetWindow(this), text, "Hiperwall 전체 닫기", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes; };
     }
+    // Scope deletion to the LIVE canvas and read-only instance list. Search, numeric inputs,
+    // content library and saved-layout editors keep their normal text/navigation behavior.
+    private void RemoveInstanceKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Delete or Key.Back) || Keyboard.Modifiers != ModifierKeys.None ||
+            sender is not UIElement { IsVisible: true, IsKeyboardFocusWithin: true } ||
+            DataContext is not HiperwallViewModel vm) return;
+        e.Handled = true; // Never let DataGrid delete only its local row.
+        if (e.IsRepeat || !vm.CloseInstanceCommand.CanExecute(null)) return;
+        WallCanvas.CancelInteraction();
+        vm.CloseInstanceCommand.Execute(null);
+    }
     private void PreviewContextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Previews.RefreshContext();
     private void PreviewWindowChanged(object? sender, EventArgs e) => UpdatePreviewVisibility();
     private void UpdatePreviewVisibility() => Previews.SetVisible(IsLoaded && IsVisible && WallCanvas.IsVisible && _previewWindow?.WindowState != WindowState.Minimized);

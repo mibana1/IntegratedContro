@@ -96,6 +96,7 @@ public sealed partial class HiperwallCanvas
         if (zone is not null) InstanceZoneDropped?.Invoke(item, zone);
         else if (layout is { IsValid: true }) GeometryCommitted?.Invoke(item, layout);
     }
+    public void CancelInteraction() { EndPan(); CancelEditGesture(); }
     private void CancelEditGesture()
     {
         _dragItem = null; _dragLayout = null; _previewLayout = null; _dragMoved = false; SetDropZone(null);
