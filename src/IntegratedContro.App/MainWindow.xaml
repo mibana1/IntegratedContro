@@ -2,24 +2,8 @@
  Title="IntegratedContro · 운영 콘솔" Width="1500" Height="1000" MinWidth="1180" MinHeight="860" WindowStartupLocation="CenterScreen" Closing="OnClosing">
  <Window.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility"/></Window.Resources>
  <Grid>
-  <Grid.RowDefinitions><RowDefinition Height="66"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <Border Background="#132840" Padding="22,10"><DockPanel>
-   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-    <Border Background="#DDF3EB" CornerRadius="12" Padding="12,5" Margin="12,0"><TextBlock Text="장비: 가상 · Hiperwall: 실장비 연동" Foreground="#0C6657" FontWeight="Bold"/></Border>
-    <TextBlock Text="{Binding UserSummary}" Foreground="#E1EAF4" VerticalAlignment="Center"/>
-    <Button x:Name="HeaderLogout" Content="로그아웃" Command="{Binding LogoutCommand}" FontSize="11" MinHeight="28" Padding="10,3" Margin="12,0,0,0" Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolVisibility}}"/>
-    <Button x:Name="HeaderLogin" Content="접속" Click="OpenLogin" FontSize="11" MinHeight="28" Padding="10,3" Margin="12,0,0,0">
-     <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding IsLoggedIn}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Button.Style>
-    </Button>
-   </StackPanel>
-   <StackPanel><TextBlock Text="{Binding SiteTitle}" FontSize="23" FontWeight="Bold" Foreground="White"/><TextBlock Text="IntegratedContro  /  공통 호스트 운영 콘솔" Foreground="#B3C3D7" FontSize="11"/></StackPanel>
-  </DockPanel></Border>
-  <Grid Grid.Row="2" Margin="18,12,18,10">
-   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-   <StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding LeaseSummary}" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="{Binding PreviousSummary}" Foreground="#556B82" Margin="0,5,0,0"/></StackPanel>
-   <StackPanel Grid.Column="1" Orientation="Horizontal"><Button Content="사용 시작" Command="{Binding AcquireCommand}" Style="{StaticResource Primary}" AutomationProperties.AutomationId="AcquireButton"/><Button Content="사용 종료 · 작업 유지" Command="{Binding ReleaseCommand}" AutomationProperties.AutomationId="ReleaseButton"/><Button Content="새로 고침" Command="{Binding RefreshCommand}"/></StackPanel>
-  </Grid>
-  <TabControl x:Name="MainTabs" Grid.Row="3" Margin="18,0,18,12" Background="Transparent" BorderBrush="#D5DFEA">
+  <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <TabControl x:Name="MainTabs" Margin="18,12,18,12" Background="Transparent" BorderBrush="#D5DFEA">
    <TabItem Header="장비 제어">
     <TabControl x:Name="DeviceViews" SelectedIndex="{Binding DeviceViewIndex}" BorderThickness="0" Background="#F3F6FA" Margin="8">
      <TabItem Header="조명 모아보기"><local:LightingView/></TabItem>
@@ -35,6 +19,7 @@
        <Border BorderBrush="#D5DFEA" BorderThickness="1" Background="#F3F6FA" Padding="10" Margin="0,8,0,0"><StackPanel>
         <TextBlock Text="선택 장비 역할 배정 · 관리자" FontWeight="SemiBold"/>
         <TextBlock Text="{Binding RoleTargetSummary}" TextWrapping="Wrap" Margin="0,4"/>
+        <local:RoleAssignmentsView x:Name="QuickRoleAssignments" Compact="True"/>
         <WrapPanel><TextBlock Text="역할 ID" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBox x:Name="QuickRoleName" Text="{Binding RoleName, UpdateSourceTrigger=PropertyChanged}" Width="200" IsEnabled="{Binding CanConfigure}" ToolTip="예: room.light"/><Button x:Name="QuickAssignRole" Content="선택 장비에 역할 배정" Command="{Binding SaveRoleCommand}"/></WrapPanel>
         <TextBlock Text="{Binding RoleAssignmentHint}" TextWrapping="Wrap" Foreground="#536C85"/>
        </StackPanel></Border>
@@ -42,8 +27,10 @@
      </Grid>
      <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
       <TextBlock Text="역할로 조작" Style="{StaticResource SectionTitle}"/><TextBlock Text="역할"/><ComboBox x:Name="ControlRolePicker" ItemsSource="{Binding Roles}" DisplayMemberPath="Id" SelectedItem="{Binding SelectedRole}" AutomationProperties.AutomationId="ControlRole"/>
-      <TextBlock Text="지원 기능"/><ComboBox ItemsSource="{Binding Capabilities}" DisplayMemberPath="Operation" SelectedItem="{Binding SelectedCapability}"/>
-      <TextBlock Text="{Binding CommandRange}" Foreground="#156D68"/><TextBox Text="{Binding CommandValue, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+      <TextBlock Text="지원 기능"/><ComboBox x:Name="ControlCapabilityPicker" ItemsSource="{Binding Capabilities}" DisplayMemberPath="Operation" SelectedItem="{Binding SelectedCapability}"/>
+      <TextBlock Text="{Binding CommandRange}" Foreground="#156D68" TextWrapping="Wrap"/>
+      <local:PowerButtons x:Name="ManualPowerButtons" Value="{Binding CommandValue}" Visibility="{Binding IsPowerCommand, Converter={StaticResource BoolVisibility}}"/>
+      <TextBox x:Name="ManualNumericValue" Text="{Binding CommandValue, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" Visibility="{Binding IsNumericCommand, Converter={StaticResource BoolVisibility}}"/>
       <TextBlock Text="전송 전 대기 (ms)"/><TextBox Text="{Binding DelayMs, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
       <TextBlock Text="단계 제한시간 (ms)"/><TextBox Text="{Binding TimeoutMs, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
       <Button Content="일반 명령 접수" Command="{Binding SubmitCommand}" Style="{StaticResource Primary}" AutomationProperties.AutomationId="SubmitCommandButton"/>
@@ -57,46 +44,68 @@
    <TabItem x:Name="CameraTab" Header="카메라 · 영상"><local:CameraView x:Name="CameraWorkspace" DataContext="{Binding Cameras}"/></TabItem>
    <TabItem x:Name="ScenarioTab" Header="시나리오">
     <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="330"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-     <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,18,0"><StackPanel>
+     <DockPanel Margin="0,0,18,0">
+      <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+       <Button x:Name="AddScenarioStep" Content="선택 설정을 단계로 추가" Command="{Binding AddStepCommand}"/>
+       <Button x:Name="SaveScenarioDefinition" Content="정의 저장 (관리자)" Command="{Binding SaveScenarioCommand}" Style="{StaticResource Primary}"/>
+      </StackPanel>
+     <ScrollViewer x:Name="ScenarioSettingsScroll" VerticalScrollBarVisibility="Auto"><StackPanel>
       <TextBlock Text="순차 시나리오" Style="{StaticResource SectionTitle}"/>
-      <ComboBox ItemsSource="{Binding Scenarios}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedScenario}"/>
+      <ComboBox x:Name="SavedScenarioPicker" ItemsSource="{Binding Scenarios}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedScenario}"/>
       <WrapPanel><Button Content="실행" Command="{Binding RunScenarioCommand}" Style="{StaticResource Primary}"/><Button Content="편집에 불러오기" Command="{Binding LoadScenarioCommand}"/><Button Content="새 정의" Command="{Binding NewScenarioCommand}"/></WrapPanel>
+      <Button x:Name="DeleteScenarioDefinition" Content="저장 시나리오 삭제" Command="{Binding DeleteScenarioCommand}" HorizontalAlignment="Left"/>
+      <TextBlock Text="{Binding ScenarioDeletionHint}" TextWrapping="Wrap" Foreground="#65778E" Margin="0,2,0,6"/>
       <TextBlock Text="정의 이름" Margin="0,10,0,0"/><TextBox Text="{Binding ScenarioName, UpdateSourceTrigger=PropertyChanged}"/>
       <TextBlock Text="추가할 단계" FontWeight="SemiBold" Margin="0,8,0,0"/>
       <ComboBox x:Name="ScenarioKindPicker" ItemsSource="{Binding ScenarioKinds}" DisplayMemberPath="Label" SelectedValuePath="Kind" SelectedValue="{Binding DraftStepKind}"/>
       <TextBlock Text="{Binding ScenarioStepHint}" TextWrapping="Wrap" Foreground="#65778E" Margin="0,4,0,8"/>
       <StackPanel Visibility="{Binding IsDeviceScenarioStep, Converter={StaticResource BoolVisibility}}">
-       <TextBlock Text="역할 / 기능"/><ComboBox ItemsSource="{Binding Roles}" DisplayMemberPath="Id" SelectedItem="{Binding SelectedRole}"/>
-       <ComboBox ItemsSource="{Binding Capabilities}" DisplayMemberPath="Operation" SelectedItem="{Binding SelectedCapability}"/>
-       <TextBlock Text="{Binding CommandRange}"/><TextBox Text="{Binding CommandValue, ValidatesOnExceptions=True}"/>
+       <TextBlock Text="설정할 장비 · 역할"/>
+       <ComboBox x:Name="ScenarioTargetPicker" ItemsSource="{Binding ScenarioTargets}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedScenarioTarget}" ToolTip="{Binding SelectedScenarioTarget.Label}"/>
+       <TextBlock Text="{Binding ScenarioSettingsHint}" TextWrapping="Wrap" Foreground="#65778E" Margin="0,0,0,8"/>
+       <local:ScenarioSettingsView x:Name="ScenarioDeviceSettings"/>
       </StackPanel>
       <StackPanel Visibility="{Binding IsDisplayScenarioStep, Converter={StaticResource BoolVisibility}}">
        <TextBlock Text="저장 배치"/><ComboBox x:Name="ScenarioLayoutPicker" ItemsSource="{Binding ScenarioLayouts}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedScenarioLayout}"/>
        <TextBlock Text="배치는 Hiperwall 편집 → 저장 배치에서 먼저 저장하세요." TextWrapping="Wrap" Foreground="#65778E"/>
       </StackPanel>
       <TextBlock Text="시작 전 대기 / 제한시간 (ms)"/>
+      <TextBlock Text="여러 설정을 추가하면 시작 전 대기는 첫 단계에 적용합니다." TextWrapping="Wrap" Foreground="#65778E" FontSize="11"/>
       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
        <TextBox Text="{Binding DelayMs, ValidatesOnExceptions=True}" ToolTip="단계 시작 전 대기: 0~3600000ms"/>
        <TextBox Grid.Column="1" Text="{Binding TimeoutMs, ValidatesOnExceptions=True}" ToolTip="장비 명령: 100~30000ms / 조건 대기·표시: 100~3600000ms"/>
       </Grid>
       <TextBlock Text="실패 정책 (Stop: 중단 / Continue: 다음 단계)"/><ComboBox ItemsSource="{Binding FailurePolicies}" SelectedItem="{Binding DraftFailurePolicy}"/>
-      <StackPanel Visibility="{Binding IsCommandScenarioStep, Converter={StaticResource BoolVisibility}}">
-       <TextBlock Text="전송 직전 한 번 확인할 조건 (선택)"/><TextBox Text="{Binding ConditionOperationText}" ToolTip="Power, Brightness, Volume, Mute, Input, Lift 중 지원 기능. 빈 값은 조건 없음."/>
-       <TextBox Text="{Binding ConditionValueText}" ToolTip="조건 값"/>
-      </StackPanel>
-      <Button x:Name="AddScenarioStep" Content="마지막 단계로 추가" Command="{Binding AddStepCommand}"/>
-      <Button Content="선택 단계 삭제" Command="{Binding RemoveStepCommand}"/>
-      <Button Content="시나리오 정의 저장 (관리자)" Command="{Binding SaveScenarioCommand}" Style="{StaticResource Primary}"/>
+      <Expander x:Name="ScenarioConditionExpander" Header="전송 직전 확인 조건 (선택)" Visibility="{Binding IsCommandScenarioStep, Converter={StaticResource BoolVisibility}}"><StackPanel>
+       <TextBlock Text="전송 직전 한 번 확인할 조건 (선택)"/>
+       <ComboBox x:Name="ConditionOperationPicker" ItemsSource="{Binding ConditionOperations}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding ConditionOperationText}"/>
+       <local:PowerButtons x:Name="ConditionPowerButtons" Value="{Binding ConditionPowerValue}" Visibility="{Binding IsPowerCondition, Converter={StaticResource BoolVisibility}}"/>
+       <StackPanel Visibility="{Binding IsNumericCondition, Converter={StaticResource BoolVisibility}}">
+        <TextBlock Text="{Binding ConditionRange}" Foreground="#156D68"/>
+        <TextBox x:Name="ConditionNumericValue" Text="{Binding ConditionValueText, UpdateSourceTrigger=PropertyChanged}" ToolTip="조건 기대값"/>
+       </StackPanel>
+      </StackPanel></Expander>
       <TextBlock Text="시작 시 모든 대상과 저장 배치를 고정·예약합니다. 권한·설정 변경과 불확실 결과는 실패 정책과 관계없이 후속 단계를 차단합니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,10,0,0"/>
-     </StackPanel></ScrollViewer>
-     <DataGrid x:Name="ScenarioStepGrid" Grid.Column="1" ItemsSource="{Binding DraftSteps}" SelectedItem="{Binding SelectedDraftStep}"><DataGrid.Columns>
+     </StackPanel></ScrollViewer></DockPanel>
+     <DockPanel Grid.Column="1">
+      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+       <WrapPanel>
+        <Button x:Name="MoveScenarioStepFirst" Content="맨 위" Command="{Binding MoveStepFirstCommand}" ToolTip="선택 단계를 최상단으로 이동"/>
+        <Button x:Name="MoveScenarioStepUp" Content="위로" Command="{Binding MoveStepUpCommand}" ToolTip="선택 단계를 한 단계 위로 이동"/>
+        <Button x:Name="MoveScenarioStepDown" Content="아래로" Command="{Binding MoveStepDownCommand}" ToolTip="선택 단계를 한 단계 아래로 이동"/>
+        <Button x:Name="MoveScenarioStepLast" Content="맨 아래" Command="{Binding MoveStepLastCommand}" ToolTip="선택 단계를 최하단으로 이동"/>
+        <Button x:Name="DeleteScenarioStep" Content="선택 단계 삭제" Command="{Binding RemoveStepCommand}"/>
+       </WrapPanel>
+       <TextBlock Text="{Binding ScenarioOrderHint}" Foreground="#65778E" Margin="0,4,0,0"/>
+      </StackPanel>
+     <DataGrid x:Name="ScenarioStepGrid" ItemsSource="{Binding DraftSteps}" SelectedIndex="{Binding SelectedDraftStepIndex, Mode=TwoWay}" CanUserSortColumns="False"><DataGrid.Columns>
       <DataGridTextColumn Header="단계 종류" Binding="{Binding KindLabel}" Width="140"/>
       <DataGridTextColumn Header="역할 / 배치 ID" Binding="{Binding TargetLabel}" Width="200"/>
       <DataGridTextColumn Header="동작·조건" Binding="{Binding ActionLabel}" Width="125"/>
       <DataGridTextColumn Header="시작 전 ms" Binding="{Binding DelayBeforeMs}" Width="85"/>
       <DataGridTextColumn Header="제한 ms" Binding="{Binding TimeoutMs}" Width="85"/>
       <DataGridTextColumn Header="실패 정책" Binding="{Binding OnFailure}" Width="80"/>
-     </DataGrid.Columns></DataGrid>
+     </DataGrid.Columns></DataGrid></DockPanel>
     </Grid>
    </TabItem>
    <TabItem x:Name="HandoverTab" Header="작업 · 교대">
@@ -136,7 +145,8 @@
       <Separator Margin="0,12"/><TextBlock Text="역할 배정" FontSize="16" FontWeight="SemiBold"/>
       <TextBlock Text="배정할 등록 장비"/><ComboBox x:Name="RoleDevicePicker" ItemsSource="{Binding Devices}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedDevice}" IsEnabled="{Binding CanConfigure}"/>
       <TextBlock Text="{Binding RoleTargetSummary}" TextWrapping="Wrap" Margin="0,4"/><TextBlock Text="역할 ID (예: room.light)"/>
-      <TextBox Text="{Binding RoleName, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanConfigure}"/><Button Content="선택 장비에 역할 배정" Command="{Binding SaveRoleCommand}"/>
+      <local:RoleAssignmentsView x:Name="AssignedRoleIds"/>
+      <TextBox x:Name="RoleIdInput" Text="{Binding RoleName, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanConfigure}" ToolTip="선택 장비의 기존 역할 ID입니다. 다른 역할을 배정하려면 ID를 수정하세요."/><Button Content="선택 장비에 역할 배정" Command="{Binding SaveRoleCommand}"/>
       <TextBlock Text="{Binding RoleAssignmentHint}" TextWrapping="Wrap" Foreground="#65778E"/>
      </StackPanel></Border>
      <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
@@ -173,10 +183,68 @@
      </Expander>
     </Grid>
    </TabItem>
+   <TabItem x:Name="MyInfoTab" Header="내 정보">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="24">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <Border Style="{StaticResource Card}" VerticalAlignment="Top"><StackPanel>
+      <TextBlock Text="내 계정" Style="{StaticResource SectionTitle}"/>
+      <TextBlock x:Name="MyAccountNameText" Text="{Binding MyAccountName}" FontSize="24" FontWeight="SemiBold" TextWrapping="Wrap"/>
+      <TextBlock Text="{Binding MyAccountRole}" Foreground="#156D68" Margin="0,6,0,20"/>
+      <TextBlock Text="제어 권한" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding MyControlScope}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+      <TextBlock Text="Hiperwall 제어" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding MyHiperwallPermission}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+      <TextBlock Text="현재 사용 상태" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding MyControlStatus}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+      <WrapPanel>
+       <Button x:Name="HeaderLogout" Content="로그아웃" Command="{Binding LogoutCommand}" Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolVisibility}}"/>
+       <Button x:Name="HeaderLogin" Content="접속" Click="OpenLogin">
+        <Button.Style><Style TargetType="Button" BasedOn="{StaticResource Primary}"><Style.Triggers><DataTrigger Binding="{Binding IsLoggedIn}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Button.Style>
+       </Button>
+       <Button x:Name="AccountSettingsButton" Content="계정 및 권한 관리" Click="OpenAccountSettings" Visibility="{Binding IsAdmin, Converter={StaticResource BoolVisibility}}"/>
+      </WrapPanel>
+     </StackPanel></Border>
+     <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,0,12" VerticalAlignment="Top"><StackPanel>
+      <TextBlock Text="접속 정보" Style="{StaticResource SectionTitle}"/>
+      <TextBlock Text="접속 PC" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding MyPcName}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+      <TextBlock Text="연결 호스트" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding MyHostEndpoint}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+      <TextBlock Text="연결 상태" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding ConnectionSummary}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+      <TextBlock Text="저장 슬롯 지원" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding MySlotSupport}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+      <Expander Header="계정 · 세션 식별 정보">
+       <StackPanel Margin="0,8,0,0">
+        <TextBlock Text="계정 ID" FontWeight="SemiBold"/><TextBlock Text="{Binding MyAccountId}" TextWrapping="Wrap" Margin="0,4,0,12"/>
+        <TextBlock Text="PC ID" FontWeight="SemiBold"/><TextBlock Text="{Binding MyPcId}" TextWrapping="Wrap" Margin="0,4,0,12"/>
+        <TextBlock Text="세션 ID" FontWeight="SemiBold"/><TextBlock Text="{Binding MySessionId}" TextWrapping="Wrap" Margin="0,4,0,12"/>
+       </StackPanel>
+      </Expander>
+     </StackPanel></Border>
+    </Grid></ScrollViewer>
+   </TabItem>
   </TabControl>
-  <Border Grid.Row="4" Background="#E7EEF6" Padding="18,10"><StackPanel>
-   <DockPanel><TextBlock Text="{Binding ConnectionSummary}" DockPanel.Dock="Right" FontSize="11" Foreground="#536C85"/><TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,18,0" AutomationProperties.AutomationId="StatusMessage"/></DockPanel>
-   <WrapPanel><TextBlock Text="{Binding PendingSummary}" VerticalAlignment="Center" Foreground="#8B5824"/><Button Content="접수 여부 재확인" Command="{Binding RetryCommand}" Padding="10,4" Margin="12,4,0,0"/></WrapPanel>
+  <Border Grid.Row="1" Background="#E7EEF6" Padding="18,10"><StackPanel>
+   <DockPanel>
+    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+     <TextBlock Text="장비: 가상 · Hiperwall: 실장비 연동" FontSize="11" Foreground="#0C6657" Margin="0,0,16,0"/>
+     <TextBlock Text="{Binding ConnectionSummary}" FontSize="11" Foreground="#536C85"/>
+    </StackPanel>
+    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,18,0" AutomationProperties.AutomationId="StatusMessage"/>
+   </DockPanel>
+   <Grid Margin="0,4,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <DockPanel Margin="0,0,18,0">
+     <Button DockPanel.Dock="Right" Content="접수 여부 재확인" Command="{Binding RetryCommand}" Padding="10,4" Margin="12,0,0,0"/>
+     <TextBlock Text="{Binding PendingSummary}" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#8B5824"/>
+    </DockPanel>
+    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+     <Button Content="사용 시작" Command="{Binding AcquireCommand}" Style="{StaticResource Primary}" Padding="12,5" Margin="0,0,8,0" AutomationProperties.AutomationId="AcquireButton"/>
+     <Button Content="사용 종료 · 작업 유지" Command="{Binding ReleaseCommand}" Padding="12,5" Margin="0,0,8,0" AutomationProperties.AutomationId="ReleaseButton"/>
+     <Button Content="새로 고침" Command="{Binding RefreshCommand}" Padding="12,5" Margin="0,0,8,0"/>
+     <Button x:Name="OpenMyInfoButton" Content="내 정보" Click="OpenMyInfo" Padding="12,5" Margin="0"/>
+    </StackPanel>
+   </Grid>
   </StackPanel></Border>
  </Grid>
 </Window>

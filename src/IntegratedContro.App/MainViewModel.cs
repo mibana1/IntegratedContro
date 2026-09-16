@@ -50,7 +50,7 @@ public sealed partial class MainViewModel : Bindable
 {
     public HiperwallViewModel Hiperwall { get; } = new();
     public CameraViewModel Cameras { get; }
-    private readonly ClientPreferences _preferences = ClientPreferences.Load();
+    private ClientPreferences _preferences = ClientPreferences.Load();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly List<AsyncCommand> _commands = [];
     private HostClient? _client;
@@ -62,7 +62,7 @@ public sealed partial class MainViewModel : Bindable
     private RecoveryReview? _review;
     private bool _busy, _polling, _closing, _connected;
     private readonly CancellationTokenSource _lifetime = new();
-    private string _message = "호스트의 최초 설정을 완료한 뒤 주소·인증서 지문·앱 계정으로 접속하세요.";
+    private string _message = "접속 설정을 확인하고 앱 계정으로 로그인하세요.";
     public string Message { get => _message; private set => Set(ref _message, value); }
     public bool IsBusy => _busy;
     public bool CanEditLogin => !_busy && !_closing;
@@ -111,7 +111,7 @@ public sealed partial class MainViewModel : Bindable
     public IEnumerable<VirtualFault> Faults => Enum.GetValues<VirtualFault>();
     public IEnumerable<FailurePolicy> FailurePolicies => Enum.GetValues<FailurePolicy>();
     private DeviceRow? _selectedDevice;
-    public DeviceRow? SelectedDevice { get => _selectedDevice; set { Set(ref _selectedDevice, value); Notify(); } }
+    public DeviceRow? SelectedDevice { get => _selectedDevice; set { var previous = _selectedDevice?.Id; Set(ref _selectedDevice, value); if (previous != value?.Id) LoadAssignedRoleName(); Notify(); } }
     private RoleBinding? _selectedRole;
     public RoleBinding? SelectedRole
     {
@@ -124,16 +124,13 @@ public sealed partial class MainViewModel : Bindable
     public Capability? SelectedCapability
     {
         get => _selectedCapability;
-        set { Set(ref _selectedCapability, value); if (value is not null) { CommandValue = value.Minimum; Changed(nameof(CommandValue)); } Changed(nameof(CommandRange)); }
+        set { Set(ref _selectedCapability, value); if (value is not null) { CommandValue = value.Minimum; Changed(nameof(CommandValue)); } NotifyCommandInput(); }
     }
-    public string CommandRange => SelectedCapability is null ? "역할을 선택하세요." : $"{SelectedCapability.Minimum}~{SelectedCapability.Maximum} {SelectedCapability.Unit}";
+    public string CommandRange => SelectedCapability is null ? "역할을 선택하세요." : IsPowerCommand ? "전원 상태를 선택한 뒤 명령을 접수하세요." : $"{SelectedCapability.Minimum}~{SelectedCapability.Maximum} {SelectedCapability.Unit}";
     private int _commandValue = 1; public int CommandValue { get => _commandValue; set => Set(ref _commandValue, value); }
     private int _delayMs; public int DelayMs { get => _delayMs; set => Set(ref _delayMs, value); }
     private int _timeoutMs = 3000; public int TimeoutMs { get => _timeoutMs; set => Set(ref _timeoutMs, value); }
     public FailurePolicy DraftFailurePolicy { get; set; }
-    public string ConditionOperationText { get; set; } = "";
-    public string ConditionValueText { get; set; } = "";
-    public ScenarioStep? SelectedDraftStep { get; set; }
     private JobRow? _selectedJob;
     public JobRow? SelectedJob { get => _selectedJob; set { Set(ref _selectedJob, value); Changed(nameof(JobDetails)); Notify(); } }
     public string JobDetails
@@ -149,7 +146,6 @@ public sealed partial class MainViewModel : Bindable
                 string.Join("\n\n", snapshot.Steps.Select((step, i) => FormatScenarioStep(step, job.Steps[i], i)));
         }
     }
-    public ScenarioDefinition? SelectedScenario { get; set; }
     public DeviceModel? SelectedModel { get; set; }
     public string DeviceIdText { get; set; } = Guid.NewGuid().ToString();
     public string PcIdText { get; set; }
@@ -161,7 +157,7 @@ public sealed partial class MainViewModel : Bindable
     public int DeviceLatencyMs { get; set; } = 50;
     public int DeviceExpectedVersion { get; private set; }
     private string _roleName = "";
-    public string RoleName { get => _roleName; set { if (Set(ref _roleName, value)) Notify(); } }
+    public string RoleName { get => _roleName; set { if (Set(ref _roleName, value)) { _roleNameEdited = true; Notify(); } } }
     public string RoleTargetSummary => SelectedDevice is null ? "배정 대상: 장비를 선택하세요." :
         $"배정 대상: {SelectedDevice.Name} / {SelectedDevice.PcName}\n장비 ID: {SelectedDevice.Id}";
     public string RoleAssignmentHint => !IsLoggedIn ? "호스트에 접속한 뒤 관리자 계정으로 사용 시작을 누르세요." :
@@ -210,7 +206,9 @@ public sealed partial class MainViewModel : Bindable
         Cameras = new CameraViewModel(Hiperwall);
         Cameras.StatusReported += message => Message = message;
         Endpoint = _preferences.Endpoint; Fingerprint = _preferences.Fingerprint; PcIdText = _preferences.PcId.ToString();
-        LoginCommand = Command(Login, () => !IsLoggedIn);
+        LoginName = _preferences.LastLoginName ?? "";
+        InitializeLoginSettings();
+        LoginCommand = Command(Login, () => !IsLoggedIn && IsLoginPage);
         LogoutCommand = Command(Logout, () => IsLoggedIn);
         AcquireCommand = Command(async () => { await Client.Post<Lease>("/api/lease/acquire"); }, () => _connected && IsLoggedIn && _state?.Lease.Mode == LeaseMode.Free);
         ReleaseCommand = Command(async () => { await Client.Post<Lease>("/api/lease/release", new LeaseRequest(Generation)); Message = "사용 종료 완료. 접수 작업과 예약은 호스트에서 유지됩니다."; }, () => CanControl);
@@ -237,10 +235,12 @@ public sealed partial class MainViewModel : Bindable
             var saved = await Client.Post<RoleBinding>("/api/roles", new RoleRequest(Generation, roleId, target.Id, version));
             await Refresh();
             SelectedRole = Roles.SingleOrDefault(r => r.Id == saved.Id);
+            _roleNameEdited = false; Set(ref _roleName, saved.Id, nameof(RoleName));
             Message = $"역할 배정 완료: {saved.Id} → {target.Name} / {target.PcName}. 장비 제어에서 기능·값을 선택해 명령을 접수하세요.";
         }, () => CanConfigure && SelectedDevice is not null && !string.IsNullOrWhiteSpace(RoleName));
         AddStepCommand = Command(AddScenarioStep);
-        RemoveStepCommand = Command(() => { if (SelectedDraftStep is not null) DraftSteps.Remove(SelectedDraftStep); return Task.CompletedTask; });
+        InitializeScenarioEditor();
+        RemoveStepCommand = ScenarioEditCommand(RemoveSelectedDraftStep, () => HasSelectedDraftStep);
         SaveScenarioCommand = Command(async () =>
         {
             RequireScenarioExtensions(DraftSteps);
@@ -251,10 +251,11 @@ public sealed partial class MainViewModel : Bindable
         {
             if (SelectedScenario is null) return Task.CompletedTask;
             _scenarioId = SelectedScenario.Id; _scenarioVersion = SelectedScenario.Version; ScenarioName = SelectedScenario.Name;
+            SelectedDraftStepIndex = -1;
             DraftSteps.Clear(); foreach (var step in SelectedScenario.Steps) DraftSteps.Add(step);
             Changed(nameof(ScenarioName)); return Task.CompletedTask;
         });
-        NewScenarioCommand = Command(() => { _scenarioId = Guid.NewGuid(); _scenarioVersion = 0; ScenarioName = ""; DraftSteps.Clear(); Changed(nameof(ScenarioName)); return Task.CompletedTask; });
+        NewScenarioCommand = Command(() => { ClearScenarioDraft(); return Task.CompletedTask; });
         RunScenarioCommand = Command(() => Submit(true), () => CanControl && !HasPending);
         CreateAccountCommand = Command(async () =>
         {
@@ -330,8 +331,15 @@ public sealed partial class MainViewModel : Bindable
         }
         finally { ClearLoginPassword(); }
         Client.SetToken(_login.Token); _state = null; _connected = true;
-        (_preferences with { Endpoint = Endpoint, Fingerprint = Fingerprint }).Save();
-        Message = "로그인 완료. 조회 모드에서 현황을 확인하고 사용 시작을 선택하세요.";
+        LoginName = _login.Session.UserName; Changed(nameof(LoginName));
+        var preferences = _preferences with { Endpoint = Endpoint, Fingerprint = Fingerprint, LastLoginName = LoginName };
+        try
+        {
+            preferences.Save(); _preferences = preferences;
+            Message = "로그인 완료. 조회 모드에서 현황을 확인하고 사용 시작을 선택하세요.";
+        }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException)
+        { Message = "로그인은 완료했지만 최근 아이디를 저장하지 못했습니다. 앱 설정 폴더를 확인하세요."; }
     }
     private async Task Logout()
     {
@@ -340,7 +348,7 @@ public sealed partial class MainViewModel : Bindable
         finally
         {
             _login = null; _connected = false; _state = null; _review = null;
-            _pending = null; _pendingLightBatch = null; _editingLightOrder = false; Lights.Clear(); Devices.Clear(); Roles.Clear(); Jobs.Clear(); Scenarios.Clear(); ScenarioLayouts.Clear(); SelectedScenarioLayout = null; Accounts.Clear(); Audit.Clear();
+            _pending = null; _pendingLightBatch = null; _editingLightOrder = false; Lights.Clear(); Devices.Clear(); Roles.Clear(); Jobs.Clear(); Scenarios.Clear(); ScenarioLayouts.Clear(); SelectedScenarioLayout = null; ScenarioTargets.Clear(); SelectedScenarioTarget = null; LoadAssignedRoleName(); Accounts.Clear(); Audit.Clear();
         }
     }
     private async Task Poll()
@@ -383,6 +391,7 @@ public sealed partial class MainViewModel : Bindable
         _selectedDevice = Devices.FirstOrDefault(x => x.Id == selectedDeviceId);
         Replace(Roles, state.Roles); _selectedRole = Roles.FirstOrDefault(x => x.Id == selectedRoleId);
         Replace(Models, state.Models); SelectedModel = Models.FirstOrDefault(x => x.Id == modelId) ?? Models.FirstOrDefault();
+        RefreshRoleAssignments(); RefreshScenarioTargets(state);
         RefreshScenarioLayouts(state);
         Replace(Scenarios, state.Scenarios); SelectedScenario = Scenarios.FirstOrDefault(x => x.Id == scenarioId);
         Replace(Accounts, state.Accounts); SelectedAccount = Accounts.FirstOrDefault(x => x.Id == selectedAccountId);
@@ -395,7 +404,7 @@ public sealed partial class MainViewModel : Bindable
         { _pending = null; _pendingLightBatch = null; Message = "요청 ID로 호스트 접수 기록을 확인했습니다."; }
         Changed(nameof(SelectedDevice)); Changed(nameof(SelectedRole)); Changed(nameof(SelectedJob));
         Changed(nameof(SelectedScenario)); Changed(nameof(SelectedModel)); Changed(nameof(SelectedAccount));
-        _selectedCapability = Capabilities.FirstOrDefault(c => c.Operation == operation); Changed(nameof(SelectedCapability)); Changed(nameof(Capabilities)); Changed(nameof(JobDetails)); Notify();
+        _selectedCapability = Capabilities.FirstOrDefault(c => c.Operation == operation); Changed(nameof(SelectedCapability)); Changed(nameof(Capabilities)); Changed(nameof(JobDetails)); NotifyCommandInput(); Notify();
     }
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> values)
     {
@@ -448,7 +457,10 @@ public sealed partial class MainViewModel : Bindable
         foreach (var name in new[] { nameof(IsBusy), nameof(CanEditLogin), nameof(IsLoggedIn), nameof(IsAdmin), nameof(CanControl), nameof(CanConfigure), nameof(SiteTitle),
             nameof(UserSummary), nameof(LeaseSummary), nameof(PreviousSummary), nameof(ConnectionSummary), nameof(PendingSummary),
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
+        NotifyMyInfo();
+        NotifyScenarioEditor();
         RefreshLighting();
+        RefreshAssignedRoleRows();
         RefreshHandover();
         Hiperwall.UpdateDisplayJobs(_state?.HiperwallDisplayJobs ?? [], _state?.HiperwallLayoutsSupported == true);
         Cameras.Generation = Generation;
@@ -457,6 +469,7 @@ public sealed partial class MainViewModel : Bindable
         Hiperwall.Generation = Generation;
         Hiperwall.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
             IsAdmin, CanConfigure, _state?.HiperwallReadSupported ?? false, _state?.HiperwallConfigurationVersion ?? 0, CanControl && (_state?.CanControlHiperwall ?? false), _state?.HiperwallWriteSupported ?? false);
+        Hiperwall.UpdateSlots(_state?.HiperwallSlots ?? [], _state?.HiperwallSlotsSupported == true);
         foreach (var command in _commands) command.Raise();
     }
     public async Task CloseAsync()

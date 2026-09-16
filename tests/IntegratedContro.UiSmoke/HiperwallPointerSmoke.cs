@@ -29,11 +29,10 @@ public static partial class Program
         using (var touch = new EditorTouch(canvas, 1100, start))
         {
             touch.Raise(UIElement.TouchDownEvent, start);
-            Require(!h.CanMove && !canvas.CanManipulate && h.EditHint.Contains("Zone 정보가 없습니다"), "Missing Zone did not explain disabled movement");
-            touch.Raise(UIElement.TouchMoveEvent, start + new Vector(30, 0));
-            touch.Raise(UIElement.TouchUpEvent, start + new Vector(30, 0));
+            Require(h.CanMove && canvas.CanManipulate && h.TargetZone?.Item.Id == "zone-1", "Existing source Zone was not inferred");
+            touch.Raise(UIElement.TouchUpEvent, start);
         }
-        Require(commands == fixture.Commands.Count, "Missing Zone sent a command");
+        Require(commands == fixture.Commands.Count, "Selecting an existing source sent a command");
         h.TargetZone = h.Zones[0]; h.SelectedContent = h.Contents[0]; window.UpdateLayout();
         var scale = canvas.ViewScale;
         MouseGesture("BeginEditGesture", start);

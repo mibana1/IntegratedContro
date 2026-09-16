@@ -198,6 +198,8 @@ public sealed partial class HiperwallViewModel
     {
         SavedLayouts.Clear(); DisplayJobs.Clear(); SelectedLayout = null; SelectedDisplay = null; ResetDraft();
         DraftContent = DraftZone = null;
+        foreach (var row in LayoutSlots) row.Update(null);
+        _slotsSupported = false; SlotMessage = "";
     }
     private void NotifyLayouts()
     {

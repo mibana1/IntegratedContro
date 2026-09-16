@@ -29,7 +29,7 @@
   <Style TargetType="TabItem"><Setter Property="Foreground" Value="#182F47"/><Setter Property="Padding" Value="10,6"/></Style>
  </UserControl.Resources>
  <TabControl x:Name="HiperwallWorkTabs" Margin="8" Background="#0B111A" BorderThickness="0"><TabItem Header="LIVE 편집"><Grid Margin="10">
-  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
   <DockPanel Margin="2,0,2,10">
    <Button DockPanel.Dock="Right" VerticalAlignment="Top" Content="목록 새로 고침" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HiperwallRefresh" Background="#20695E"/>
    <StackPanel>
@@ -42,7 +42,38 @@
    </StackPanel>
   </DockPanel>
   <Border Grid.Row="1" Background="#1B2C40" CornerRadius="6" Padding="10,8" Margin="0,0,0,12"><TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12"/></Border>
-  <Grid Grid.Row="2">
+  <Border Grid.Row="2" Background="#121D2B" BorderBrush="#2C3D51" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,10">
+   <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <DockPanel>
+     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="10,0,0,0">
+      <Button x:Name="SaveLayoutSlot" Content="현재 상태 저장" MinHeight="44" Command="{Binding SaveSlotCommand}" ToolTip="{Binding SaveSlotToolTip}" ToolTipService.ShowOnDisabled="True"/>
+      <Button x:Name="DeleteLayoutSlot" Content="저장 삭제" MinHeight="44" Command="{Binding DeleteSlotCommand}" ToolTip="{Binding DeleteSlotToolTip}" ToolTipService.ShowOnDisabled="True"/>
+      <Button x:Name="RestoreLayoutSlot" Content="불러오기" MinHeight="44" Command="{Binding RestoreSlotCommand}" ToolTip="{Binding RestoreSlotToolTip}" ToolTipService.ShowOnDisabled="True" Background="#20695E"/>
+     </StackPanel>
+    <ItemsControl x:Name="LayoutSlotButtons" ItemsSource="{Binding LayoutSlots}">
+     <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+     <ItemsControl.ItemTemplate><DataTemplate>
+      <Button Command="{Binding SelectCommand}" MinHeight="48" Padding="8,4" ToolTip="{Binding Description}" AutomationProperties.Name="{Binding Title}">
+       <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True">
+         <Setter Property="Background" Value="#20695E"/><Setter Property="BorderBrush" Value="#7DDFC5"/>
+        </DataTrigger></Style.Triggers>
+       </Style></Button.Style>
+       <StackPanel><TextBlock Text="{Binding Title}" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+        <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="#B5CDDE" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+       </StackPanel>
+      </Button>
+     </DataTemplate></ItemsControl.ItemTemplate>
+    </ItemsControl></DockPanel>
+    <TextBlock Grid.Row="1" Text="{Binding SlotMessage}" FontSize="11" TextWrapping="Wrap" Foreground="#FFD58A" Margin="3,6,0,0">
+     <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+      <DataTrigger Binding="{Binding SlotMessage}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+     </Style.Triggers></Style></TextBlock.Style>
+    </TextBlock>
+   </Grid>
+  </Border>
+  <ScrollViewer x:Name="LiveEditorScroll" Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
+  <Grid MinHeight="520" Height="{Binding ViewportHeight, ElementName=LiveEditorScroll}">
    <Grid.ColumnDefinitions><ColumnDefinition Width=".9*" MinWidth="225"/><ColumnDefinition Width="12"/><ColumnDefinition Width="2*" MinWidth="365"/><ColumnDefinition Width="12"/><ColumnDefinition Width=".9*" MinWidth="225"/></Grid.ColumnDefinitions>
    <Border Style="{StaticResource Panel}">
     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -72,12 +103,11 @@
      </ListBox>
      <StackPanel Grid.Row="5" Margin="0,12,0,0">
       <Button Content="선택 콘텐츠 추가" Command="{Binding AddContentCommand}" AutomationProperties.AutomationId="HiperwallAdd" Background="#20695E"/>
-      <TextBlock Text="Zone으로 드래그하거나 오른쪽에서 위치·크기를 지정해 추가하세요." Style="{StaticResource Muted}" Margin="0,8,0,0"/>
      </StackPanel>
     </Grid>
    </Border>
    <Border Grid.Column="2" Style="{StaticResource Panel}">
-    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="2*" MinHeight="90"/><RowDefinition Height="Auto"/><RowDefinition Height=".6*" MinHeight="85" MaxHeight="160"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="2*" MinHeight="90"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="180" MaxHeight="240"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
      <TextBlock Text="Wall · Zone · 이미지 프리뷰" ToolTip="{Binding CanvasSummary}" FontSize="19" FontWeight="SemiBold" Margin="0,4"/>
      <WrapPanel Grid.Row="1" Margin="0,6,0,8">
       <Button Content="−" Click="ZoomOut" AutomationProperties.Name="캔버스 축소"/><TextBlock Text="{Binding ZoomLabel, ElementName=WallCanvas}" VerticalAlignment="Center" MinWidth="54" TextAlignment="Center"/>
@@ -117,7 +147,8 @@
        <Grid Margin="6"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <TextBlock Text="{Binding InstanceBrief}" ToolTip="{Binding InstanceState}" Style="{StaticResource Muted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
         <DataGrid x:Name="InstanceGrid" PreviewKeyDown="RemoveInstanceKeyDown" CanUserDeleteRows="False" Grid.Row="1" ItemsSource="{Binding Instances}" SelectedItem="{Binding SelectedInstance}"><DataGrid.Columns>
-         <DataGridTextColumn Header="콘텐츠 이름" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="인스턴스 ID" Binding="{Binding Identity}" Width="*"/>
+         <DataGridTextColumn Header="콘텐츠 이름" Binding="{Binding Name}" Width="*" MinWidth="100"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding Name}"/></Style></DataGridTextColumn.ElementStyle></DataGridTextColumn>
+         <DataGridTextColumn Header="인스턴스 ID" Binding="{Binding Identity}" Width="*" MinWidth="100"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding Identity}"/></Style></DataGridTextColumn.ElementStyle></DataGridTextColumn>
         </DataGrid.Columns></DataGrid>
        </Grid>
       </TabItem>
@@ -144,13 +175,13 @@
        </Grid>
       </TabItem>
      </TabControl>
-     <StackPanel Grid.Row="5" Margin="0,6,0,0">
-      <WrapPanel><Button Content="선택 닫기" Command="{Binding CloseInstanceCommand}"/>
-       <Button Content="전체 음소거" Command="{Binding MuteAllCommand}"/><Button Content="전체 음소거 해제" Command="{Binding UnmuteAllCommand}"/>
-       <Button x:Name="CloseAllButton" Content="전체 닫기…" Command="{Binding CloseAllCommand}" Background="#733D47"/>
-      </WrapPanel>
-      <TextBlock Text="{Binding EditResult}" Style="{StaticResource Muted}" Margin="3,8,0,0"/>
-     </StackPanel>
+     <Grid Grid.Row="5" Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Button Content="선택 닫기" Command="{Binding CloseInstanceCommand}" Padding="7,7"/>
+       <Button Content="전체 음소거" Command="{Binding MuteAllCommand}" Padding="7,7"/><Button Content="전체 음소거 해제" Command="{Binding UnmuteAllCommand}" Padding="7,7"/>
+       <Button x:Name="CloseAllButton" Content="전체 닫기…" Command="{Binding CloseAllCommand}" Background="#733D47" Padding="7,7"/>
+      </StackPanel>
+      <TextBlock x:Name="EditResultSummary" Grid.Column="1" Text="{Binding EditResult}" ToolTip="{Binding EditResult}" Style="{StaticResource Muted}" TextTrimming="CharacterEllipsis" MaxHeight="44" VerticalAlignment="Center" Margin="8,0,0,0"/>
+     </Grid>
     </Grid>
    </Border>
    <Border Grid.Column="4" Style="{StaticResource Panel}">
@@ -185,6 +216,6 @@
      </StackPanel>
     </ScrollViewer>
    </Border>
-  </Grid>
+  </Grid></ScrollViewer>
  </Grid></TabItem><TabItem x:Name="LayoutsTab" Header="저장 배치 · 표시 · 복구"><local:HiperwallLayoutsView/></TabItem></TabControl>
 </UserControl>

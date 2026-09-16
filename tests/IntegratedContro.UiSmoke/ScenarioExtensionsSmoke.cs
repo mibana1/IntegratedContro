@@ -42,8 +42,7 @@ public static partial class Program
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("ScenarioTab"); window.UpdateLayout();
             var kind = (ComboBox)window.FindName("ScenarioKindPicker"); var add = (Button)window.FindName("AddScenarioStep");
             vm.ScenarioName = "조명 → 조건 확인 → 배치 표시 → 밝기";
-            vm.SelectedRole = vm.Roles.Single(); vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Power);
-            vm.CommandValue = 1; vm.DelayMs = 0; vm.TimeoutMs = 10000;
+            SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Power, 1); vm.DelayMs = 0; vm.TimeoutMs = 10000;
             await Click(vm, add);
             kind.SetCurrentValue(ComboBox.SelectedValueProperty, ScenarioStepKind.WaitUntil); window.UpdateLayout();
             Require(vm.DraftStepKind == ScenarioStepKind.WaitUntil && vm.IsDeviceScenarioStep, "Wait kind binding failed");
@@ -54,7 +53,7 @@ public static partial class Program
             Require(vm.SelectedScenarioLayout is not null && layouts.IsVisible, "Saved layout binding missing");
             await Click(vm, add);
             kind.SetCurrentValue(ComboBox.SelectedValueProperty, ScenarioStepKind.DeviceCommand);
-            vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness); vm.CommandValue = 60;
+            SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Brightness, 60);
             await Click(vm, add);
             Require(vm.DraftSteps.Select(s => s.Kind).SequenceEqual(new[] { ScenarioStepKind.DeviceCommand,
                 ScenarioStepKind.WaitUntil, ScenarioStepKind.DisplayLayout, ScenarioStepKind.DeviceCommand }), "Mixed draft order lost");
@@ -73,9 +72,12 @@ public static partial class Program
             vm.SelectedJob = vm.Jobs.Single(); Require(vm.JobDetails.Contains("시나리오 배치") && vm.JobDetails.Contains("조건 충족"), "Mixed details missing");
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("HandoverTab"); window.UpdateLayout();
             Capture(window, Path.Combine(output, "scenario-results.png"));
+            await Execute(vm, vm.DeleteScenarioCommand);
+            Require(vm.Scenarios.Count == 0 && vm.Jobs.Single().Job.Id == completed.Id &&
+                vm.HiperwallJobs.Any(j => j.Display?.Outstanding == true), "Definition deletion removed completed history or scheduled display cleanup");
 
             await Execute(vm, vm.NewScenarioCommand); vm.ScenarioName = "교대 중 조건 대기"; vm.DraftStepKind = ScenarioStepKind.WaitUntil;
-            vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Power); vm.CommandValue = 0; vm.TimeoutMs = 60000;
+            SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Power, 0); vm.TimeoutMs = 60000;
             await Execute(vm, vm.AddStepCommand); vm.DraftStepKind = ScenarioStepKind.DisplayLayout;
             await Execute(vm, vm.AddStepCommand); await Execute(vm, vm.SaveScenarioCommand);
             vm.SelectedScenario = vm.Scenarios.Single(s => s.Name == "교대 중 조건 대기"); await Execute(vm, vm.RunScenarioCommand);

@@ -155,7 +155,8 @@ public sealed partial class ControlService
                     OutstandingHiperwallDisplays = s.HiperwallDisplays.Where(j => j.Outstanding).ToArray(),
                     HiperwallDisplayJobs = s.HiperwallDisplays.Where(j => j.Outstanding).Union(s.HiperwallDisplays.TakeLast(100)).Reverse().ToArray(),
                     HiperwallLayoutsSupported = _hiperwall is IHiperwallWriter,
-                    ScenarioExtensionsSupported = true, SavedHiperwallLayouts = s.HiperwallLayouts.ToArray(),
+                    HiperwallSlotsSupported = _hiperwall is IHiperwallWriter, HiperwallSlots = s.HiperwallSlots.ToArray(),
+                    ScenarioExtensionsSupported = true, ScenarioDeletionSupported = true, RoleUnassignmentSupported = true, SavedHiperwallLayouts = s.HiperwallLayouts.ToArray(),
                     CameraSupported = _media is not null, MediaConfigurationVersion = s.Media?.Version ?? 0,
                     LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = CurrentLightLayout(s),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(User(s, session), d.Id)).Select(d => d.Id).ToArray() });

@@ -86,6 +86,7 @@ public sealed class HostClient : IDisposable
 }
 public sealed record ClientPreferences(Guid PcId, string Endpoint, string Fingerprint)
 {
+    public string LastLoginName { get; init; } = "";
     public static string ProfilePath
     {
         get

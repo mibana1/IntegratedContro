@@ -64,13 +64,29 @@ public sealed partial class ControlService
         Require(s.Devices.Any(d => d.Id == request.DeviceId && d.Enabled), "target_missing", "활성 장비를 선택하세요.", 400);
         var old = s.Roles.SingleOrDefault(r => r.Id == request.Id.Trim());
         Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "역할 설정을 다시 조회하세요.");
-        var role = new RoleBinding(request.Id.Trim(), request.DeviceId, (old?.Version ?? 0) + 1);
+        var role = new RoleBinding(request.Id.Trim(), request.DeviceId,
+            checked(Math.Max(old?.Version ?? 0, s.DeletedRoleVersions.GetValueOrDefault(request.Id.Trim())) + 1));
         // Existing scenarios declare the required capabilities of this role.
         foreach (var step in s.Scenarios.SelectMany(x => x.Steps).Where(x => x.RoleId == role.Id))
             Resolve(s, User(s, session), step with { RoleId = role.Id }, role);
         s.Roles.RemoveAll(r => r.Id == role.Id); s.Roles.Add(role);
         Audit(s, session.Info.UserId, "RoleAssigned", $"role={role.Id}; device={role.DeviceId}; v={role.Version}");
         return role;
+    });
+    public bool UnassignRole(string token, UnassignRoleRequest request) => Change(s =>
+    {
+        var session = Owner(s, token, request.Generation); Admin(s, token);
+        Text(request.Id, "역할 ID");
+        Require(request.DeviceId != Guid.Empty && request.ExpectedVersion > 0, "invalid_role", "해제할 장비와 역할 배정을 확인하세요.", 400);
+        var role = s.Roles.SingleOrDefault(r => r.Id == request.Id.Trim());
+        Require(role is not null && role.DeviceId == request.DeviceId && role.Version == request.ExpectedVersion,
+            "version_conflict", "역할 배정이 변경되었거나 해제되었습니다. 다시 조회하세요.");
+        Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(step => step.Role?.Id == role!.Id)),
+            "role_in_use", "이 역할을 사용하는 작업이 진행 중입니다. 작업·교대에서 완료를 확인하거나 취소한 뒤 해제하세요.");
+        s.DeletedRoleVersions[role!.Id] = role.Version;
+        s.Roles.Remove(role);
+        Audit(s, session.Info.UserId, "RoleUnassigned", $"role={role.Id}; device={role.DeviceId}; v={role.Version}");
+        return true;
     });
     public ScenarioDefinition SaveScenario(string token, ScenarioRequest request) => Change(s =>
     {
@@ -82,10 +98,27 @@ public sealed partial class ControlService
         foreach (var step in steps) Resolve(s, User(s, session), step);
         var old = s.Scenarios.SingleOrDefault(x => x.Id == request.Id);
         Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "시나리오 설정을 다시 조회하세요.");
-        var definition = new ScenarioDefinition(request.Id, request.Name.Trim(), (old?.Version ?? 0) + 1, steps);
+        var definition = new ScenarioDefinition(request.Id, request.Name.Trim(),
+            checked(Math.Max(old?.Version ?? 0, s.DeletedScenarioVersions.GetValueOrDefault(request.Id)) + 1), steps);
         s.Scenarios.RemoveAll(x => x.Id == definition.Id); s.Scenarios.Add(definition);
         Audit(s, session.Info.UserId, "ScenarioSaved", $"scenario={definition.Id}; v={definition.Version}");
         return definition;
+    });
+    public bool DeleteScenario(string token, DeleteScenarioRequest request) => Change(s =>
+    {
+        var session = Owner(s, token, request.Generation); Admin(s, token);
+        Require(request.Id != Guid.Empty && request.ExpectedVersion > 0,
+            "invalid_scenario", "삭제할 시나리오를 확인하세요.", 400);
+        var definition = s.Scenarios.SingleOrDefault(x => x.Id == request.Id);
+        Require(definition is not null && definition.Version == request.ExpectedVersion,
+            "version_conflict", "시나리오가 변경되었거나 삭제되었습니다. 다시 조회하세요.");
+        Require(!s.Jobs.Any(j => j.Active && j.Snapshot.ScenarioId == request.Id),
+            "scenario_in_use", "이 시나리오의 작업이 진행 중입니다. 작업·교대에서 완료를 확인하거나 취소한 뒤 삭제하세요.");
+        // Capture the definition name in the audit before removing it. Frozen job history remains intact.
+        Audit(s, session.Info.UserId, "ScenarioDeleted", $"scenario={definition!.Id}; v={definition.Version}");
+        s.DeletedScenarioVersions[definition.Id] = definition.Version;
+        s.Scenarios.Remove(definition);
+        return true;
     });
     private StepSnapshot Resolve(HostState s, Account user, ScenarioStep step, RoleBinding? overrideRole = null)
     {

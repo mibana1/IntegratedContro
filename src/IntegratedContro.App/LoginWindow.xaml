@@ -1,22 +1,37 @@
-﻿<Window x:Class="IntegratedContro.App.LoginWindow"
+<Window x:Class="IntegratedContro.App.LoginWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="IntegratedContro · 호스트 접속" Width="540" SizeToContent="Height" ResizeMode="NoResize"
+ Title="IntegratedContro · 접속" Width="540" SizeToContent="Height" ResizeMode="NoResize"
  WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="#F3F6FA">
+ <Window.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility"/></Window.Resources>
  <StackPanel Margin="28">
-  <TextBlock Text="호스트에 접속" FontSize="25" FontWeight="Bold" Foreground="#172B46"/>
-  <TextBlock Text="현장의 호스트 주소와 앱 계정으로 로그인하세요." Margin="0,8,0,24" Foreground="#596E85"/>
-  <StackPanel IsEnabled="{Binding CanEditLogin}">
-   <TextBlock Text="호스트 HTTPS 주소"/><TextBox x:Name="HostEndpoint" Text="{Binding Endpoint, UpdateSourceTrigger=PropertyChanged}" MinHeight="36" Margin="0,5,0,16"/>
-   <TextBlock Text="호스트 인증서 SHA-256 지문"/><TextBox x:Name="CertificateFingerprint" Text="{Binding Fingerprint, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" MinHeight="50" Margin="0,5,0,4"/>
-   <TextBlock Text="호스트 최초 설정 또는 실행 콘솔에 표시된 지문을 입력하세요." TextWrapping="Wrap" FontSize="11" Foreground="#596E85" Margin="0,0,0,16"/>
-   <TextBlock Text="앱 계정"/><TextBox x:Name="LoginNameInput" Text="{Binding LoginName, UpdateSourceTrigger=PropertyChanged}" MinHeight="36" Margin="0,5,0,16"/>
-   <TextBlock Text="비밀번호"/><PasswordBox x:Name="LoginPassword" MinHeight="36" Margin="0,5,0,10"/>
+  <DockPanel Margin="0,0,0,20">
+   <Button x:Name="OpenConnectionSettings" DockPanel.Dock="Right" Content="접속 설정" Command="{Binding OpenConnectionSettingsCommand}"
+    Visibility="{Binding IsLoginPage, Converter={StaticResource BoolVisibility}}" Padding="10,5" Margin="12,0,0,0"/>
+   <TextBlock Text="{Binding LoginPageTitle}" FontSize="25" FontWeight="Bold" Foreground="#172B46"/>
+  </DockPanel>
+  <StackPanel x:Name="LoginPage" Visibility="{Binding IsLoginPage, Converter={StaticResource BoolVisibility}}">
+   <TextBlock Text="{Binding LoginHostSummary}" TextWrapping="Wrap" Foreground="#596E85" Margin="0,0,0,20"/>
+   <StackPanel IsEnabled="{Binding CanEditLogin}">
+    <TextBlock Text="앱 계정 아이디"/><TextBox x:Name="LoginNameInput" Text="{Binding LoginName, UpdateSourceTrigger=PropertyChanged}" MinHeight="36" Margin="0,5,0,16"/>
+    <TextBlock Text="비밀번호"/><PasswordBox x:Name="LoginPassword" MinHeight="36" Margin="0,5,0,10"/>
+   </StackPanel>
+   <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="#375774" Margin="0,18,0,14"/>
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+    <Button Content="취소" IsCancel="True" MinHeight="36"/>
+    <Button x:Name="ConnectButton" Content="접속" IsDefault="True" Command="{Binding LoginCommand}" Style="{StaticResource Primary}" MinHeight="36" MinWidth="88" Margin="8,0,0,0"/>
+   </StackPanel>
   </StackPanel>
-  <TextBlock Text="비밀번호는 저장하지 않습니다." FontSize="11" Foreground="#596E85"/>
-  <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="#375774" Margin="0,18,0,14"/>
-  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-   <Button Content="취소" IsCancel="True" MinHeight="36"/>
-   <Button x:Name="ConnectButton" Content="접속" IsDefault="True" Command="{Binding LoginCommand}" Style="{StaticResource Primary}" MinHeight="36" MinWidth="88" Margin="8,0,0,0"/>
+  <StackPanel x:Name="ConnectionSettingsPage" Visibility="{Binding IsEditingConnectionSettings, Converter={StaticResource BoolVisibility}}">
+   <StackPanel IsEnabled="{Binding CanEditLogin}">
+    <TextBlock Text="호스트 HTTPS 주소"/><TextBox x:Name="HostEndpoint" Text="{Binding ConnectionEndpoint, UpdateSourceTrigger=PropertyChanged}" MinHeight="36" Margin="0,5,0,16"/>
+    <TextBlock Text="호스트 인증서 SHA-256 지문"/><TextBox x:Name="CertificateFingerprint" Text="{Binding ConnectionFingerprint, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" MinHeight="50" Margin="0,5,0,4"/>
+    <TextBlock Text="호스트에서 확인한 주소와 인증서 지문을 입력하세요. 이 PC에 저장됩니다." TextWrapping="Wrap" FontSize="11" Foreground="#596E85" Margin="0,0,0,12"/>
+   </StackPanel>
+   <TextBlock Text="{Binding ConnectionSettingsMessage}" TextWrapping="Wrap" Foreground="#9B3D42" Margin="0,6,0,14"/>
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+    <Button x:Name="CancelConnectionSettings" Content="돌아가기" Command="{Binding CancelConnectionSettingsCommand}" MinHeight="36"/>
+    <Button x:Name="SaveConnectionSettings" Content="설정 저장" IsDefault="True" Command="{Binding SaveConnectionSettingsCommand}" Style="{StaticResource Primary}" MinHeight="36" Margin="8,0,0,0"/>
+   </StackPanel>
   </StackPanel>
  </StackPanel>
 </Window>

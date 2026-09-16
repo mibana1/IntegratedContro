@@ -85,7 +85,7 @@ public sealed partial class HiperwallViewModel : Bindable
 
     public HiperwallViewModel()
     {
-        InitializeWorkspace(); InitializeEditing(); InitializeLayouts();
+        InitializeWorkspace(); InitializeEditing(); InitializeLayouts(); InitializeSlots();
         RefreshCommand = new(() => Run(async (client, ct) =>
         {
             InvalidateLists("최신 콘텐츠와 인스턴스를 조회합니다.");
@@ -127,6 +127,7 @@ public sealed partial class HiperwallViewModel : Bindable
                 foreach (var propertyName in new[] { nameof(Name), nameof(Endpoint), nameof(User), nameof(TimeoutText) }) Changed(propertyName);
             }
             _client = client; _session = session; _hostVersion = version; _view = null;
+            TargetZone = null;
             InvalidateLists(session is null ? "로그인 후 조회할 수 있습니다." : "연결 설정이 변경되었거나 새 세션입니다. 새로 고침하세요.");
             ClearSecret();
             if (session is null) { AppliedSettings = "적용 설정 조회 전"; SecretStatus = "토큰 입력이 비워졌습니다."; }
@@ -200,16 +201,16 @@ public sealed partial class HiperwallViewModel : Bindable
     private void Apply(HiperwallSnapshot view)
     {
         if (view.ConfigurationVersion < _hostVersion) return;
-        var selected = Selected; var zoneId = TargetZone?.Item.Id;
+        var selected = Selected; var zoneId = TargetZone?.Item.Id; var chosenZoneId = _chosenZoneId;
         _view = view;
         if (_editorVersion != view.ConfigurationVersion)
             AppliedSettings = $"현재 적용: v{view.ConfigurationVersion} · {view.ConnectionName}\n{view.Endpoint}\n편집 기준 v{_editorVersion} · 편집하려면 현재 적용 설정을 불러오세요.";
         Fill(Walls, view.Walls, HiperwallRowKind.Wall); Fill(Zones, view.Zones, HiperwallRowKind.Zone); Fill(Contents, view.Contents);
         Fill(Instances, view.Instances, HiperwallRowKind.Instance); UpdateWorkspace();
+        _chosenZoneId = chosenZoneId;
+        SetTargetZone(Zones.FirstOrDefault(z => z.Item.Id is not null && z.Item.Id == zoneId));
         Selected = selected is null ? null : Contents.Concat(Instances).Concat(Zones).Concat(Walls)
             .FirstOrDefault(r => r.Kind == selected.Kind && r.Item.Id == selected.Item.Id && r.Item.Name == selected.Item.Name);
-        TargetZone = Zones.FirstOrDefault(z => z.Item.Id is not null && z.Item.Id == zoneId) ??
-            Zones.FirstOrDefault(z => z.Item.Id is not null && z.Item.Id == TargetZone?.Item.Id);
         if (_selectAfterEditId is { } openedId) { Selected = Instances.FirstOrDefault(i => i.Item.Id == openedId); _selectAfterEditId = null; }
         Message = view.Message; Notify();
     }
@@ -243,7 +244,7 @@ public sealed partial class HiperwallViewModel : Bindable
     {
         foreach (var name in new[] { nameof(IsBusy), nameof(CanEdit), nameof(Status), nameof(CurrentConnection), nameof(ControllerInfo),
             nameof(LastSuccess), nameof(WallState), nameof(ZoneState), nameof(ContentState), nameof(InstanceState), nameof(InstanceBrief), nameof(ZoneBrief), nameof(WallBrief), nameof(ContentCount), nameof(CanvasSummary), nameof(AppliedSettings), nameof(SecretStatus) }) Changed(name);
-        NotifyEditing(); NotifyLayouts();
+        NotifyEditing(); NotifyLayouts(); NotifySlots();
         RefreshCommand?.Raise(); LoadSettingsCommand?.Raise(); SaveCommand?.Raise(); TestCommand?.Raise();
     }
 }

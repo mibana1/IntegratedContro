@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace IntegratedContro.Core;
 
-public enum HiperwallEditAction { Open, Change, Close, MuteAll, CloseAll }
+public enum HiperwallEditAction { Open, Change, Close, MuteAll, CloseAll, RestoreSlot }
 public enum HiperwallSendState { Pending, Sending, Acknowledged, Rejected, Unknown }
 public sealed record HiperwallLayout(double X, double Y, double Width, double Height)
 {
@@ -15,7 +15,11 @@ public sealed record HiperwallLayout(double X, double Y, double Width, double He
 }
 public sealed record HiperwallEditRequest(Guid RequestId, long Generation, int ConfigurationVersion, HiperwallEditAction Action,
     string? InstanceId = null, string? Selector = null, string? ContentValue = null, string? ZoneId = null,
-    HiperwallLayout? Layout = null, int? Volume = null, bool? Muted = null, string? ExpectedRevision = null);
+    HiperwallLayout? Layout = null, int? Volume = null, bool? Muted = null, string? ExpectedRevision = null)
+{
+    public int? SlotNumber { get; init; }
+    public int? SlotVersion { get; init; }
+}
 public sealed record HiperwallWireCommand(HiperwallEditAction Action, string? InstanceId = null,
     string? Selector = null, string? ContentValue = null, string? ZoneId = null, HiperwallLayout? Layout = null,
     int? Volume = null, bool? Muted = null);
@@ -34,6 +38,7 @@ public sealed class HiperwallEditReceipt
     public required string Endpoint { get; init; }
     public DateTimeOffset AcceptedAt { get; init; }
     public List<HiperwallEditStep> Steps { get; init; } = [];
+    public HiperwallSlot? SlotSnapshot { get; init; }
     public bool Active => Steps.Any(s => s.State is HiperwallSendState.Pending or HiperwallSendState.Sending);
     public bool NeedsAttention => Active || Steps.Any(s => s.State == HiperwallSendState.Unknown);
     public string Summary => $"{HiperwallEditing.ActionName(Request.Action)} · 응답 확인 {Steps.Count(s => s.State == HiperwallSendState.Acknowledged)} / 거부 {Steps.Count(s => s.State == HiperwallSendState.Rejected)} / 결과 확인 필요 {Steps.Count(s => s.State == HiperwallSendState.Unknown)} / 대기·전송 {Steps.Count(s => s.State is HiperwallSendState.Pending or HiperwallSendState.Sending)}";
@@ -43,6 +48,7 @@ public static class HiperwallEditing
     public static string ActionName(HiperwallEditAction action) => action switch
     {
         HiperwallEditAction.Open => "콘텐츠 추가", HiperwallEditAction.Change => "위치·크기·소리 변경",
+        HiperwallEditAction.RestoreSlot => "저장 슬롯 불러오기",
         HiperwallEditAction.Close => "선택 닫기", HiperwallEditAction.CloseAll => "전체 닫기", _ => "전체 음소거 변경"
     };
     public static string Revision(IEnumerable<HiperwallItem> items) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(

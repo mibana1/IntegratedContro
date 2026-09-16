@@ -12,6 +12,25 @@ public readonly record struct HiperwallRectangle(double Left, double Top, double
 }
 public static class HiperwallGeometry
 {
+    // Shared by editing, slot capture and restore verification. Explicit metadata wins,
+    // including its failure: an unknown supplied ID must not be replaced with a guess.
+    public static HiperwallItem? ResolveInstanceZone(HiperwallItem instance, IEnumerable<HiperwallItem> zones)
+    {
+        var zoneId = instance.Fields.GetValueOrDefault("content.zone");
+        IEnumerable<HiperwallItem> candidates;
+        if (!string.IsNullOrWhiteSpace(zoneId))
+            candidates = zones.Where(z => z.Id == zoneId);
+        else
+        {
+            if (!TryInstance(instance, out var source, out _)) return null;
+            // Content can exceed its Zone. Only a unique center match is meaningful.
+            candidates = zones.Where(z => !string.IsNullOrWhiteSpace(z.Id) && TryZone(z, out var area, out _) &&
+                source.CenterX >= area.Left && source.CenterX <= area.Right &&
+                source.CenterY >= area.Top && source.CenterY <= area.Bottom);
+        }
+        var matches = candidates.Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
     public static bool TryNumber(string text, out double value) =>
         double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
     public static bool TryPair(string text, out double a, out double b)

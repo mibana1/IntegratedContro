@@ -12,7 +12,7 @@ public sealed class VirtualDeviceDriver(string connectionString) : IDeviceDriver
         new("virtual-light", "가상 조명 (조광)", [new(DeviceOperation.Power,0,1,"on/off"), new(DeviceOperation.Brightness,0,100,"%")], DeviceCategory.Lighting),
         new("virtual-light-basic", "가상 조명 (전원만)", [new(DeviceOperation.Power,0,1,"on/off")], DeviceCategory.Lighting),
         new("virtual-projector", "가상 프로젝터", [new(DeviceOperation.Power,0,1,"on/off"), new(DeviceOperation.Input,1,4,"입력 번호")], DeviceCategory.Projection),
-        new("virtual-audio", "가상 음향", [new(DeviceOperation.Volume,0,100,"%"), new(DeviceOperation.Mute,0,1,"on/off")], DeviceCategory.Audio),
+        new("virtual-audio", "가상 음향", [new(DeviceOperation.Power,0,1,"on/off"), new(DeviceOperation.Volume,0,100,"%"), new(DeviceOperation.Mute,0,1,"on/off")], DeviceCategory.Audio),
         new("virtual-lift", "가상 승강", [new(DeviceOperation.Lift,-1,1,"-1=하강 / 0=정지 / 1=상승"), new(DeviceOperation.Stop,0,0,"STOP")], DeviceCategory.Lift)
     ];
     public async Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken cancellationToken)

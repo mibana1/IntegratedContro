@@ -91,6 +91,8 @@ try
     app.MapGet("/api/hiperwall/edits/{id:guid}", (HttpContext c, Guid id) => service.GetHiperwallEdit(Token(c), id));
     app.MapPost("/api/hiperwall/edits/cancel", (HttpContext c, JobActionRequest r) => service.CancelHiperwallEdit(Token(c), r));
     app.MapGet("/api/hiperwall/displays", (HttpContext c) => service.GetHiperwallDisplays(Token(c)));
+    app.MapPost("/api/hiperwall/slots/save", (HttpContext c, SaveHiperwallSlotRequest r) => service.SaveHiperwallSlotAsync(Token(c), r, c.RequestAborted));
+    app.MapPost("/api/hiperwall/slots/delete", (HttpContext c, DeleteHiperwallSlotRequest r) => service.DeleteHiperwallSlot(Token(c), r));
     app.MapPost("/api/hiperwall/layouts/save", (HttpContext c, SaveHiperwallLayoutRequest r) => service.SaveHiperwallLayout(Token(c), r));
     app.MapPost("/api/hiperwall/layouts/delete", (HttpContext c, DeleteHiperwallLayoutRequest r) => service.DeleteHiperwallLayout(Token(c), r));
     app.MapPost("/api/hiperwall/displays/show", (HttpContext c, HiperwallDisplayRequest r) => service.DisplayHiperwallAsync(Token(c), r, c.RequestAborted));
@@ -127,7 +129,9 @@ try
     app.MapPost("/api/devices", (HttpContext c, DeviceRequest r) => service.SaveDevice(Token(c), r));
     app.MapPost("/api/layout/lights", (HttpContext c, LightOrderRequest r) => service.SaveLightOrder(Token(c), r));
     app.MapPost("/api/roles", (HttpContext c, RoleRequest r) => service.SaveRole(Token(c), r));
+    app.MapPost("/api/roles/unassign", (HttpContext c, UnassignRoleRequest r) => service.UnassignRole(Token(c), r));
     app.MapPost("/api/scenarios", (HttpContext c, ScenarioRequest r) => service.SaveScenario(Token(c), r));
+    app.MapPost("/api/scenarios/delete", (HttpContext c, DeleteScenarioRequest r) => service.DeleteScenario(Token(c), r));
     app.MapPost("/api/lights/power", (HttpContext c, LightBatchRequest r) => service.SubmitLightBatch(Token(c), r));
     app.MapPost("/api/jobs", (HttpContext c, SubmitRequest r) => service.Submit(Token(c), r));
     app.MapPost("/api/jobs/cancel", (HttpContext c, JobActionRequest r) => service.Cancel(Token(c), r));

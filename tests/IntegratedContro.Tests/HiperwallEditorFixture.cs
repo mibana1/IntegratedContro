@@ -9,6 +9,7 @@ public sealed class HiperwallEditorFixture : IAsyncDisposable
 {
     public FakeHiperwallServer Server { get; } = new();
     public ConcurrentQueue<XElement> Commands { get; } = new();
+    public bool OmitInstanceZones { get; set; }
     public Func<XElement, FakeHiperwallServer.Response?>? CommandResponse { get; set; }
     private readonly object _gate = new();
     public HiperwallEditorFixture()
@@ -25,7 +26,17 @@ public sealed class HiperwallEditorFixture : IAsyncDisposable
             var xml = XElement.Parse(request.Body);
             var operation = xml.Element("command") ?? xml.Element("action")!;
             var type = operation.Attribute("type")!.Value;
-            if (type is "list" or "walls") return Server.Default(request);
+            if (type is "list" or "walls")
+            {
+                var response = Server.Default(request);
+                if (OmitInstanceZones && type == "list" && operation.Element("filter")?.Value == "open")
+                {
+                    var body = XElement.Parse(response.Body);
+                    body.Elements("Object").Elements("zone").Remove();
+                    return response with { Body = body.ToString(SaveOptions.DisableFormatting) };
+                }
+                return response;
+            }
             if (xml.Element("auth")?.Element("token")?.Value != FakeHiperwallServer.FixtureSecret)
                 return new("<Error><code>403</code></Error>");
             if (type == "preview") return new("", 404);

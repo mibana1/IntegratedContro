@@ -63,8 +63,7 @@ public static partial class Program
             // A Controller may provide geometry without an Object-level zone.
             fixture.Server.Instances = fixture.Server.Instances.Replace("<zone>zone-1</zone>", "");
             await Hiper(h.RefreshCommand);
-            h.TargetZone = h.Zones[0]; h.SelectedInstance = h.Instances[0];
-            Require(h.CanMove && h.TargetZone?.Item.Id == "zone-1", "Selecting a zone-less instance discarded the explicitly chosen Zone");
+            await RunExistingHiperwallSources(window, vm, canvas, fixture, Hiper);
             h.SelectedContent = h.Contents[0]; h.TargetZone = h.Zones[0];
             Require(h.EditWidth == "2560" && h.EditHeight == "1440", "Native source dimensions lost");
             await Hiper(h.AddContentCommand);
@@ -85,16 +84,22 @@ public static partial class Program
             await RunHiperwallZoneShortcuts(window, vm, view, canvas, fixture, id!);
             window.UpdateLayout();
             var output = Path.Combine(host.Root, "artifacts", "ui-smoke");
+            window.Width = 1500; window.Height = 1000; window.UpdateLayout();
+            RequireInstanceRowsVisible(view);
             Capture(window, Path.Combine(output, "hiperwall-editor.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             Require(canvas.ActualWidth >= 300 && canvas.ActualHeight >= 70, "Editor unusable at minimum window size");
             Require(((ComboBox)view.FindName("ContentTypePicker")).SelectedItem is not null, "Content type selection lost after refresh");
+            // Slot actions stay fixed; smaller windows scroll the editor to reach its lower controls.
+            var editorScroll = (ScrollViewer)view.FindName("LiveEditorScroll");
+            editorScroll.ScrollToBottom(); window.UpdateLayout();
             var closeAll = (Button)view.FindName("CloseAllButton");
             var buttonPosition = closeAll.TransformToAncestor(view).Transform(new Point());
             Require(buttonPosition.Y + closeAll.ActualHeight <= view.ActualHeight, "Global controls clipped at minimum window size");
             var zoneStrip = (ScrollViewer)view.FindName("ZoneShortcutScroll");
             var stripPosition = zoneStrip.TransformToAncestor(view).Transform(new Point());
             Require(zoneStrip.ActualHeight >= 36 && stripPosition.Y + zoneStrip.ActualHeight <= view.ActualHeight, "Zone buttons clipped at minimum window size");
+            RequireInstanceRowsVisible(view);
             Capture(window, Path.Combine(output, "hiperwall-editor-small.png"));
             var commands = fixture.Commands.Count;
             h.ConfirmCloseAll = _ => false; await Hiper(h.CloseAllCommand);
@@ -105,7 +110,7 @@ public static partial class Program
             await Hiper(h.CloseAllCommand); Require(h.Instances.Count == 0, "Close all left fixture instances");
             Require(h.EditHistory.Count >= 7 && h.EditHistory.All(r => !r.Active), "Edit history missing completed requests");
             Require(!bindingLog.ToString().Contains("System.Windows.Data Error"), "Editor binding errors: " + bindingLog);
-            var result = "PASS: add, audio, numeric geometry; mouse selection/gesture pipeline; routed WPF touch select/move/resize with a 44-DIP hit target; final release coordinates; exactly one command per drag; no command on tap, lost capture, changed selection, second touch, missing Zone or lost lease. Isolated HTTPS host and stateful fake Controller. Code-driven WPF mouse pipeline and synthetic TouchDevice; physical mouse/touchscreen/Controller not tested.";
+            var result = "PASS: add, audio, numeric geometry; mouse selection/gesture pipeline; routed WPF touch select/move/resize with a 44-DIP hit target; final release coordinates; exactly one command per drag; existing sources draggable immediately after acquire without open; visible content name/instance ID rows at full/compact sizes; no command on tap, lost capture, changed selection, second touch, ambiguous Zone or lost lease. Isolated HTTPS host and stateful fake Controller. Code-driven WPF mouse pipeline and synthetic TouchDevice; physical mouse/touchscreen/Controller not tested.";
             await File.WriteAllTextAsync(Path.Combine(output, "hiperwall-pointer-result.txt"), result);
             Console.WriteLine(result);
         }

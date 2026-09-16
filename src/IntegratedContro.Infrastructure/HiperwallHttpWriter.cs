@@ -55,7 +55,7 @@ public sealed partial class HiperwallHttpReader
     private static XElement BuildEdit(HiperwallWireCommand c)
     {
         static bool Identity(string? value, int max = 4096) => !string.IsNullOrWhiteSpace(value) && value.Length <= max && !value.Any(char.IsControl);
-        if (!Enum.IsDefined(c.Action) || c.Action == HiperwallEditAction.CloseAll || c.Layout is { IsValid: false } || c.Volume is < 0 or > 100)
+        if (!Enum.IsDefined(c.Action) || c.Action is (HiperwallEditAction.CloseAll or HiperwallEditAction.RestoreSlot) || c.Layout is { IsValid: false } || c.Volume is < 0 or > 100)
             throw new ArgumentException("유효하지 않은 Hiperwall 명령입니다.");
         if (c.Action == HiperwallEditAction.MuteAll)
         {

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Windows;
 
 namespace IntegratedContro.App;
@@ -31,6 +31,11 @@ public partial class MainWindow : Window
         var loggedOut = _wasLoggedIn && !_viewModel.IsLoggedIn;
         _wasLoggedIn = _viewModel.IsLoggedIn;
         if (loggedOut && !_closing && _showLoginPrompts) Dispatcher.InvokeAsync(ShowLogin);
+    }
+    private void OpenMyInfo(object sender, RoutedEventArgs e) => MainTabs.SelectedItem = MyInfoTab;
+    private void OpenAccountSettings(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.IsAdmin) MainTabs.SelectedItem = AdminTab;
     }
     private void OpenLogin(object sender, RoutedEventArgs e) => ShowLogin();
     private void ShowLogin()

@@ -44,12 +44,17 @@ public static partial class Program
                 else if (args.Contains("--editor-only")) { await RunHiperwallEditing(); await RunHiperwallDeletion(); }
                 else if (args.Contains("--deletion-only")) await RunHiperwallDeletion();
                 else if (args.Contains("--scenarios-only")) await RunScenarioExtensions();
+                else if (args.Contains("--scenario-settings-only")) await RunScenarioSettings();
+                else if (args.Contains("--role-unassignment-only")) await RunRoleUnassignment();
+                else if (args.Contains("--scenario-editor-only")) await RunScenarioEditor();
+                else if (args.Contains("--power-input-only")) await RunPowerInputs();
+                else if (args.Contains("--slots-only")) await RunHiperwallSlots();
                 else if (args.Contains("--layouts-only")) await RunHiperwallLayouts();
                 else if (args.Contains("--handover-only")) await RunHandover();
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); }
-                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunScenarioExtensions(); await RunHandover(); await RunRelay(); await RunPreview();
+                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunPowerInputs(); await RunScenarioEditor(); await RunHandover(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }
@@ -63,6 +68,10 @@ public static partial class Program
     {
         await using var host = new HostProcess(); await host.Initialize();
         var output = Path.Combine(host.Root, "artifacts", "ui-smoke"); Directory.CreateDirectory(output);
+        var stablePcId = Guid.NewGuid();
+        await File.WriteAllTextAsync(ClientPreferences.ProfilePath, System.Text.Json.JsonSerializer.Serialize(
+            new { pcId = stablePcId, endpoint = "", fingerprint = "" }, JsonDefaults.Options));
+        Require(ClientPreferences.Load().LastLoginName == "", "Legacy profile did not default to an empty recent login");
         var window = new MainWindow();
         var vm = (MainViewModel)window.DataContext; vm.Endpoint = ""; vm.Fingerprint = "";
         using var bindingLog = new StringWriter(); using var listener = new TextWriterTraceListener(bindingLog);
@@ -73,27 +82,65 @@ public static partial class Program
             window.Show(); await Wait(() => window.LoginDialog?.IsVisible == true);
             Require(((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed, "Admin tab visible before login");
             var dialog = window.LoginDialog!;
-            ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, host.Endpoint);
+            Require(!((TextBox)dialog.FindName("HostEndpoint")).IsVisible && vm.LoginName == "",
+                "Connection settings leaked into the login form or first-use ID was not blank");
+            await Click(vm, (Button)dialog.FindName("OpenConnectionSettings")); dialog.UpdateLayout();
+            Require(((TextBox)dialog.FindName("HostEndpoint")).IsVisible && !vm.LoginCommand.CanExecute(null),
+                "Settings did not open separately or allowed login with unapplied settings");
+            ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, "http://127.0.0.1:8000");
             ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, host.Fingerprint);
-            ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "admin");
+            await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));
+            Require(vm.IsEditingConnectionSettings && vm.ConnectionSettingsMessage.Contains("https://") &&
+                ClientPreferences.Load().Endpoint == "", "Invalid HTTPS settings were accepted");
+            ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, host.Endpoint);
+            ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, "invalid");
+            await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));
+            Require(vm.IsEditingConnectionSettings && vm.ConnectionSettingsMessage.Contains("SHA-256"),
+                "Invalid certificate pin was accepted");
+            ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, host.Fingerprint.ToLowerInvariant());
+            dialog.UpdateLayout(); Capture(dialog, Path.Combine(output, "login-connection-settings.png"));
+            await Click(vm, (Button)dialog.FindName("SaveConnectionSettings")); dialog.UpdateLayout();
+            var settings = ClientPreferences.Load();
+            Require(!vm.IsEditingConnectionSettings && settings.Endpoint == host.Endpoint && settings.Fingerprint == host.Fingerprint &&
+                settings.PcId == stablePcId && settings.LastLoginName == "", "Settings were not saved before login or changed PC identity");
+            await Click(vm, (Button)dialog.FindName("OpenConnectionSettings"));
+            ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, "https://127.0.0.1:1");
+            await Click(vm, (Button)dialog.FindName("CancelConnectionSettings"));
+            Require(vm.Endpoint == host.Endpoint && ClientPreferences.Load().Endpoint == host.Endpoint, "Returning applied unsaved settings");
+            ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "missing-fixture-account");
             var password = (PasswordBox)dialog.FindName("LoginPassword");
             password.Password = "invalid-test-password";
             await Click(vm, (Button)dialog.FindName("ConnectButton"));
-            Require(!vm.IsLoggedIn && dialog.IsVisible && password.Password == "", "Failed login closed popup or retained password");
+            Require(!vm.IsLoggedIn && dialog.IsVisible && password.Password == "" && ClientPreferences.Load().LastLoginName == "",
+                "Failed login closed popup, retained password or remembered a failed ID");
             Capture(dialog, Path.Combine(output, "login-popup.png")); // No password is present in the evidence.
+            ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "admin");
             password.Password = host.Password;
             await Click(vm, (Button)dialog.FindName("ConnectButton"));
             await Wait(() => window.LoginDialog is null);
+            Require(ClientPreferences.Load().LastLoginName == "admin", "Successful account ID was not remembered");
             Require(vm.IsLoggedIn && ((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Visible, "Admin login did not expose admin tab");
             Require(!(await File.ReadAllTextAsync(ClientPreferences.ProfilePath)).Contains(host.Password), "Password was persisted");
             await Execute(vm, vm.AcquireCommand);
             vm.NewAccountName = "operator"; vm.NewAccountRole = AccountRole.Operator; vm.ReadNewPassword = () => host.Password;
             await Execute(vm, vm.CreateAccountCommand);
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("AdminTab");
+            await Click(vm, (Button)window.FindName("OpenMyInfoButton")); window.UpdateLayout();
+            Require(((TabControl)window.FindName("MainTabs")).SelectedItem == window.FindName("MyInfoTab") &&
+                ((TextBlock)window.FindName("MyAccountNameText")).Text == "admin" && vm.MyAccountRole == "관리자" &&
+                vm.MyControlStatus == "사용 중" && vm.MySlotSupport == "지원됨", "My information did not reflect the logged-in account/host");
+            Capture(window, Path.Combine(output, "my-info-admin.png"));
+            window.Width = 1180; window.Height = 860; window.UpdateLayout();
+            Capture(window, Path.Combine(output, "my-info-small.png"));
+            await Click(vm, (Button)window.FindName("AccountSettingsButton"));
+            Require(((TabControl)window.FindName("MainTabs")).SelectedItem == window.FindName("AdminTab"), "Account management link did not open settings");
+            await Click(vm, (Button)window.FindName("OpenMyInfoButton"));
             await Click(vm, (Button)window.FindName("HeaderLogout"));
             await Wait(() => window.LoginDialog?.IsVisible == true);
             Require(((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed &&
-                ((TabControl)window.FindName("MainTabs")).SelectedIndex == 0, "Logout retained admin page");
+                ((TabControl)window.FindName("MainTabs")).SelectedItem != window.FindName("AdminTab") &&
+                vm.MyAccountName == "로그인 전" && vm.MyAccountId == "—" && vm.MySessionId == "—",
+                "Logout retained admin page or previous account details");
             dialog = window.LoginDialog!;
             ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "operator");
             ((PasswordBox)dialog.FindName("LoginPassword")).Password = host.Password;
@@ -101,10 +148,40 @@ public static partial class Program
             Require(vm.IsLoggedIn && !vm.IsAdmin && ((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed,
                 "Operator could see admin settings");
             Require(!vm.SaveDeviceCommand.CanExecute(null), "Hidden admin form retained write access");
+            Require(vm.MyAccountName == "operator" && vm.MyAccountRole == "운영자" &&
+                ((Button)window.FindName("AccountSettingsButton")).Visibility == Visibility.Collapsed,
+                "My information retained administrator identity/access after account switch");
+            window.UpdateLayout(); Capture(window, Path.Combine(output, "my-info-operator.png"));
+            ((TabControl)window.FindName("MainTabs")).SelectedIndex = 0; window.UpdateLayout();
             Capture(window, Path.Combine(output, "operator-home.png"));
+            Require(ClientPreferences.Load().LastLoginName == "operator", "Account switch did not update recent ID");
+            var reopened = new MainViewModel();
+            try
+            {
+                Require(reopened.LoginName == "operator" && reopened.Endpoint == host.Endpoint && reopened.Fingerprint == host.Fingerprint,
+                    "App restart did not restore successful ID and connection settings");
+                var rememberedDialog = new LoginWindow(reopened) { Owner = window };
+                try
+                {
+                    rememberedDialog.Show(); rememberedDialog.UpdateLayout();
+                    Require(((TextBox)rememberedDialog.FindName("LoginNameInput")).Text == "operator" &&
+                        ((PasswordBox)rememberedDialog.FindName("LoginPassword")).Password == "",
+                        "Remembered ID was not filled or password was restored");
+                    Capture(rememberedDialog, Path.Combine(output, "login-remembered-id.png"));
+                    await Click(reopened, (Button)rememberedDialog.FindName("OpenConnectionSettings"));
+                    await Click(reopened, (Button)rememberedDialog.FindName("SaveConnectionSettings"));
+                    Require(ClientPreferences.Load().LastLoginName == "operator", "Saving connection settings erased the recent ID");
+                    ((TextBox)rememberedDialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "missing-fixture-account");
+                    ((PasswordBox)rememberedDialog.FindName("LoginPassword")).Password = "invalid-test-password";
+                    await Click(reopened, (Button)rememberedDialog.FindName("ConnectButton"));
+                    Require(!reopened.IsLoggedIn && ClientPreferences.Load().LastLoginName == "operator", "Failed login replaced the last successful ID");
+                }
+                finally { rememberedDialog.Close(); }
+            }
+            finally { await reopened.CloseAsync(); }
             listener.Flush(); Require(string.IsNullOrWhiteSpace(bindingLog.ToString()), "Login binding errors: " + bindingLog);
             await File.WriteAllTextAsync(Path.Combine(output, "login-result.txt"),
-                "PASS: startup modal fields and actual WPF bindings; failed login retains dialog and clears password; successful login closes dialog; header logout reopens popup; operator cannot see admin tab; selected admin tab removed after logout; password not saved. Local code-driven WPF.");
+                "PASS: separate connection settings, HTTPS/pin validation, save before login, unapplied edit cancellation and legacy profile/PC ID preservation; latest successful account ID survives restart and settings save while failed logins do not replace it; no password persistence; startup modal fields and actual WPF bindings; failed login retains dialog and clears password; successful login closes dialog; My information navigation, current account/host support, compact rendering and admin settings link; profile logout reopens popup and clears account IDs; operator profile cannot see admin controls; password not saved. Local code-driven WPF.");
         }
         finally
         {
@@ -181,9 +258,15 @@ public static partial class Program
             Require(targetPicker.IsDropDownOpen && ReferenceEquals(targetPicker.SelectedItem, secondDevice)
                 && resets == 0, "Polling interrupted the target picker");
             targetPicker.IsDropDownOpen = false;
+            Require(a.RoleName == "", "Unassigned target inherited a previous role");
+            var roleInput = (TextBox)first.FindName("RoleIdInput");
+            roleInput.SetCurrentValue(TextBox.TextProperty, "room.light");
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Execute(a, a.SaveRoleCommand);
             Require(a.Roles.Single().DeviceId == secondDevice.Id, "Explicit role reassignment selected the wrong PC/device");
             targetPicker.SetCurrentValue(ComboBox.SelectedItemProperty, firstDevice);
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            roleInput.SetCurrentValue(TextBox.TextProperty, "room.light");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Execute(a, a.SaveRoleCommand);
             Require(a.Roles.Single().DeviceId == firstDevice.Id, "Role reassignment back to the first device failed");
@@ -234,8 +317,8 @@ public static partial class Program
             }
             // Construct and save a sequential definition through the actual admin ViewModel.
             await Execute(b, b.ReleaseCommand); await Execute(a, a.RefreshCommand); await Execute(a, a.AcquireCommand);
-            a.SelectedRole = a.Roles[0]; a.SelectedCapability = a.Capabilities.Single(c => c.Operation == DeviceOperation.Power);
-            a.CommandValue = 1; a.DelayMs = 10000; a.ScenarioName = "검증용 순차 시나리오";
+            SetScenarioValue(a, a.Roles[0].Id, DeviceOperation.Power, 1);
+            a.DelayMs = 10000; a.ScenarioName = "검증용 순차 시나리오";
             await Execute(a, a.AddStepCommand);
             await Execute(a, a.SaveScenarioCommand); Require(a.Scenarios.Count == 1, a.Message);
             a.SelectedScenario = a.Scenarios[0]; await Execute(a, a.RunScenarioCommand);
@@ -336,9 +419,8 @@ public static partial class Program
             Require(vm.Lights.All(c => !c.PowerCommand.CanExecute(null)), "Read-only cards could control");
             await Execute(vm, vm.AcquireCommand);
             // Reserved scenario: no implicit cancellation or queued manual power command.
-            vm.SelectedRole = vm.Roles.Single(r => r.DeviceId == light.Id);
-            vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Power);
-            vm.CommandValue = 0; vm.DelayMs = 60000; vm.ScenarioName = "조명 예약 검증";
+            SetScenarioValue(vm, vm.Roles.Single(r => r.DeviceId == light.Id).Id, DeviceOperation.Power, 0);
+            vm.DelayMs = 60000; vm.ScenarioName = "조명 예약 검증";
             await Execute(vm, vm.AddStepCommand); await Execute(vm, vm.SaveScenarioCommand);
             vm.SelectedScenario = vm.Scenarios.Single(); await Execute(vm, vm.RunScenarioCommand);
             Require(!light.PowerCommand.CanExecute(null) && light.Hint.Contains("시나리오 예약"), "Reserved light was clickable");

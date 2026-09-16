@@ -1,4 +1,4 @@
-﻿namespace IntegratedContro.Core;
+namespace IntegratedContro.Core;
 
 public sealed record LoginRequest(string UserName, string Password, Guid PcId, string PcName);
 public sealed record LeaseRequest(long Generation);
@@ -9,7 +9,9 @@ public sealed record DeviceRequest(long Generation, Guid Id, Guid PcId, string P
     string ConnectionId, string ModelId, bool Enabled = true, VirtualFault Fault = VirtualFault.None,
     int LatencyMs = 50, int ExpectedVersion = 0);
 public sealed record RoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion = 0);
+public sealed record UnassignRoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion);
 public sealed record ScenarioRequest(long Generation, Guid Id, string Name, ScenarioStep[] Steps, int ExpectedVersion = 0);
+public sealed record DeleteScenarioRequest(long Generation, Guid Id, int ExpectedVersion);
 public sealed record SubmitRequest(Guid RequestId, long Generation, string? RoleId,
     DeviceOperation Operation = DeviceOperation.Power, int Value = 1, Guid? ScenarioId = null,
     int DelayBeforeMs = 0, int TimeoutMs = 3000, int ExpiresAfterSeconds = 86400,

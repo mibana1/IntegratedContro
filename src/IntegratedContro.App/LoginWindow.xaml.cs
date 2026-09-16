@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Windows;
 
 namespace IntegratedContro.App;
@@ -22,10 +22,19 @@ public partial class LoginWindow : Window
             viewModel.PropertyChanged -= ModelChanged;
             viewModel.ReadLoginPassword = _previousRead; viewModel.ClearLoginPassword = _previousClear;
         };
-        Loaded += (_, _) => { if (string.IsNullOrWhiteSpace(viewModel.Endpoint)) HostEndpoint.Focus(); else LoginNameInput.Focus(); };
+        Loaded += (_, _) => FocusPage();
+    }
+    private void FocusPage()
+    {
+        if (_viewModel.IsEditingConnectionSettings) HostEndpoint.Focus();
+        else if (string.IsNullOrWhiteSpace(_viewModel.Endpoint) || string.IsNullOrWhiteSpace(_viewModel.Fingerprint)) OpenConnectionSettings.Focus();
+        else if (string.IsNullOrWhiteSpace(_viewModel.LoginName)) LoginNameInput.Focus();
+        else LoginPassword.Focus();
     }
     private void ModelChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.IsEditingConnectionSettings))
+            Dispatcher.InvokeAsync(FocusPage);
         if (_viewModel.IsLoggedIn && !_viewModel.IsBusy && IsVisible) DialogResult = true;
     }
 }

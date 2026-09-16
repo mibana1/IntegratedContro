@@ -53,7 +53,7 @@ public sealed record ScenarioStep(string RoleId, DeviceOperation Operation, int 
     ScenarioStepKind Kind = ScenarioStepKind.DeviceCommand, Guid? LayoutId = null)
 {
     public string KindLabel => Kind switch { ScenarioStepKind.WaitUntil => "조건 충족까지 대기", ScenarioStepKind.DisplayLayout => "저장 배치 표시", _ => "장비 명령" };
-    [JsonIgnore] public string ActionLabel => Kind == ScenarioStepKind.DisplayLayout ? "표시 응답 대기" : $"{Operation} = {Value}";
+    [JsonIgnore] public string ActionLabel => Kind == ScenarioStepKind.DisplayLayout ? "표시 응답 대기" : DeviceLabels.Format(Operation, Value);
     [JsonIgnore] public string TargetLabel => Kind == ScenarioStepKind.DisplayLayout ? LayoutId?.ToString() ?? "배치 미선택" : RoleId;
 }
 public sealed record ScenarioDefinition(Guid Id, string Name, int Version, ScenarioStep[] Steps);
@@ -148,7 +148,11 @@ public sealed class HostState
     public LightLayout LightLayout { get; set; } = new(0, []);
     public Dictionary<Guid, DeviceState> DeviceStates { get; set; } = [];
     public List<RoleBinding> Roles { get; set; } = [];
+    // Keep removed versions so recreating an ID cannot validate an old request again.
+    public Dictionary<string, int> DeletedRoleVersions { get; set; } = [];
+    public List<HiperwallSlot> HiperwallSlots { get; set; } = [];
     public List<ScenarioDefinition> Scenarios { get; set; } = [];
+    public Dictionary<Guid, int> DeletedScenarioVersions { get; set; } = [];
     public List<Job> Jobs { get; set; } = [];
     public List<Guid> UncertainDevices { get; set; } = [];
     public List<AuditEntry> Audit { get; set; } = [];
@@ -172,7 +176,11 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public HiperwallDisplayJob[] OutstandingHiperwallDisplays { get; init; } = [];
     public HiperwallDisplayJob[] HiperwallDisplayJobs { get; init; } = [];
     public bool HiperwallLayoutsSupported { get; init; }
+    public bool HiperwallSlotsSupported { get; init; }
+    public HiperwallSlot[] HiperwallSlots { get; init; } = [];
     public bool ScenarioExtensionsSupported { get; init; }
+    public bool ScenarioDeletionSupported { get; init; }
+    public bool RoleUnassignmentSupported { get; init; }
     public SavedHiperwallLayout[] SavedHiperwallLayouts { get; init; } = [];
     public bool LightGroupsSupported { get; init; }
     public bool LightBatchSupported { get; init; }

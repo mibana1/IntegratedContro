@@ -1,0 +1,40 @@
+<UserControl x:Class="IntegratedContro.App.RoleAssignmentsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <UserControl.Resources>
+  <DataTemplate x:Key="FullRole">
+   <Border BorderBrush="#D5DFEA" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,4,4,4">
+    <StackPanel>
+     <DockPanel><Button x:Name="UnassignRoleButton" DockPanel.Dock="Right" Content="배정 해제" Command="{Binding UnassignCommand}"
+      Padding="12,6" Margin="12,0,0,0" ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True"
+      AutomationProperties.Name="{Binding Id, StringFormat={}{0} 역할 배정 해제}"/>
+      <TextBlock Text="{Binding Id}" FontWeight="SemiBold" Foreground="#156D68" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel>
+     <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" Foreground="#65778E" FontSize="11" Margin="0,5,0,0"/>
+    </StackPanel>
+   </Border>
+  </DataTemplate>
+  <DataTemplate x:Key="CompactRole">
+   <Button x:Name="UnassignRoleButton" Command="{Binding UnassignCommand}"
+    ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{Binding Id, StringFormat={}{0} 역할 배정 해제}">
+    <TextBlock Text="{Binding Id, StringFormat={}{0} · 배정 해제}"/>
+   </Button>
+  </DataTemplate>
+  <ItemsPanelTemplate x:Key="CompactRolesPanel"><WrapPanel/></ItemsPanelTemplate>
+ </UserControl.Resources>
+ <StackPanel>
+  <TextBlock Text="{Binding AssignedRoleSummary}" TextWrapping="Wrap" Foreground="#536C85">
+   <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/>
+    <Style.Triggers><DataTrigger Binding="{Binding AssignedRoles.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+   </Style></TextBlock.Style>
+  </TextBlock>
+  <ItemsControl ItemsSource="{Binding AssignedRoles}">
+   <ItemsControl.Style><Style TargetType="ItemsControl">
+    <Setter Property="MaxHeight" Value="200"/><Setter Property="ItemTemplate" Value="{StaticResource FullRole}"/>
+    <Style.Triggers><DataTrigger Binding="{Binding Compact, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+     <Setter Property="MaxHeight" Value="90"/><Setter Property="ItemTemplate" Value="{StaticResource CompactRole}"/>
+     <Setter Property="ItemsPanel" Value="{StaticResource CompactRolesPanel}"/>
+    </DataTrigger></Style.Triggers>
+   </Style></ItemsControl.Style>
+   <ItemsControl.Template><ControlTemplate TargetType="ItemsControl"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsPresenter/></ScrollViewer></ControlTemplate></ItemsControl.Template>
+  </ItemsControl>
+ </StackPanel>
+</UserControl>

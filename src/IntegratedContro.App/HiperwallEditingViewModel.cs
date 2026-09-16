@@ -11,6 +11,7 @@ public sealed partial class HiperwallViewModel
     private string _x = "", _y = "", _width = "", _height = "";
     private int _volume;
     private HiperwallItemRow? _targetZone;
+    private string? _chosenZoneId;
     private Guid? _pendingEditId;
     private string? _selectAfterEditId;
     private string _editResult = "편집 결과가 여기에 표시됩니다.";
@@ -29,13 +30,14 @@ public sealed partial class HiperwallViewModel
     public HiperwallItemRow? TargetZone
     {
         get => _targetZone;
-        set
-        {
-            if (!Set(ref _targetZone, value)) return;
-            if (SelectedContent is not null && value?.TryRectangle(out var r, out _) == true)
-            { EditX = Format(r.CenterX); EditY = Format(r.CenterY); }
-            NotifyEditing();
-        }
+        set { _chosenZoneId = value?.Item.Id; SetTargetZone(value); }
+    }
+    private void SetTargetZone(HiperwallItemRow? value)
+    {
+        if (!Set(ref _targetZone, value, nameof(TargetZone))) return;
+        if (SelectedContent is not null && value?.TryRectangle(out var r, out _) == true)
+        { EditX = Format(r.CenterX); EditY = Format(r.CenterY); }
+        NotifyEditing();
     }
     public string EditX { get => _x; set { if (Set(ref _x, value)) NotifyEditing(); } }
     public string EditY { get => _y; set { if (Set(ref _y, value)) NotifyEditing(); } }
@@ -120,11 +122,11 @@ public sealed partial class HiperwallViewModel
             if (instance.TryRectangle(out var r, out _)) SetLayout(HiperwallLayout.From(r));
             else { EditX = EditY = EditWidth = EditHeight = ""; }
             if (HiperwallEditing.TryAudio(instance.Item, out var volume, out _)) EditVolume = volume;
-            // Prefer a supplied Object zone. If absent, preserve the user's explicit valid target;
-            // selecting an instance must not silently clear the Zone needed to start a drag.
-            var zoneId = instance.Item.Fields.GetValueOrDefault("content.zone");
-            TargetZone = Zones.SingleOrDefault(z => z.Item.Id is not null && z.Item.Id == zoneId) ??
-                Zones.FirstOrDefault(z => z.Item.Id is not null && z.Item.Id == TargetZone?.Item.Id);
+            // Some Controllers omit Object.zone for sources already on the wall.
+            // Resolve their observed position before falling back to a manually chosen target.
+            var zoneId = HiperwallGeometry.ResolveInstanceZone(instance.Item, Zones.Select(z => z.Item))?.Id;
+            SetTargetZone(Zones.FirstOrDefault(z => z.Item.Id is not null && z.Item.Id == zoneId) ??
+                Zones.FirstOrDefault(z => z.Item.Id is not null && z.Item.Id == _chosenZoneId));
         }
         else if (SelectedContent is { } content)
         {

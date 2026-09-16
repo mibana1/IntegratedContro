@@ -8,18 +8,28 @@ public sealed partial class ControlService
     private static bool DisplayDue(HiperwallDisplayJob j, DateTimeOffset now) => j.StopRequested || j.CloseAt <= now;
     private static void TrackLiveOpen(HostState s, HiperwallEditReceipt edit, DateTimeOffset now)
     {
-        if (edit.Request.Action != HiperwallEditAction.Open || s.HiperwallDisplays.Any(j => j.Request.RequestId == edit.Request.RequestId)) return;
-        var step = edit.Steps.Single();
-        s.HiperwallDisplays.Add(new HiperwallDisplayJob {
-            Request = new(edit.Request.RequestId, edit.Request.Generation, edit.Request.ConfigurationVersion),
-            Requester = edit.Requester, Endpoint = edit.Endpoint, Name = "LIVE 추가 · " + step.Command.ContentValue,
-            Duration = new(DisplayDurationMode.Continuous), AcceptedAt = edit.AcceptedAt,
-            Targets = [new() { Command = step.Command, OpenState = step.State, OpenAttempted = true, NextAttemptAt = now }]
-        });
+        if (edit.Request.Action is not (HiperwallEditAction.Open or HiperwallEditAction.RestoreSlot)) return;
+        foreach (var step in edit.Steps.Where(t => t.Command.Action == HiperwallEditAction.Open &&
+            t.State is HiperwallSendState.Sending or HiperwallSendState.Acknowledged or HiperwallSendState.Unknown))
+        {
+            var job = s.HiperwallDisplays.SingleOrDefault(j => j.Request.RequestId == edit.Request.RequestId);
+            if (job is null)
+            {
+                job = new HiperwallDisplayJob {
+                    Request = new(edit.Request.RequestId, edit.Request.Generation, edit.Request.ConfigurationVersion),
+                    Requester = edit.Requester, Endpoint = edit.Endpoint,
+                    Name = edit.SlotSnapshot is { } slot ? $"저장 슬롯 {slot.Number} 불러오기" : "LIVE 추가 · " + step.Command.ContentValue,
+                    Duration = new(DisplayDurationMode.Continuous), AcceptedAt = edit.AcceptedAt
+                };
+                s.HiperwallDisplays.Add(job);
+            }
+            if (job.Targets.All(t => t.Command.InstanceId != step.Command.InstanceId))
+                job.Targets.Add(new() { Command = step.Command, OpenState = step.State, OpenAttempted = true, NextAttemptAt = now });
+        }
     }
     private void RecoverHiperwallDisplays(HostState next)
     {
-        foreach (var edit in next.HiperwallEdits.Where(e => e.Request.Action == HiperwallEditAction.Open &&
+        foreach (var edit in next.HiperwallEdits.Where(e => e.Request.Action is (HiperwallEditAction.Open or HiperwallEditAction.RestoreSlot) &&
             e.Steps.Any(t => t.State is HiperwallSendState.Sending or HiperwallSendState.Acknowledged or HiperwallSendState.Unknown)))
             TrackLiveOpen(next, edit, Now);
         foreach (var job in next.HiperwallDisplays.Where(j => j.Outstanding))
@@ -64,6 +74,8 @@ public sealed partial class ControlService
             lock (_gate)
             {
                 if (_storageFailed || (_stopping && !shutdown) || ct.IsCancellationRequested || _hiperwall is not IHiperwallWriter || _credentials is null) return;
+                // Keep cleanup from removing the source view during an accepted replacement.
+                if (!shutdown && _state.HiperwallEdits.Any(e => e.Active && e.Request.Action == HiperwallEditAction.RestoreSlot)) return;
                 var job = _state.HiperwallDisplays.Where(j => j.Targets.Any(t => t.Outstanding &&
                         t.CleanupState != DisplayCleanupState.NeedsReview && (t.NextAttemptAt <= Now || DisplayDue(j, Now) && t.CleanupAttempts == 0)))
                     .OrderByDescending(j => DisplayDue(j, Now)).ThenBy(j => j.AcceptedAt).FirstOrDefault();
