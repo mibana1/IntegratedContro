@@ -2,7 +2,7 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <UserControl.Resources>
   <Style x:Key="PowerChoice" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-   <Setter Property="MinWidth" Value="90"/><Setter Property="MinHeight" Value="38"/>
+   <Setter Property="MinWidth" Value="90"/><Setter Property="MinHeight" Value="48"/>
    <Setter Property="Padding" Value="12,8"/>
   </Style>
  </UserControl.Resources>
@@ -10,14 +10,14 @@
   <Button x:Name="OnButton" Content="ON · 켜기" Click="SelectOn" AutomationProperties.Name="전원 ON 선택">
    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource PowerChoice}"><Style.Triggers>
     <DataTrigger Binding="{Binding Value, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="1">
-     <Setter Property="Background" Value="#156D68"/><Setter Property="Foreground" Value="White"/>
+     <Setter Property="Background" Value="{DynamicResource AccentFill}"/><Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
     </DataTrigger>
    </Style.Triggers></Style></Button.Style>
   </Button>
   <Button x:Name="OffButton" Content="OFF · 끄기" Click="SelectOff" AutomationProperties.Name="전원 OFF 선택">
    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource PowerChoice}"><Style.Triggers>
     <DataTrigger Binding="{Binding Value, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="0">
-     <Setter Property="Background" Value="#156D68"/><Setter Property="Foreground" Value="White"/>
+     <Setter Property="Background" Value="{DynamicResource AccentFill}"/><Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
     </DataTrigger>
    </Style.Triggers></Style></Button.Style>
   </Button>

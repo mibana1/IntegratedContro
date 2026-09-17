@@ -1,0 +1,26 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <SolidColorBrush x:Key="Ink" Color="#172B46"/>
+ <SolidColorBrush x:Key="MutedInk" Color="#596E85"/>
+ <SolidColorBrush x:Key="AppBackground" Color="#F3F6FA"/>
+ <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
+ <SolidColorBrush x:Key="SubtleSurface" Color="#EDF3F7"/>
+ <SolidColorBrush x:Key="Line" Color="#D6E1EA"/>
+ <SolidColorBrush x:Key="Accent" Color="#156D68"/>
+ <SolidColorBrush x:Key="AccentFill" Color="#156D68"/>
+ <SolidColorBrush x:Key="AccentSoft" Color="#E3F2EE"/>
+ <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF"/>
+ <SolidColorBrush x:Key="DangerInk" Color="#A33435"/>
+ <SolidColorBrush x:Key="DangerSoft" Color="#FFF0EE"/>
+ <SolidColorBrush x:Key="DangerLine" Color="#E8C5C2"/>
+ <SolidColorBrush x:Key="WarningInk" Color="#85551C"/>
+ <SolidColorBrush x:Key="WarningSoft" Color="#FFF2DA"/>
+ <SolidColorBrush x:Key="WarningLine" Color="#DFC697"/>
+ <SolidColorBrush x:Key="FeedbackInk" Color="#172B46"/>
+ <SolidColorBrush x:Key="Selection" Color="#A5D5CB"/>
+ <SolidColorBrush x:Key="AlternateRow" Color="#F7F9FB"/>
+ <SolidColorBrush x:Key="LightOnSoft" Color="#FFF4D5"/>
+ <SolidColorBrush x:Key="LightOnLine" Color="#D5A13D"/>
+ <SolidColorBrush x:Key="LightOnInk" Color="#956414"/>
+ <SolidColorBrush x:Key="FocusInk" Color="#2477D4"/>
+ <SolidColorBrush x:Key="FocusSoft" Color="#E9F2FF"/>
+</ResourceDictionary>

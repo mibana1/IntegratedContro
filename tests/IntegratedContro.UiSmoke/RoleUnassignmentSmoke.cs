@@ -60,7 +60,7 @@ public static partial class Program
 
             tabs.SelectedIndex = 0; vm.DeviceViewIndex = 1; window.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(((DataGrid)window.FindName("DeviceGrid")).ActualHeight > 80 &&
+            Require(((DataGrid)window.FindName("DeviceGrid")).ActualHeight >= 160 &&
                 FindAll<Button>((RoleAssignmentsView)window.FindName("QuickRoleAssignments")).Count() == 2,
                 "Multiple role actions hid the compact device list");
             Require(FindAll<Button>((RoleAssignmentsView)window.FindName("QuickRoleAssignments"))

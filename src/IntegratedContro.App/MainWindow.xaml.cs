@@ -9,6 +9,7 @@ public partial class MainWindow : Window
     private bool _closed, _closing, _wasLoggedIn;
     private readonly bool _showLoginPrompts;
     public LoginWindow? LoginDialog { get; private set; }
+    public ThemeManager Appearance { get; } = ThemeManager.Current;
     public MainWindow(bool showLoginOnStart = true)
     {
         _showLoginPrompts = showLoginOnStart;

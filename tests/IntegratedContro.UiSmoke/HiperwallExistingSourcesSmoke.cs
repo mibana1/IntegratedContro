@@ -58,7 +58,7 @@ public static partial class Program
             await Wait(() => !h.IsBusy);
             Require(fixture.Commands.Count == ++commands && h.Instances.Single().TryRectangle(out var moved, out _) &&
                 Math.Abs(moved.CenterX + 960 - 18 / scale) < .001 &&
-                Math.Abs(moved.CenterY - 8 / scale) < .001, "Existing source first drag failed");
+                Math.Abs(moved.CenterY - 8 / scale) < .001, $"Existing source first drag failed: touch={touchInput}; commands={fixture.Commands.Count}/{commands}; canvas={canvas.ActualWidth}x{canvas.ActualHeight}; scale={scale}; position={h.Instances.Single().Item.Fields.GetValueOrDefault("position")}; size={h.Instances.Single().Item.Fields.GetValueOrDefault("size")}");
             Require(fixture.Commands.All(c => c.Attribute("type")?.Value == "change"), "Existing drag needed an open command");
         }
 
@@ -112,6 +112,6 @@ public static partial class Program
         Require(cells.Length == 2 && cells.All(c => c.ActualWidth >= 80 && FindAll<TextBlock>(c).Any(t => !string.IsNullOrWhiteSpace(t.Text))),
             "Content name/instance ID cells are blank or too narrow");
         var rowsViewport = Find<DataGridRowsPresenter>(grid)!;
-        Require(rowsViewport.ActualHeight >= grid.RowHeight * 2, "Instance list cannot show two rows");
+        Require(rowsViewport.ActualHeight >= grid.RowHeight * 2, $"Instance list cannot show two rows: viewport={rowsViewport.ActualHeight}, row={grid.RowHeight}, grid={grid.ActualHeight}");
     }
 }

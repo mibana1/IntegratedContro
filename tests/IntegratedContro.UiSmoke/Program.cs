@@ -28,6 +28,7 @@ public static partial class Program
             Console.Error.WriteLine("Use --profile-dir with a folder under repository artifacts; user preferences must not be overwritten.");
             return 2;
         }
+        if (args.Contains("--theme-startup-child")) return RunThemeStartupChild();
         if (args.Contains("--login-close-child")) return RunLoginCloseChild();
         if (args.Contains("--preferences-startup-child")) return RunLoginCloseChild(requireRecovery: true);
         var app = new System.Windows.Application();
@@ -37,7 +38,9 @@ public static partial class Program
         {
             try
             {
-                if (args.Contains("--login-only")) { await RunLogin(); await RunLoginClose(); }
+                if (args.Contains("--theme-only")) await RunThemeSwitching();
+                else if (args.Contains("--design-only")) await RunDesignControls();
+                else if (args.Contains("--login-only")) { await RunLogin(); await RunLoginClose(); }
                 else if (args.Contains("--environment-adapters-only")) await RunEnvironmentAdapters();
                 else if (args.Contains("--preferences-only")) await RunPreferencesRecovery();
                 else if (args.Contains("--draft-recovery-only")) await RunDraftRecovery();
@@ -63,7 +66,7 @@ public static partial class Program
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await RunPreferencesRecovery(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); await RunDraftRecovery(); }
-                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
+                    await RunThemeSwitching(); await RunDesignControls(); await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }

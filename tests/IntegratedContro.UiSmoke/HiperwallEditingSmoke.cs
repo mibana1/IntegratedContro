@@ -86,21 +86,30 @@ public static partial class Program
             var output = Path.Combine(host.Root, "artifacts", "ui-smoke");
             window.Width = 1500; window.Height = 1000; window.UpdateLayout();
             RequireInstanceRowsVisible(view);
+            var editorScroll = (ScrollViewer)view.FindName("LiveEditorScroll");
+            editorScroll.ScrollToTop(); window.UpdateLayout();
             Capture(window, Path.Combine(output, "hiperwall-editor.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             Require(canvas.ActualWidth >= 300 && canvas.ActualHeight >= 70, "Editor unusable at minimum window size");
             Require(((ComboBox)view.FindName("ContentTypePicker")).SelectedItem is not null, "Content type selection lost after refresh");
             // Slot actions stay fixed; smaller windows scroll the editor to reach its lower controls.
-            var editorScroll = (ScrollViewer)view.FindName("LiveEditorScroll");
             editorScroll.ScrollToBottom(); window.UpdateLayout();
-            var closeAll = (Button)view.FindName("CloseAllButton");
-            var buttonPosition = closeAll.TransformToAncestor(view).Transform(new Point());
-            Require(buttonPosition.Y + closeAll.ActualHeight <= view.ActualHeight, "Global controls clipped at minimum window size");
             var zoneStrip = (ScrollViewer)view.FindName("ZoneShortcutScroll");
             var stripPosition = zoneStrip.TransformToAncestor(view).Transform(new Point());
             Require(zoneStrip.ActualHeight >= 36 && stripPosition.Y + zoneStrip.ActualHeight <= view.ActualHeight, "Zone buttons clipped at minimum window size");
             RequireInstanceRowsVisible(view);
             Capture(window, Path.Combine(output, "hiperwall-editor-small.png"));
+            // Global actions now belong to the independently scrollable controls panel.
+            var controlsScroll = (ScrollViewer)view.FindName("LiveControlsScroll");
+            controlsScroll.ScrollToBottom(); window.UpdateLayout();
+            var closeAll = (Button)view.FindName("CloseAllButton");
+            closeAll.BringIntoView(); window.UpdateLayout();
+            var buttonPosition = closeAll.TransformToAncestor(view).Transform(new Point());
+            var controlsPosition = closeAll.TransformToAncestor(controlsScroll).Transform(new Point());
+            Require(buttonPosition.Y >= 0 && buttonPosition.Y + closeAll.ActualHeight <= view.ActualHeight
+                && controlsPosition.Y >= 0 && controlsPosition.Y + closeAll.ActualHeight <= controlsScroll.ViewportHeight,
+                "Global controls cannot be reached at minimum window size");
+            Capture(window, Path.Combine(output, "hiperwall-editor-actions-small.png"));
             var commands = fixture.Commands.Count;
             h.ConfirmCloseAll = _ => false; await Hiper(h.CloseAllCommand);
             Require(commands == fixture.Commands.Count, "Cancel close-all sent commands");

@@ -1,21 +1,21 @@
 <UserControl x:Class="IntegratedContro.App.HiperwallSettingsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <StackPanel>
   <TextBlock Text="Hiperwall 연결 · 관리자" Style="{StaticResource SectionTitle}"/>
-  <TextBlock Text="{Binding AppliedSettings}" TextWrapping="Wrap" Foreground="#156D68" Margin="0,0,0,8"/>
+  <TextBlock Text="{Binding AppliedSettings}" TextWrapping="Wrap" Foreground="{DynamicResource Accent}" Margin="0,0,0,8"/>
   <Button Content="현재 적용 설정 불러오기" Command="{Binding LoadSettingsCommand}"/>
   <StackPanel IsEnabled="{Binding CanEdit}">
    <TextBlock Text="연결 이름"/><TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.AutomationId="HiperwallName"/>
    <TextBlock Text="주소 · 포트 (http://주소:포트 또는 https://주소:포트)"/><TextBox Text="{Binding Endpoint, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.AutomationId="HiperwallEndpoint"/>
-   <TextBlock Text="HTTP/XML은 참고 자료 기반입니다. HTTPS는 현장 TLS 구성이 필요합니다. HTTP에서는 토큰이 전송 구간에서 암호화되지 않습니다." TextWrapping="Wrap" Foreground="#65778E"/>
+   <TextBlock Text="HTTP/XML은 참고 자료 기반입니다. HTTPS는 현장 TLS 구성이 필요합니다. HTTP에서는 토큰이 전송 구간에서 암호화되지 않습니다." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}"/>
    <TextBlock Text="인증 방식 · Crypto 미지원"/><ComboBox ItemsSource="{Binding Authentications}" SelectedItem="{Binding Authentication}"/>
    <TextBlock Text="Token 인증 사용자"/><TextBox Text="{Binding User, UpdateSourceTrigger=PropertyChanged}"/>
    <TextBlock Text="새 토큰 · 저장값은 다시 표시되지 않음"/><PasswordBox x:Name="TokenInput" AutomationProperties.AutomationId="HiperwallToken"/>
-   <TextBlock Text="{Binding SecretStatus}" TextWrapping="Wrap" Foreground="#65778E"/>
+   <TextBlock Text="{Binding SecretStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}"/>
    <TextBlock Text="전체 조회 제한시간 (ms · 100~30000)"/><TextBox Text="{Binding TimeoutText, UpdateSourceTrigger=PropertyChanged}"/>
   </StackPanel>
   <WrapPanel><Button Content="연결 설정 저장·적용" Command="{Binding SaveCommand}" Style="{StaticResource Primary}"/><Button Content="적용 설정 연결 테스트" Command="{Binding TestCommand}"/></WrapPanel>
   <TextBlock Text="{Binding Status}" FontWeight="SemiBold"/><TextBlock Text="{Binding Message}" TextWrapping="Wrap"/>
-  <TextBlock Text="저장은 관리자와 현재 사용권이 필요합니다. 테스트는 저장·적용된 설정으로 목록 조회만 수행합니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,8"/>
+  <TextBlock Text="저장은 관리자와 현재 사용권이 필요합니다. 테스트는 저장·적용된 설정으로 목록 조회만 수행합니다." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="0,8"/>
   <Separator Margin="0,12"/>
  </StackPanel>
 </UserControl>

@@ -2,9 +2,9 @@
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <UserControl.Resources>
   <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
-  <Style x:Key="LightPower" TargetType="Button">
-   <Setter Property="Background" Value="#FFFFFF"/><Setter Property="Foreground" Value="#637184"/>
-   <Setter Property="BorderBrush" Value="#D9E1EB"/><Setter Property="BorderThickness" Value="1"/>
+  <Style x:Key="LightPower" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+   <Setter Property="Background" Value="{DynamicResource Surface}"/><Setter Property="Foreground" Value="{DynamicResource MutedInk}"/>
+   <Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="BorderThickness" Value="1"/>
    <Setter Property="Padding" Value="12"/><Setter Property="Margin" Value="0"/><Setter Property="Cursor" Value="Hand"/>
    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
@@ -13,41 +13,41 @@
     </Border>
     <ControlTemplate.Triggers>
      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="BorderThickness" Value="2"/></Trigger>
-     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#2477D4"/><Setter TargetName="Surface" Property="BorderThickness" Value="3"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource FocusInk}"/><Setter TargetName="Surface" Property="BorderThickness" Value="3"/></Trigger>
      <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.78"/></Trigger>
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
    <Style.Triggers>
-    <DataTrigger Binding="{Binding IsOn}" Value="True"><Setter Property="Background" Value="#FFF4D5"/><Setter Property="BorderBrush" Value="#D5A13D"/><Setter Property="Foreground" Value="#956414"/></DataTrigger>
-    <DataTrigger Binding="{Binding NeedsCheck}" Value="True"><Setter Property="Background" Value="#FFF0EE"/><Setter Property="BorderBrush" Value="#D9968C"/><Setter Property="Foreground" Value="#A44736"/></DataTrigger>
+    <DataTrigger Binding="{Binding IsOn}" Value="True"><Setter Property="Background" Value="{DynamicResource LightOnSoft}"/><Setter Property="BorderBrush" Value="{DynamicResource LightOnLine}"/><Setter Property="Foreground" Value="{DynamicResource LightOnInk}"/></DataTrigger>
+    <DataTrigger Binding="{Binding NeedsCheck}" Value="True"><Setter Property="Background" Value="{DynamicResource DangerSoft}"/><Setter Property="BorderBrush" Value="{DynamicResource DangerLine}"/><Setter Property="Foreground" Value="{DynamicResource DangerInk}"/></DataTrigger>
    </Style.Triggers>
   </Style>
   <Style x:Key="SmallAction" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-   <Setter Property="MinHeight" Value="44"/><Setter Property="Padding" Value="8,5"/><Setter Property="Margin" Value="0,6,0,0"/>
+   <Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="8,5"/><Setter Property="Margin" Value="0,6,0,0"/>
   </Style>
  </UserControl.Resources>
  <Grid Margin="20,16">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-   <StackPanel><TextBlock Text="조명" FontSize="26" FontWeight="Bold" Foreground="#172B46"/><TextBlock Text="{Binding LightingSummary}" FontSize="14" Foreground="#596E85" Margin="0,8,0,0"/></StackPanel>
+   <StackPanel><TextBlock Text="조명" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource Ink}"/><TextBlock Text="{Binding LightingSummary}" FontSize="14" Foreground="{DynamicResource MutedInk}" Margin="0,8,0,0"/></StackPanel>
    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-    <Button x:Name="AllLightsOn" Content="전체 ON" Command="{Binding AllLightsOnCommand}" MinHeight="44"/>
-    <Button x:Name="AllLightsOff" Content="전체 OFF" Command="{Binding AllLightsOffCommand}" MinHeight="44"/>
-    <Button Content="그룹 · 순서 편집" Command="{Binding EditLightOrderCommand}" MinHeight="44"/>
-    <Button Content="저장" Command="{Binding SaveLightOrderCommand}" MinHeight="44" Visibility="{Binding EditingLightOrder, Converter={StaticResource BoolVisibility}}"/>
-    <Button Content="취소" Command="{Binding CancelLightOrderCommand}" MinHeight="44" Visibility="{Binding EditingLightOrder, Converter={StaticResource BoolVisibility}}"/>
+    <Button x:Name="AllLightsOn" Content="전체 ON" Command="{Binding AllLightsOnCommand}" MinHeight="48"/>
+    <Button x:Name="AllLightsOff" Content="전체 OFF" Command="{Binding AllLightsOffCommand}" MinHeight="48"/>
+    <Button Content="그룹 · 순서 편집" Command="{Binding EditLightOrderCommand}" MinHeight="48"/>
+    <Button Content="저장" Command="{Binding SaveLightOrderCommand}" MinHeight="48" Visibility="{Binding EditingLightOrder, Converter={StaticResource BoolVisibility}}"/>
+    <Button Content="취소" Command="{Binding CancelLightOrderCommand}" MinHeight="48" Visibility="{Binding EditingLightOrder, Converter={StaticResource BoolVisibility}}"/>
    </StackPanel>
   </Grid>
   <StackPanel Grid.Row="1" Margin="0,10,0,10">
-   <TextBlock Text="{Binding LightingHint}" TextWrapping="Wrap" Foreground="#596E85"/>
+   <TextBlock Text="{Binding LightingHint}" TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}"/>
    <WrapPanel Margin="0,8,0,0" Visibility="{Binding EditingLightOrder, Converter={StaticResource BoolVisibility}}">
-    <TextBox x:Name="NewGroupName" Text="{Binding NewLightGroupName, UpdateSourceTrigger=PropertyChanged}" Width="220" MaxLength="50" MinHeight="40" Margin="0,0,8,0" ToolTip="새 그룹 이름" IsEnabled="{Binding CanArrangeLighting}"/>
-    <Button x:Name="AddGroup" Content="그룹 추가" Command="{Binding AddLightGroupCommand}" MinHeight="40" Margin="0"/>
+    <TextBox x:Name="NewGroupName" Text="{Binding NewLightGroupName, UpdateSourceTrigger=PropertyChanged}" Width="220" MaxLength="50" MinHeight="48" Margin="0,0,8,0" ToolTip="새 그룹 이름" IsEnabled="{Binding CanArrangeLighting}"/>
+    <Button x:Name="AddGroup" Content="그룹 추가" Command="{Binding AddLightGroupCommand}" MinHeight="48" Margin="0"/>
    </WrapPanel>
   </StackPanel>
   <ScrollViewer x:Name="BoardScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
    <StackPanel>
-    <Border Padding="28" Background="#EDF2F8" CornerRadius="16" Visibility="{Binding HasNoLights, Converter={StaticResource BoolVisibility}}">
+    <Border Padding="28" Background="{DynamicResource SubtleSurface}" CornerRadius="16" Visibility="{Binding HasNoLights, Converter={StaticResource BoolVisibility}}">
      <StackPanel><TextBlock Text="등록된 조명이 없습니다" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="관리자 설정에서 조명 모델을 등록하면 여기에 모아 표시됩니다." TextWrapping="Wrap" Margin="0,12,0,0"/></StackPanel>
     </Border>
     <ItemsControl x:Name="LightGroupList" ItemsSource="{Binding LightGroups}">
@@ -55,31 +55,31 @@
      <ItemsControl.ItemTemplate><DataTemplate>
       <Border x:Name="GroupDropZone" Width="{Binding LayoutWidth}" Margin="0,0,12,12" Padding="10" CornerRadius="12" BorderThickness="1"
        Visibility="{Binding IsVisible, Converter={StaticResource BoolVisibility}}">
-       <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#DEE5EE"/><Setter Property="Background" Value="#F3F6FA"/>
-        <Style.Triggers><DataTrigger Binding="{Binding IsDropTarget}" Value="True"><Setter Property="BorderBrush" Value="#2477D4"/><Setter Property="Background" Value="#E9F2FF"/></DataTrigger></Style.Triggers>
+       <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Background" Value="{DynamicResource AppBackground}"/>
+        <Style.Triggers><DataTrigger Binding="{Binding IsDropTarget}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource FocusInk}"/><Setter Property="Background" Value="{DynamicResource FocusSoft}"/></DataTrigger></Style.Triggers>
        </Style></Border.Style>
        <StackPanel>
         <DockPanel Margin="2,0,0,8">
-         <Button DockPanel.Dock="Right" Content="그룹 삭제" Command="{Binding RemoveCommand}" MinHeight="36" Padding="10,4" ToolTip="조명은 미분류로 옮겨집니다.">
+         <Button DockPanel.Dock="Right" Content="그룹 삭제" Command="{Binding RemoveCommand}" MinHeight="48" Padding="10,4" ToolTip="조명은 미분류로 옮겨집니다.">
           <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding CanRename}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Button.Style>
          </Button>
          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock Text="{Binding Name}" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center">
            <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding CanRename}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
           </TextBlock>
-          <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="210" MaxLength="50" MinHeight="36" Margin="0">
+          <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="210" MaxLength="50" MinHeight="48" Margin="0">
            <TextBox.Style><Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding CanRename}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBox.Style>
           </TextBox>
-          <TextBlock Text="{Binding CountText}" FontSize="12" Foreground="#708297" Margin="10,0" VerticalAlignment="Center"/>
+          <TextBlock Text="{Binding CountText}" FontSize="12" Foreground="{DynamicResource MutedInk}" Margin="10,0" VerticalAlignment="Center"/>
          </StackPanel>
         </DockPanel>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
          <StackPanel.Style><Style TargetType="StackPanel"><Style.Triggers><DataTrigger Binding="{Binding Editing}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
-         <Button x:Name="GroupOn" Content="그룹 ON" Command="{Binding OnCommand}" MinHeight="36" Padding="12,5" Margin="0,0,8,0"/>
-         <Button x:Name="GroupOff" Content="그룹 OFF" Command="{Binding OffCommand}" MinHeight="36" Padding="12,5" Margin="0"/>
+         <Button x:Name="GroupOn" Content="그룹 ON" Command="{Binding OnCommand}" MinHeight="48" Padding="12,5" Margin="0,0,8,0"/>
+         <Button x:Name="GroupOff" Content="그룹 OFF" Command="{Binding OffCommand}" MinHeight="48" Padding="12,5" Margin="0"/>
         </StackPanel>
         <Border MinHeight="60" Background="Transparent" Visibility="{Binding IsEmpty, Converter={StaticResource BoolVisibility}}">
-         <TextBlock Text="조명을 여기에 놓으세요" Foreground="#8392A4" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+         <TextBlock Text="조명을 여기에 놓으세요" Foreground="{DynamicResource MutedInk}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
         </Border>
         <ItemsControl ItemsSource="{Binding Cards}">
          <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -89,24 +89,24 @@
            <StackPanel>
             <Button x:Name="LightPowerButton" Command="{Binding PowerCommand}" Style="{StaticResource LightPower}" ToolTip="{Binding TargetDetail}" AutomationProperties.Name="{Binding Name}" MinHeight="158">
              <StackPanel>
-              <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="Bold" Foreground="#172B46" TextTrimming="CharacterEllipsis"/>
-              <TextBlock Text="{Binding PcName}" FontSize="10" Foreground="#617084" TextTrimming="CharacterEllipsis" Margin="0,3,0,6"/>
+              <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding PcName}" FontSize="12" Foreground="{DynamicResource MutedInk}" TextTrimming="CharacterEllipsis" Margin="0,3,0,6"/>
               <Viewbox Width="34" Height="42" Margin="0,2,0,6"><Canvas Width="64" Height="76">
                <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
                 Data="M 23,53 C 23,44 12,39 12,27 C 12,0 52,0 52,27 C 52,39 41,44 41,53 Z M 24,60 L 40,60 M 27,67 L 37,67 M 27,34 L 32,40 L 37,34 M 32,40 L 32,52"/>
               </Canvas></Viewbox>
               <TextBlock Text="{Binding StateText}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
-              <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" TextAlignment="Center" FontSize="10" Margin="0,4,0,0"/>
+              <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12" Margin="0,4,0,0"/>
              </StackPanel>
             </Button>
             <Grid>
              <Grid.Style><Style TargetType="Grid"><Style.Triggers><DataTrigger Binding="{Binding IsEditing}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Grid.Style>
              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-             <Button Content="상태 확인" Command="{Binding ReadCommand}" Style="{StaticResource SmallAction}" FontSize="11" ToolTip="{Binding LastChecked}"/>
-             <Button Grid.Column="2" Content="상세 설정" Command="{Binding DetailsCommand}" Style="{StaticResource SmallAction}" FontSize="11"/>
+             <Button Content="상태 확인" Command="{Binding ReadCommand}" Style="{StaticResource SmallAction}" FontSize="12" ToolTip="{Binding LastChecked}"/>
+             <Button Grid.Column="2" Content="상세 설정" Command="{Binding DetailsCommand}" Style="{StaticResource SmallAction}" FontSize="12"/>
             </Grid>
            </StackPanel>
-           <Border Width="3" Background="#2477D4" IsHitTestVisible="False">
+           <Border Width="3" Background="{DynamicResource FocusInk}" IsHitTestVisible="False">
             <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Collapsed"/><Setter Property="HorizontalAlignment" Value="Left"/>
              <Style.Triggers>
               <DataTrigger Binding="{Binding DropEdge}" Value="before"><Setter Property="Visibility" Value="Visible"/></DataTrigger>

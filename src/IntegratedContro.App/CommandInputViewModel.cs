@@ -23,6 +23,16 @@ public sealed partial class DeviceControlViewModel
         set { if (Set(ref _timeoutMsText, value ?? "")) NotifyNumericInput(); }
     }
     public int CommandValue { get => ParseInteger(CommandValueText); set => CommandValueText = FormatInteger(value); }
+    public double CommandSliderValue
+    {
+        get => TryInteger(CommandValueText, out var value) ? Math.Clamp(value, CommandMinimum, CommandMaximum) : CommandMinimum;
+        set
+        {
+            // A range/binding refresh must never repair invalid editor text or enable dispatch.
+            if (!IsRangeCommand || !double.IsFinite(value) || value == CommandSliderValue) return;
+            CommandValue = (int)Math.Clamp(Math.Round(value), CommandMinimum, CommandMaximum);
+        }
+    }
     public int DelayMs { get => ParseInteger(DelayMsText); set => DelayMsText = FormatInteger(value); }
     public int TimeoutMs { get => ParseInteger(TimeoutMsText); set => TimeoutMsText = FormatInteger(value); }
     public int? CommandPowerValue
@@ -54,7 +64,7 @@ public sealed partial class DeviceControlViewModel
         TryInteger(text, out var value) && value >= minimum && value <= maximum;
     private void NotifyNumericInput()
     {
-        Changed(nameof(CommandPowerValue)); Changed(nameof(ManualInputError));
+        Changed(nameof(CommandPowerValue)); Changed(nameof(CommandSliderValue)); Changed(nameof(ManualInputError));
         SubmitCommand?.Raise();
     }
 }

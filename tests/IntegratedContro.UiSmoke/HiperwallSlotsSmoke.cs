@@ -45,7 +45,7 @@ public static partial class Program
             var save = (Button)view.FindName("SaveLayoutSlot"); var delete = (Button)view.FindName("DeleteLayoutSlot");
             var restore = (Button)view.FindName("RestoreLayoutSlot");
             var buttons = FindAll<Button>(slots).ToArray();
-            Require(buttons.Length == 6 && buttons.All(b => b.ActualHeight >= 44), "Six touch-sized slots missing");
+            Require(buttons.Length == 6 && buttons.All(b => b.ActualHeight >= 48), "Six touch-sized slots missing");
             Button Slot(int n) => buttons.Single(b => ((HiperwallSlotRow)b.DataContext).Number == n);
             async Task Press(Button button) { await Click(vm, button); await Wait(() => !h.IsBusy); }
             Require(!delete.IsEnabled && !restore.IsEnabled && save.IsEnabled, "Empty slot actions incorrect");
@@ -86,7 +86,10 @@ public static partial class Program
                 "Compact layout clipped canvas or slot actions");
             var editorScroll = (ScrollViewer)view.FindName("LiveEditorScroll");
             editorScroll.ScrollToBottom(); window.UpdateLayout();
+            var controlsScroll = (ScrollViewer)view.FindName("LiveControlsScroll");
+            controlsScroll.ScrollToBottom(); window.UpdateLayout();
             var closeAll = (Button)view.FindName("CloseAllButton");
+            closeAll.BringIntoView(); window.UpdateLayout();
             var controlsY = closeAll.TransformToAncestor(editorScroll).Transform(new Point()).Y;
             Require(controlsY >= 0 && controlsY + closeAll.ActualHeight <= editorScroll.ViewportHeight,
                 "Small-window lower controls cannot be reached by scrolling");
@@ -112,7 +115,7 @@ public static partial class Program
                 save.ToolTip is string enabledHint && !enabledHint.Contains("ControlHost"), "Slot actions or hint did not recover with supported host");
             listener.Flush(); Require(string.IsNullOrWhiteSpace(bindingLog.ToString()), "Slot binding warnings: " + bindingLog);
             await File.WriteAllTextAsync(Path.Combine(output, "hiperwall-slots-result.txt"),
-                "PASS: six stable 44+ DIP slot buttons, selection/highlight and empty state; actual save/delete/load buttons; authoritative live capture without writes; two Zone/source forms and fractional geometry; replacement close/open order and refreshed canvas; overwrite, delete-only metadata, polling/reconnect and stale response protection; ownership/old-host guards; full/compact rendering without binding errors. Isolated HTTPS host and fake Controller; code-driven WPF, physical touch/Controller not tested.");
+                "PASS: six stable 48+ DIP slot buttons, selection/highlight and empty state; actual save/delete/load buttons; authoritative live capture without writes; two Zone/source forms and fractional geometry; replacement close/open order and refreshed canvas; overwrite, delete-only metadata, polling/reconnect and stale response protection; ownership/old-host guards; full/compact rendering without binding errors. Isolated HTTPS host and fake Controller; code-driven WPF, physical touch/Controller not tested.");
             Console.WriteLine("Hiperwall storage slots WPF smoke PASS.");
         }
         finally { PresentationTraceSources.DataBindingSource.Listeners.Remove(listener); await vm.CloseAsync(); window.Close(); }

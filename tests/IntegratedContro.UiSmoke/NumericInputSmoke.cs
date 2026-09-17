@@ -41,6 +41,13 @@ public static partial class Program
             var timeout = (TextBox)window.FindName("ManualTimeoutInput");
             var submit = (Button)window.FindName("SubmitCommandButton");
             var error = (TextBlock)window.FindName("ManualInputErrorText");
+            var range = (TouchSlider)window.FindName("ManualValueSlider");
+            Require(range.IsVisible && range.ActualHeight >= 48, "Manual range control is not the shared touch slider");
+            range.SetCurrentValue(System.Windows.Controls.Primitives.RangeBase.ValueProperty, 62d);
+            Require(vm.DeviceControl.CommandValue == 62 && value.Text == "62" && vm.JobManagement.Jobs.Count == 0,
+                "Manual slider did not update its numeric draft or dispatched without confirmation");
+            vm.DeviceControl.CommandValueText = "41"; window.UpdateLayout();
+            Require(range.Value == 41, "Manual numeric input did not update the shared slider");
             async Task Input(TextBox input, string text)
             {
                 input.SetCurrentValue(TextBox.TextProperty, text);
@@ -63,7 +70,9 @@ public static partial class Program
             }
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             var output = Path.Combine(host.Root, "artifacts", "ui-smoke"); Directory.CreateDirectory(output);
-            await Input(value, "abc"); window.UpdateLayout(); Capture(window, Path.Combine(output, "numeric-input-error.png"));
+            await Input(value, "abc"); window.UpdateLayout();
+            Require(((DataGrid)window.FindName("DeviceGrid")).ActualHeight >= 160, "Touch controls squeezed out the compact device list");
+            Capture(window, Path.Combine(output, "numeric-input-error.png"));
             await Input(value, "37");
             Require(submit.IsEnabled && !error.IsVisible, "Correcting to the previous valid value did not restore submission");
             await Click(vm, submit); await Wait(() => vm.JobManagement.Jobs.All(j => !j.Job.Active));
