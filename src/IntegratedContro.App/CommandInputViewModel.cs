@@ -1,5 +1,4 @@
 using System.Globalization;
-using IntegratedContro.Core;
 
 namespace IntegratedContro.App;
 

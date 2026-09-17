@@ -82,7 +82,6 @@ public static partial class Program
             return _completion.Task.WaitAsync(ct);
         }
         public void Fail() => _completion.TrySetException(new InvalidOperationException("injected async failure"));
-        public Task StopAsync() { _completion.TrySetResult(); return Task.CompletedTask; }
-        public async ValueTask DisposeAsync() { await StopAsync(); Disposed = true; }
+        public ValueTask DisposeAsync() { _completion.TrySetResult(); Disposed = true; return ValueTask.CompletedTask; }
     }
 }

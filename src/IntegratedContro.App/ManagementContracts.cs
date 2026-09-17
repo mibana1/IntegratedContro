@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using IntegratedContro.Core;
 
 namespace IntegratedContro.App;

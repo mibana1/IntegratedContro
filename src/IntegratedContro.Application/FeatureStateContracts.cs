@@ -42,7 +42,6 @@ internal interface IDeviceStateAccess : IFeatureStateAccess<DeviceStateScope>
 internal abstract class DeviceStateScope : FeatureStateScope
 {
     private protected DeviceStateScope(StateContext context) : base(context) { }
-    public abstract Guid SiteId { get; }
     public abstract List<DeviceConfig> Devices { get; set; }
     public abstract Dictionary<Guid, DeviceState> DeviceStates { get; set; }
     public abstract List<RoleBinding> Roles { get; set; }

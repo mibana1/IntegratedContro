@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using IntegratedContro.Core;
 
 namespace IntegratedContro.App;
@@ -16,11 +15,10 @@ public sealed class DeviceRow(DeviceConfig config, string state, string desired,
     {
         Config = current.Config; State = current.State; Desired = current.Desired;
         Connection = current.Connection; Result = current.Result; Restriction = current.Restriction;
-        foreach (var name in new[] { nameof(Config), nameof(Name), nameof(PcName), nameof(Model), nameof(Label),
+        foreach (var name in new[] { nameof(Config), nameof(Name), nameof(PcName), nameof(Label),
             nameof(State), nameof(Desired), nameof(Connection), nameof(Result), nameof(Restriction) }) Changed(name);
     }
     public Guid Id => Config.Id;
     public string Name => Config.Name;
     public string PcName => Config.PcName;
-    public string Model => Config.ModelId;
 }

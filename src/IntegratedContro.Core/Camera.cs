@@ -41,6 +41,5 @@ public interface IVideoPlayer : IAsyncDisposable
 {
     event Action<VideoPlaybackStatus>? StatusChanged;
     Task PlayAsync(VideoSource source, CancellationToken cancellationToken);
-    Task StopAsync();
     bool Muted { get; set; }
 }

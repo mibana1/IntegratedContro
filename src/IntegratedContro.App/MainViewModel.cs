@@ -38,14 +38,6 @@ public sealed partial class MainViewModel : Bindable
         _state.Lease.SessionId == _login?.Session.Id;
     public bool IsAdmin => _connected && _login?.Session.Role == AccountRole.Administrator;
     public bool CanConfigure => CanControl && IsAdmin;
-    public string SiteTitle => _state?.SiteName ?? "IntegratedContro";
-    public string UserSummary => _login is null ? "로그인 전" : $"{_login.Session.UserName} · {Environment.MachineName} · 세션 {_login.Session.Id.ToString()[..8]}";
-    public string LeaseSummary => !_connected && IsLoggedIn ? "연결 이상 · 신규 제어 차단" : _state?.Lease.Mode switch
-    {
-        LeaseMode.Held => $"사용 중: {_state.Lease.UserName} / {_state.Lease.PcName} · 세대 {_state.Lease.Generation}",
-        LeaseMode.RecoveryRequired => "복구 필요 · 이전 세션 신규 요청 차단됨",
-        LeaseMode.Free => "조회 모드 · 사용 시작 가능", _ => "호스트에 연결되지 않음"
-    };
     public string ConnectionSummary => _connected ? $"HTTPS 연결 · 마지막 확인 {DateTime.Now:HH:mm:ss}" : "미연결 / 표시된 이전 상태를 최신 관측으로 사용하지 마세요.";
     public string PendingSummary => !HasPending ? "" : $"접수 결과 확인 필요: {_pending?.RequestId ?? _pendingLightBatch?.RequestId} · 같은 요청 ID로만 재확인합니다.";
     public string Endpoint { get; set; }
@@ -183,8 +175,8 @@ public sealed partial class MainViewModel : Bindable
     }
     private void Notify()
     {
-        foreach (var name in new[] { nameof(IsBusy), nameof(CanEditLogin), nameof(IsLoggedIn), nameof(IsAdmin), nameof(CanControl), nameof(CanConfigure), nameof(SiteTitle),
-            nameof(UserSummary), nameof(LeaseSummary), nameof(ConnectionSummary), nameof(PendingSummary) }) Changed(name);
+        foreach (var name in new[] { nameof(IsBusy), nameof(CanEditLogin), nameof(IsLoggedIn), nameof(IsAdmin), nameof(CanControl), nameof(CanConfigure),
+            nameof(ConnectionSummary), nameof(PendingSummary) }) Changed(name);
         NotifyMyInfo();
         var featureContext = new FeatureContext(_state, _connected, CanControl, CanConfigure, _busy, _closing, HasPending);
         Lighting.UpdateContext(featureContext);

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
 using static IntegratedContro.Application.ControlAuthorization;

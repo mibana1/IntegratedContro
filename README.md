@@ -1,6 +1,6 @@
 # IntegratedContro
 
-Windows 11 25H2 Pro·Enterprise / x64용 통합 제어 앱의 첫 구현입니다.
+Windows 11 25H2 Pro·Enterprise / x64용 통합 제어 앱입니다.
 일반 장비는 가상 모델이며 Hiperwall LIVE 편집과 카메라 영상 연동을 제공합니다.
 WPF 운영 앱과 HTTPS 실행 호스트가 별도 프로세스로 동작합니다.
 
@@ -19,7 +19,7 @@ WPF 운영 앱과 HTTPS 실행 호스트가 별도 프로세스로 동작합니�
 
 Hiperwall 기본 조회·추가·변경·닫기의 실제 연동은 사용자가 확인했습니다.
 카메라는 생성 영상으로 실제 RTSP·MediaMTX·HLS·네이티브 디코딩을 검증했습니다.
-현장 카메라·Controller 이미지 프리뷰·물리 두 PC·Enterprise 검증은 남아 있습니다.
+현장 카메라 1대의 RTSP 입력·HLS 전달까지 확인했으며, 현장 카메라 WPF 재생·Controller 이미지 프리뷰·물리 두 PC·Enterprise 검증은 남아 있습니다.
 구체적인 범위와 결과는 [영상 검증 기록](docs/MEDIA_VALIDATION.md)을 참고하세요.
 
 ## 빌드와 검증
@@ -63,7 +63,7 @@ MediaMTX 1.21.0은 별도로 준비하며 [설정 예제](config/mediamtx.exampl
 5. 사용 시작 → 제어 → 사용 종료로 교대합니다. 사용 종료와 앱 종료는 접수 작업을 취소하지 않습니다.
 
 호스트를 자동 실행하거나 Windows 서비스로 등록하지 않습니다. UI가 호스트를 시작/중지하지 않습니다.
-`Document/`의 이전 프로젝트 코드는 런타임에 포함하지 않습니다.
+이전 프로젝트 코드는 작업 공간의 [보관 자료](../archive/README.md)에 있으며 현재 런타임에 포함하지 않습니다.
 
 ## 구성
 
@@ -76,5 +76,5 @@ MediaMTX 1.21.0은 별도로 준비하며 [설정 예제](config/mediamtx.exampl
 | App | WPF/XAML·MVVM 운영 화면과 HTTPS 클라이언트 |
 | Tests / UiSmoke | 공통 규칙·SQLite·실제 EXE 통합 테스트 / WPF 실행·렌더링 검증 |
 
-[프로젝트 기준](docs/PROJECT_GUIDE.md), [첫 구현 검증 기록](docs/FIRST_IMPLEMENTATION_VALIDATION.md)을 참고하세요.
-주요 프로젝트·프로토콜·영상 검증 문서는 Git 추적 예외에 포함합니다.
+[프로젝트 기준](docs/PROJECT_GUIDE.md)과 [문서 목록](docs/README.md)에서 현재 운영·설계·검증 자료를 찾을 수 있습니다.
+날짜별 작업 기록은 [구현 이력](docs/history/IMPLEMENTATION_HISTORY.md)에 보관합니다.

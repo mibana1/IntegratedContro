@@ -43,9 +43,6 @@
  <Style x:Key="Danger" TargetType="Button" BasedOn="{StaticResource ActionButton}">
   <Setter Property="Background" Value="{DynamicResource DangerSoft}"/><Setter Property="Foreground" Value="{DynamicResource DangerInk}"/><Setter Property="BorderBrush" Value="{DynamicResource DangerLine}"/>
  </Style>
- <Style x:Key="Quiet" TargetType="Button" BasedOn="{StaticResource ActionButton}">
-  <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource MutedInk}"/>
- </Style>
 
  <Style TargetType="TextBox">
   <Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="12,10"/><Setter Property="Margin" Value="0,5,8,12"/>

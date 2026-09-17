@@ -1,79 +1,25 @@
-# Prerequisites
-*.d
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-# Keep the WPF project; this directory is not a macOS app bundle.
-!/src/IntegratedContro.App/
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# debug information files
-*.dwo
-
-/docs/*
-!/docs/PROJECT_GUIDE.md
-!/docs/UI_DESIGN.md
-!/docs/DEVICE_DRIVERS.md
-!/docs/FEATURE_VIEWMODELS.md
-!/docs/ENVIRONMENT_ADAPTERS.md
-!/docs/HIPERWALL_PROTOCOL.md
-!/docs/HIPERWALL_VALIDATION.md
-!/docs/MEDIA_VALIDATION.md
-
-# .NET build output and local operational/test data
+# .NET / Visual Studio generated output
 **/bin/
 **/obj/
 .vs/
 TestResults/
 artifacts/
 *.user
+*.suo
+
+# Compiled binaries and debug symbols (source and documentation are tracked)
+*.dll
+*.exe
+*.pdb
+*.so
+*.so.*
+*.dylib
+
+# Local operational data and credentials
 *.sqlite*
 *.db*
 *.pfx
 *.dpapi
+.env
+.env.*
+!.env.example

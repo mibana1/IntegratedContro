@@ -13,7 +13,6 @@ public sealed record ClientPreferences(Guid PcId, string Endpoint, string Finger
     private const int MaximumBytes = 64 * 1024;
     public string LastLoginName { get; init; } = "";
     public static string ProfilePath => ClientProfileEnvironment.ProfilePath;
-    public static ClientPreferences Load() => ReadForStartup().Preferences;
     public static ClientPreferencesLoadResult ReadForStartup(string? path = null)
     {
         try

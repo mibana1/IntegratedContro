@@ -5,7 +5,6 @@ using IntegratedContro.Application;
 using IntegratedContro.ControlHost;
 using IntegratedContro.Core;
 using IntegratedContro.Infrastructure;
-using Microsoft.AspNetCore.RateLimiting;
 
 if (!OperatingSystem.IsWindows())
 {

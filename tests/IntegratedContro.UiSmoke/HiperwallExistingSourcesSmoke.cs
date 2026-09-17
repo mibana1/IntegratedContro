@@ -2,7 +2,6 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Input;
 using IntegratedContro.App;
 using IntegratedContro.Testing;
 

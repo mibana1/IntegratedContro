@@ -1,10 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
-using static IntegratedContro.Application.ControlAuthorization;
-using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 

@@ -21,7 +21,10 @@ if ($taskLatest.Count -ne 1 -or $taskLatest[0].Path -ne $taskBuild) { throw 'Cho
 $taskShortcut = Set-PublicationShortcut $taskBuild $taskPublishRoot $taskWorkspace
 $taskCleanup = Remove-OldPublications $taskPublishRoot
 $taskResult = [pscustomobject]@{ workspace=$taskShortcut; history=$taskCleanup }
-$taskResult | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $taskPublishRoot 'shortcut-result.json') -Encoding UTF8
+[pscustomobject]@{
+    workspace=$taskShortcut
+    history=[pscustomobject]@{ retained=$taskCleanup.retained; skipped=$taskCleanup.skipped }
+} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $taskPublishRoot 'shortcut-result.json') -Encoding UTF8
 foreach ($taskSkipped in $taskCleanup.skipped) {
     Write-Warning "이전 빌드 정리 보류: $($taskSkipped.path) — $($taskSkipped.reason)"
 }

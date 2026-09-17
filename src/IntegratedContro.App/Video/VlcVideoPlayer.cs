@@ -15,7 +15,6 @@ public sealed class VlcVideoPlayer : IVideoPlayer
     private bool _muted = true;
     public event Action<VideoPlaybackStatus>? StatusChanged;
     public long DecodedFrames { get; private set; }
-    public string EngineVersion => _engine.Version;
     public bool Muted
     {
         get => _muted;
@@ -114,15 +113,11 @@ public sealed class VlcVideoPlayer : IVideoPlayer
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { Status(VideoPlaybackState.Stopped, "재생 중지 · 영상 자원 정리"); }
         catch (Exception) { Status(VideoPlaybackState.Failed, "영상 엔진·코덱·HLS 구성을 확인하세요."); }
     }
-    public async Task StopAsync()
-    {
-        _stop.Cancel();
-        if (_play is not null) await _play.ConfigureAwait(false);
-    }
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        await StopAsync().ConfigureAwait(false);
+        _stop.Cancel();
+        if (_play is not null) await _play.ConfigureAwait(false);
         await Task.Run(() => { _engine.UnsetDialogHandlers(); NativePlayer.Dispose(); _engine.Dispose(); }).ConfigureAwait(false);
         _stop.Dispose();
     }

@@ -1,4 +1,3 @@
-using System.Windows;
 using System.Windows.Controls;
 namespace IntegratedContro.App;
 public partial class HiperwallSettingsView : UserControl

@@ -47,8 +47,8 @@ public static partial class Program
             await AddDevice("virtual-audio", "room.audio", "회의실 음향");
             await AddDevice("virtual-projector", "room.projector", "회의실 프로젝터");
             await AddDevice("virtual-lift", "room.lift", "스크린 승강");
-            var audio = vm.DeviceSettings.Devices.Single(d => d.Model == "virtual-audio");
-            var basic = vm.DeviceSettings.Devices.Single(d => d.Model == "virtual-light-basic");
+            var audio = vm.DeviceSettings.Devices.Single(d => d.Config.ModelId == "virtual-audio");
+            var basic = vm.DeviceSettings.Devices.Single(d => d.Config.ModelId == "virtual-light-basic");
             var tabs = (TabControl)window.FindName("MainTabs");
             tabs.SelectedItem = window.FindName("AdminTab"); window.UpdateLayout();
             var roleTarget = (ComboBox)window.FindName("RoleDevicePicker");

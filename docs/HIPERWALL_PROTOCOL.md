@@ -1,6 +1,7 @@
-# Hiperwall 읽기 전용 프로토콜 근거
+# Hiperwall 조회·편집 프로토콜 근거
 
-검토일: 2026-09-09. 이 문서는 상세 프로토콜의 공식 인증이나 실제 Controller 호환성 인증을 뜻하지 않는다.
+초기 검토일: 2026-09-09. 조회·편집 확장 기록을 포함한다. 현재 저장 배치·슬롯·프리뷰 범위는 [프로젝트 기준](PROJECT_GUIDE.md)을 따른다.
+이 문서는 상세 프로토콜의 공식 인증이나 실제 Controller 호환성 인증을 뜻하지 않는다.
 
 ## 2026-09-14 편집 명령 확장 (최신)
 
@@ -40,8 +41,8 @@ close의 404/유실 후에는 새 목록에서 해당 ID가 없어야 종료 상
 | 항목 | 확인한 내용 | 근거 및 한계 |
 |---|---|---|
 | 공식 자료 | HiperInterface는 외부 앱용 API이며 HTTP/XML 기반이다. HiperAccess는 인증·권한 기능이다. | [HiperController Add-On Applications](https://hiperwall.com/technology-stack/hipercontroller-add-on-applications/), [Hiperwall 9.0 발표](https://hiperwall.com/hiperwall-9-0-unleashes-new-era-of-video-wall-design-flexibility-content-impact-and-system-recovery/) |
-| 참고 코드·문서 | GET /hello, POST /xmlcommand, Commands/auth/action 구조, None/Token 설정 | ../../Document/backend/src/hiperwall.js, hiperwall-hello.js, ../../Document/README.md, WINDOWS_APP_REQUIREMENTS.md |
-| 참고 테스트 | Objects/Object 및 Zones/Zone 필드, 빈 Walls, 오류 응답 예제 | ../../Document/backend/test/hiperwall-inventory.integration.test.js, hiperwall-business-error*.test.js, hiperwall-enhanced-list.test.js. 모두 가짜 응답이다. |
+| 참고 코드·문서 | GET /hello, POST /xmlcommand, Commands/auth/action 구조, None/Token 설정 | ../../archive/legacy-reference/backend/src/hiperwall.js, hiperwall-hello.js, ../../archive/legacy-reference/README.md, WINDOWS_APP_REQUIREMENTS.md |
+| 참고 테스트 | Objects/Object 및 Zones/Zone 필드, 빈 Walls, 오류 응답 예제 | ../../archive/legacy-reference/backend/test/hiperwall-inventory.integration.test.js, hiperwall-business-error*.test.js, hiperwall-enhanced-list.test.js. 모두 가짜 응답이다. |
 | 이번 실제 접속 시도 | 사용자가 제공한 http://127.0.0.1:8000/hello 를 제한시간 3초·리다이렉트 금지로 1회 요청했으나 HttpRequestException 발생 | 응답 제품·버전·인증·목록을 확인하지 못함. 토큰을 전송하지 않았음. |
 | 현장 입력 정보 | 사용자가 URL 위 값, 인증 token, 사용자 3, 제한시간 3000ms를 제공 | 현장 입력값이며 실제 연결 성공·버전 확인 근거가 아님. 프로그램 기본 주소·사용자로 고정하지 않음. |
 | 미확인 | 상세 공식 API 명세, 실제 버전, 해당 포트의 HiperInterface 활성화, 조회 권한, HTTPS 제공 방식, 실제 XML 구조 | 현장 버전의 HiperInterface 매뉴얼과 실제 읽기 응답을 확보하여 대조해야 함. |

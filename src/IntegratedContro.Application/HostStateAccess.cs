@@ -121,7 +121,6 @@ internal sealed partial class HostAuthority
     private sealed class DeviceAccessPort(HostAuthority host) : FeatureAccess<DeviceStateScope>(host, (s, context) => new DeviceProjection(s, context)), IDeviceStateAccess;
     private sealed class DeviceProjection(HostState state, StateContext context) : DeviceStateScope(context)
     {
-        public override Guid SiteId => state.SiteId;
         public override List<DeviceConfig> Devices { get => state.Devices; set => state.Devices = value; }
         public override Dictionary<Guid, DeviceState> DeviceStates { get => state.DeviceStates; set => state.DeviceStates = value; }
         public override List<RoleBinding> Roles { get => state.Roles; set => state.Roles = value; }

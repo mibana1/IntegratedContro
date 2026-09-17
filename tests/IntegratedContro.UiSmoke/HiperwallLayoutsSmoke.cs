@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Windows;
 using System.Windows.Controls;
 using IntegratedContro.App;
 using IntegratedContro.Core;

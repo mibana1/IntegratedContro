@@ -83,7 +83,7 @@ public static partial class Program
         var stablePcId = Guid.NewGuid();
         await File.WriteAllTextAsync(ClientPreferences.ProfilePath, System.Text.Json.JsonSerializer.Serialize(
             new { pcId = stablePcId, endpoint = "", fingerprint = "" }, JsonDefaults.Options));
-        Require(ClientPreferences.Load().LastLoginName == "", "Legacy profile did not default to an empty recent login");
+        Require(ClientPreferences.ReadForStartup().Preferences.LastLoginName == "", "Legacy profile did not default to an empty recent login");
         var window = new MainWindow();
         var vm = (MainViewModel)window.DataContext; vm.Endpoint = ""; vm.Fingerprint = "";
         using var bindingLog = new StringWriter(); using var listener = new TextWriterTraceListener(bindingLog);
@@ -103,7 +103,7 @@ public static partial class Program
             ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, host.Fingerprint);
             await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));
             Require(vm.IsEditingConnectionSettings && vm.ConnectionSettingsMessage.Contains("https://") &&
-                ClientPreferences.Load().Endpoint == "", "Invalid HTTPS settings were accepted");
+                ClientPreferences.ReadForStartup().Preferences.Endpoint == "", "Invalid HTTPS settings were accepted");
             ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, host.Endpoint);
             ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, "invalid");
             await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));
@@ -112,25 +112,25 @@ public static partial class Program
             ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, host.Fingerprint.ToLowerInvariant());
             dialog.UpdateLayout(); Capture(dialog, Path.Combine(output, "login-connection-settings.png"));
             await Click(vm, (Button)dialog.FindName("SaveConnectionSettings")); dialog.UpdateLayout();
-            var settings = ClientPreferences.Load();
+            var settings = ClientPreferences.ReadForStartup().Preferences;
             Require(!vm.IsEditingConnectionSettings && settings.Endpoint == host.Endpoint && settings.Fingerprint == host.Fingerprint &&
                 settings.PcId == stablePcId && settings.LastLoginName == "", "Settings were not saved before login or changed PC identity");
             await Click(vm, (Button)dialog.FindName("OpenConnectionSettings"));
             ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, "https://127.0.0.1:1");
             await Click(vm, (Button)dialog.FindName("CancelConnectionSettings"));
-            Require(vm.Endpoint == host.Endpoint && ClientPreferences.Load().Endpoint == host.Endpoint, "Returning applied unsaved settings");
+            Require(vm.Endpoint == host.Endpoint && ClientPreferences.ReadForStartup().Preferences.Endpoint == host.Endpoint, "Returning applied unsaved settings");
             ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "missing-fixture-account");
             var password = (PasswordBox)dialog.FindName("LoginPassword");
             password.Password = "invalid-test-password";
             await Click(vm, (Button)dialog.FindName("ConnectButton"));
-            Require(!vm.IsLoggedIn && dialog.IsVisible && password.Password == "" && ClientPreferences.Load().LastLoginName == "",
+            Require(!vm.IsLoggedIn && dialog.IsVisible && password.Password == "" && ClientPreferences.ReadForStartup().Preferences.LastLoginName == "",
                 "Failed login closed popup, retained password or remembered a failed ID");
             Capture(dialog, Path.Combine(output, "login-popup.png")); // No password is present in the evidence.
             ((TextBox)dialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "admin");
             password.Password = host.Password;
             await Click(vm, (Button)dialog.FindName("ConnectButton"));
             await Wait(() => window.LoginDialog is null);
-            Require(ClientPreferences.Load().LastLoginName == "admin", "Successful account ID was not remembered");
+            Require(ClientPreferences.ReadForStartup().Preferences.LastLoginName == "admin", "Successful account ID was not remembered");
             Require(vm.IsLoggedIn && ((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Visible, "Admin login did not expose admin tab");
             Require(!(await File.ReadAllTextAsync(ClientPreferences.ProfilePath)).Contains(host.Password), "Password was persisted");
             await Execute(vm, vm.AcquireCommand);
@@ -166,7 +166,7 @@ public static partial class Program
             window.UpdateLayout(); Capture(window, Path.Combine(output, "my-info-operator.png"));
             ((TabControl)window.FindName("MainTabs")).SelectedIndex = 0; window.UpdateLayout();
             Capture(window, Path.Combine(output, "operator-home.png"));
-            Require(ClientPreferences.Load().LastLoginName == "operator", "Account switch did not update recent ID");
+            Require(ClientPreferences.ReadForStartup().Preferences.LastLoginName == "operator", "Account switch did not update recent ID");
             var reopened = new MainViewModel();
             try
             {
@@ -182,11 +182,11 @@ public static partial class Program
                     Capture(rememberedDialog, Path.Combine(output, "login-remembered-id.png"));
                     await Click(reopened, (Button)rememberedDialog.FindName("OpenConnectionSettings"));
                     await Click(reopened, (Button)rememberedDialog.FindName("SaveConnectionSettings"));
-                    Require(ClientPreferences.Load().LastLoginName == "operator", "Saving connection settings erased the recent ID");
+                    Require(ClientPreferences.ReadForStartup().Preferences.LastLoginName == "operator", "Saving connection settings erased the recent ID");
                     ((TextBox)rememberedDialog.FindName("LoginNameInput")).SetCurrentValue(TextBox.TextProperty, "missing-fixture-account");
                     ((PasswordBox)rememberedDialog.FindName("LoginPassword")).Password = "invalid-test-password";
                     await Click(reopened, (Button)rememberedDialog.FindName("ConnectButton"));
-                    Require(!reopened.IsLoggedIn && ClientPreferences.Load().LastLoginName == "operator", "Failed login replaced the last successful ID");
+                    Require(!reopened.IsLoggedIn && ClientPreferences.ReadForStartup().Preferences.LastLoginName == "operator", "Failed login replaced the last successful ID");
                 }
                 finally { rememberedDialog.Close(); }
             }

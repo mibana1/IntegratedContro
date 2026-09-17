@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Reflection;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using IntegratedContro.App;

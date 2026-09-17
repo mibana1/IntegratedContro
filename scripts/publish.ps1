@@ -21,7 +21,6 @@ try {
         shortcut=$taskSync.workspace.shortcut
         shortcutTarget=$taskSync.workspace.executable
         retainedBuilds=$taskSync.history.retained
-        deletedBuilds=$taskSync.history.deleted
         skippedBuilds=$taskSync.history.skipped
         builtAt=(Get-Date).ToString('o')
     } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $taskPublishRoot 'publish-result.json') -Encoding UTF8

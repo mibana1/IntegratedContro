@@ -49,7 +49,7 @@ public static partial class Program
             var output = Path.Combine(host.Root, "artifacts", "ui-smoke"); Directory.CreateDirectory(output);
             Capture(dialog, Path.Combine(output, "preferences-recovery-backup.png"));
             await Click(vm, (Button)dialog.FindName("RestorePreferencesBackup"));
-            Require(!vm.IsEditingConnectionSettings && vm.LoginCommand.CanExecute(null) && ClientPreferences.Load() == expected,
+            Require(!vm.IsEditingConnectionSettings && vm.LoginCommand.CanExecute(null) && ClientPreferences.ReadForStartup().Preferences == expected,
                 "Backup recovery failed to preserve PC identity, connection and recent login");
             Require(Directory.GetFiles(Path.GetDirectoryName(path)!, "client.json.damaged-*.json")
                 .Any(p => File.ReadAllText(p) == damaged), "Recovery discarded the damaged original");
@@ -67,8 +67,8 @@ public static partial class Program
             ((TextBox)dialog.FindName("HostEndpoint")).Text = host.Endpoint;
             ((TextBox)dialog.FindName("CertificateFingerprint")).Text = host.Fingerprint;
             await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));
-            Require(!vm.IsEditingConnectionSettings && ClientPreferences.Load().PcId.ToString() == newPcId &&
-                ClientPreferences.Load().Endpoint == host.Endpoint, "Manual settings recovery did not persist");
+            Require(!vm.IsEditingConnectionSettings && ClientPreferences.ReadForStartup().Preferences.PcId.ToString() == newPcId &&
+                ClientPreferences.ReadForStartup().Preferences.Endpoint == host.Endpoint, "Manual settings recovery did not persist");
             await CloseWindow();
 
             using (var locked = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
@@ -83,7 +83,7 @@ public static partial class Program
                 Capture(dialog, Path.Combine(output, "preferences-recovery-save-failure.png"));
             }
             await Click(vm, (Button)dialog.FindName("ReloadPreferences"));
-            Require(!vm.IsEditingConnectionSettings && vm.DeviceSettings.PcIdText == newPcId && ClientPreferences.Load().PcId.ToString() == newPcId,
+            Require(!vm.IsEditingConnectionSettings && vm.DeviceSettings.PcIdText == newPcId && ClientPreferences.ReadForStartup().Preferences.PcId.ToString() == newPcId,
                 "Retry after unlocking did not restore the unchanged profile");
             await CloseWindow();
 
