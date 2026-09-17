@@ -71,7 +71,7 @@ public sealed class ServiceSeparationTests
         r.Service.Release(r.Admin.Token, r.Generation);
 
         media.Continue.SetResult();
-        r.Driver.Completion.SetResult(new(StepStatus.Simulated, "device completed",
+        r.Driver.Completion.SetResult(new(DriverStatus.Simulated, "device completed",
             new Dictionary<DeviceOperation, int> { [DeviceOperation.Power] = 1 }));
         await Task.WhenAll(syncing, dispatching);
         r.Driver.Hold = false;

@@ -9,6 +9,7 @@
 | 기능 계약 | Core의 `Capability`, `DeviceModel` | 기능·값 범위·단위·조회 가능 여부. 제조사 명령은 포함하지 않음 |
 | 역할·작업 정책 | Application의 `ControlService` | 권한, 사용권, 역할 해석, 기능 검사, 예약, snapshot, 취소·복구 |
 | 드라이버 선택 | `DeviceDriverRegistry`, ControlHost 구성 지점 | 명시적으로 등록한 ID·버전과 모델로 선택. 알 수 없는 모델이나 통신 방식은 거절 |
+| 명령·결과 계약 | Application의 `DeviceCommand`, `DriverResult`/`DriverStatus` | 대상·기능·값·단위와 장비 결과만 전달. 단계 상태 변환은 `DeviceExecutionService`가 담당 |
 | 장비 프로토콜 | `IDeviceDriver`, `VirtualDeviceDriver` | 모델 선언, 설정 검사, 기능 명령 변환, 응답 해석, 장비 제약 |
 | 입출력 | `IVirtualDeviceTransport`, `SqliteVirtualDeviceTransport` | 가상 값 저장·조회. 드라이버가 SQLite를 직접 호출하지 않음 |
 | 현장 설정 | `DeviceConfig`, `DeviceConnection`, 관리자 장비 설정 화면 | 드라이버, 모델, 연결 ID, 통신 방식, 연결 주소, 장비 주소·채널, 통신/드라이버 옵션 |
@@ -32,12 +33,33 @@
 1. Infrastructure에 `IDeviceDriver` 구현을 추가한다. `Id`, `Version`, 모델별 기능과 `TransportIds`, `IsSimulation`을 선언한다. 프로토콜이나 실행 의미가 바뀌면 드라이버 버전을 올린다.
 2. `ValidateConfiguration`에서 해당 제조사가 허용하는 주소·채널·옵션·조합만 허용한다. 이 검사는 입출력 없이 실행해야 한다. 임의 설정을 장비 명령으로 그대로 실행하지 않는다.
 3. 드라이버에는 생성자로 전용 통신 구현을 주입한다. Serial/TCP의 스트림·프레이밍과 HTTP 요청을 하나의 가상 바이트 API로 합치지 않는다. 연결 수명·공유 연결 직렬화·제한시간·취소는 해당 통신 구현에서 책임진다. 현재 호스트는 장비 쓰기 전체를 순차 실행하며 자동 재전송하지 않는다.
-4. 전송 전에 기능 명령을 해당 프로토콜로 변환하고 응답을 해석한다. 예열·냉각 등 장비 제약도 드라이버가 처리한다. 조회할 수 없는 기능에는 `CanRead = false`를 선언한다.
+4. `ExecuteAsync(DeviceCommand, CancellationToken)`에서 대상·기능·값·단위를 해당 프로토콜로 변환하고 `DriverResult`를 반환한다. 예열·냉각 등 장비 제약도 드라이버가 처리한다. 조회할 수 없는 기능에는 `CanRead = false`를 선언한다.
 5. ControlHost의 `DeviceDriverRegistry` 생성 지점에 드라이버·통신 구현을 등록한다. 동적 DLL 로딩이나 플러그인 검색은 없다.
 6. 관리자 화면에서 연결 정보를 설정하고 같은 역할을 사용한다. 새 기능 종류 자체를 추가하는 경우에는 공통 계약·UI 변경도 필요하다.
 
 옵션은 비밀이 아닌 설정만 담는다. 비밀번호·토큰은 이 옵션이나 연결 URL에 넣지 않으며, 인증이 필요한 실제 드라이버 구현 시 보호 저장 참조를 사용해야 한다.
 정해지지 않은 제조사 명령, Serial 설정, TCP 포트, HTTP 경로를 추정해 구현하지 않는다.
+
+## 장비 명령과 작업 모델의 경계
+
+`IDeviceDriver`, `DeviceCommand`, `DriverStatus`, `DriverResult`, `DriverReading`은
+`src/IntegratedContro.Application/DeviceDriverContracts.cs`에 모여 있다.
+드라이버는 `StepSnapshot`이나 `StepStatus`를 입력·결과로 사용하지 않는다.
+
+`DeviceExecutionService`가 접수된 단계의 고정 대상 설정을 깊은 복사해
+`DeviceCommand(Target, Operation, Value, Unit)`를 만든다. 역할, 단계 종류, 지연,
+사전 조건, 실패 정책, 영상벽 배치와 시나리오 진행 정보는 장비에 전달하지 않는다.
+단계 제한시간과 호스트 종료는 실행 계층에서 취소 토큰으로 전달한다.
+명령의 연결/드라이버 옵션을 변경해도 접수된 작업이나 현재 장비 설정은 바뀌지 않는다.
+
+드라이버의 `DriverStatus`는 가상 반영·전송·ACK·관측·실패·불확실 결과만 표현한다.
+실행 서비스가 이를 내부 `StepExecutionResult`의 `StepStatus`로 명시적으로 변환하고,
+가상/물리 모드와 증거·관측값을 검증한다. 알 수 없는 결과 상태와 관측 증거 불일치는
+`Unknown`으로 처리해 후속 실행을 차단하고 대조를 요구한다.
+조건 대기와 영상벽 표시도 내부 단계 결과를 쓰며 드라이버 결과 계약에 의존하지 않는다.
+
+호스트 API와 저장되는 snapshot·단계 상태 형식은 유지하므로 DB 마이그레이션은 없다.
+기존 드라이버 구현은 새 명령 입력과 `DriverStatus` 결과로 다시 빌드해야 한다.
 
 ## 결과와 관측
 

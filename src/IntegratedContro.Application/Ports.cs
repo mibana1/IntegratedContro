@@ -30,19 +30,6 @@ public interface IInitialAdministratorPolicy
 {
     Account Create(string name, string password);
 }
-public interface IDeviceDriver
-{
-    string Id { get; }
-    string Version { get; }
-    DeviceModel[] Models { get; }
-    void ValidateConfiguration(DeviceConfig device);
-    Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken cancellationToken);
-    Task<DriverReading> ReadAsync(DeviceConfig device, CancellationToken cancellationToken);
-}
-public sealed record DriverResult(StepStatus Status, string Detail, IReadOnlyDictionary<DeviceOperation, int>? Values = null,
-    DeviceEvidence Evidence = DeviceEvidence.Simulation);
-public sealed record DriverReading(bool Available, IReadOnlyDictionary<DeviceOperation, int> Values, string Detail,
-    DeviceEvidence Evidence = DeviceEvidence.Simulation);
 public sealed class InitialAdministratorPolicy(IPasswordHasher hasher) : IInitialAdministratorPolicy
 {
     public Account Create(string name, string password)

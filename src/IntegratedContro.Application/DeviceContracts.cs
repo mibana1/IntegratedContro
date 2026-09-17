@@ -11,11 +11,10 @@ internal interface IDeviceScenarioOperations
 {
     StepSnapshot Resolve(StateContext state, AccountView user, ScenarioStep step, RoleBinding? overrideRole = null);
     string? RevalidateTarget(StateContext state, Job job, StepSnapshot step);
-    Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken ct);
+    Task<StepExecutionResult> ExecuteAsync(StepSnapshot step, CancellationToken ct);
     Task<DriverReading> ReadAsync(DeviceConfig target, CancellationToken ct);
     bool ValidReading(DeviceConfig target, DriverReading reading);
-    DriverResult NormalizeResult(StepSnapshot step, DriverResult result);
-    void RecordResult(StateContext state, StepSnapshot step, DriverResult result);
+    void RecordResult(StateContext state, StepSnapshot step, StepExecutionResult result);
     void RecordConditionReading(StateContext state, StepSnapshot step, DriverReading reading);
     LightLayout CurrentLightLayout(StateContext state);
     void ValidateCardPower(StateContext state, SubmitRequest request, StepSnapshot[] snapshots);

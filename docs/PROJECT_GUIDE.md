@@ -696,6 +696,27 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 - 수정 위치와 기능별 독립 검증 명령: [기능별 ViewModel 안내](FEATURE_VIEWMODELS.md).
   App 구조 변경이며 호스트 API·운영 DB 형식은 유지한다. 실제 장비·물리 두 PC 검증은 별도다.
 
+### 장비 드라이버 계약과 작업 모델 분리 (2026-09-17)
+
+- `IDeviceDriver.ExecuteAsync` 입력을 `StepSnapshot`에서 대상·기능·값·단위만 담는
+  `DeviceCommand`로 변경했다. `DriverResult`는 시나리오의 `StepStatus` 대신
+  장비 전용 `DriverStatus`를 반환한다.
+- `DeviceExecutionService`가 고정 대상 설정을 깊은 복사해 전달하고 장비 결과를 내부
+  `StepExecutionResult`로 변환·검증한다. 조건 대기·영상벽 표시도 내부 단계 결과를 사용한다.
+  사전 조건, 지연, 제한시간, 취소, 실패 정책과 상태 대조는 실행 계층에 유지한다.
+- 가상 드라이버와 가짜 제조사 드라이버를 새 계약에 맞췄다. 호스트 API·DB의 작업 snapshot과
+  단계 상태 형식은 유지하며, 실제 제조사 프로토콜 추가나 실장비 제어는 수행하지 않았다.
+- 회귀 검증에 장비 결과별 후속 실행/상태 반영, 알 수 없는 결과 및 잘못된 관측의 차단,
+  드라이버에 전달된 옵션 변경으로 기존 작업·설정이 변하지 않는 사례를 추가했다.
+- 검증: `scripts/verify.ps1` 통과. 빌드 경고/오류 0, 자동 테스트 384개(신규 12개),
+  전체 WPF 회귀와 배포 경로/보관 보호 검사 통과. 근거: `artifacts/driver-contract-verify.log`.
+- 배포: `scripts/publish.ps1`로 `artifacts/publish/Build-20260917-140114-637`에
+  App·ControlHost를 생성하고 작업 공간 `IntegratedContro.lnk`를 최신 App으로 갱신했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 실행 중인 운영 앱/호스트는 종료하지 않았다.
+  새 계약은 App·ControlHost를 새 배포본으로 실행할 때 적용된다.
+  근거: `artifacts/driver-contract-publish.log`. 실제 제조사·물리 통신 장비 검증은 별도다.
+- 계약과 제조사 드라이버 수정 방법: [장비 드라이버 구현 안내](DEVICE_DRIVERS.md).
+
 ### 장비 기능·드라이버·통신 책임 분리 (2026-09-17)
 
 - 운영 역할과 전원·밝기 같은 공통 기능을 유지한 채 드라이버와 설정으로 장비를 교체하는 구조를 구현했다.

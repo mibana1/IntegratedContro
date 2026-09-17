@@ -82,7 +82,7 @@ internal sealed partial class ScenarioService
                     _host.Commit(next);
                 }
             }
-            DriverResult? result;
+            StepExecutionResult? result;
             if (snapshot.Kind == ScenarioStepKind.WaitUntil)
                 result = await PollScenarioConditionAsync(jobId, stepIndex, snapshot, hostStopping);
             else if (snapshot.Kind == ScenarioStepKind.DisplayLayout)
@@ -106,7 +106,6 @@ internal sealed partial class ScenarioService
                 catch (Exception) { result = new(StepStatus.Unknown, "드라이버 예외: 결과 불확실. 자동 재전송 없음."); }
             }
             if (result is null) return true;
-            result = _devices.NormalizeResult(snapshot, result);
             using (_host.Open())
             {
                 if (_host.StorageFailed) return false;
@@ -120,13 +119,13 @@ internal sealed partial class ScenarioService
         }
         finally { Volatile.Write(ref _dispatching, 0); }
     }
-    private Task<DriverResult> ExecuteIfStillAllowedAsync(Guid jobId, int index, StepSnapshot step, CancellationToken ct)
+    private Task<StepExecutionResult> ExecuteIfStillAllowedAsync(Guid jobId, int index, StepSnapshot step, CancellationToken ct)
     {
         using (_host.Open())
         {
             var job = FindJob(_host.Current.Jobs, jobId); var invalid = Revalidate(_host.Current, job, step);
             if (_host.Stopping || _host.StorageFailed || job.CancelRequestedAt is not null || invalid is not null)
-                return Task.FromResult(new DriverResult(StepStatus.Skipped, invalid ?? "전송 진입 전 취소/저장 실패/호스트 종료 확인"));
+                return Task.FromResult(new StepExecutionResult(StepStatus.Skipped, invalid ?? "전송 진입 전 취소/저장 실패/호스트 종료 확인"));
             return _devices.ExecuteAsync(step, ct);
         }
     }

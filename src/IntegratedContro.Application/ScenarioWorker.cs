@@ -8,7 +8,7 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class ScenarioService
 {
-    private async Task<DriverResult?> PollScenarioConditionAsync(Guid id, int index, StepSnapshot step, CancellationToken ct)
+    private async Task<StepExecutionResult?> PollScenarioConditionAsync(Guid id, int index, StepSnapshot step, CancellationToken ct)
     {
         DateTimeOffset deadline;
         using (_host.Open())

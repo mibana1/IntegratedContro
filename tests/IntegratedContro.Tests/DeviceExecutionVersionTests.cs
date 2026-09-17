@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using IntegratedContro.Core;
+using IntegratedContro.Application;
 
 namespace IntegratedContro.Tests;
 
@@ -11,12 +12,12 @@ public sealed class DeviceExecutionVersionTests
             d.Enabled, d.Fault, d.LatencyMs, d.Version));
 
     [Theory]
-    [InlineData("pc", StepStatus.Simulated)]
-    [InlineData("connection", StepStatus.Simulated)]
-    [InlineData("fault", StepStatus.Failed)]
-    [InlineData("pc", StepStatus.Unknown)]
-    [InlineData("roundtrip", StepStatus.Simulated)]
-    public async Task Late_result_stays_with_original_job_and_never_updates_reconfigured_target(string change, StepStatus status)
+    [InlineData("pc", DriverStatus.Simulated, StepStatus.Simulated)]
+    [InlineData("connection", DriverStatus.Simulated, StepStatus.Simulated)]
+    [InlineData("fault", DriverStatus.Failed, StepStatus.Failed)]
+    [InlineData("pc", DriverStatus.Unknown, StepStatus.Unknown)]
+    [InlineData("roundtrip", DriverStatus.Simulated, StepStatus.Simulated)]
+    public async Task Late_result_stays_with_original_job_and_never_updates_reconfigured_target(string change, DriverStatus status, StepStatus expected)
     {
         using var r = new Rig(); var d = r.Device(); r.Driver.Hold = true;
         var job = r.Service.Submit(r.Admin.Token, r.Manual() with { TimeoutMs = 30000 });
@@ -40,10 +41,10 @@ public sealed class DeviceExecutionVersionTests
             Assert.Equal(before, JsonSerializer.Serialize(state.DeviceStates[d.Id], JsonDefaults.Options));
             Assert.DoesNotContain(d.Id, state.UncertainDevices);
             Assert.Equal(d, r.Job(job.Id).Snapshot.Steps[0].Target);
-            Assert.Equal(status, r.Job(job.Id).Steps[0].Status);
+            Assert.Equal(expected, r.Job(job.Id).Steps[0].Status);
             Assert.Equal("original PC response", r.Job(job.Id).Steps[0].Result);
         }
-        finally { r.Driver.Completion.TrySetResult(new(StepStatus.Simulated, "cleanup")); await dispatch; }
+        finally { r.Driver.Completion.TrySetResult(new(DriverStatus.Simulated, "cleanup")); await dispatch; }
     }
 
     [Theory]
@@ -74,7 +75,7 @@ public sealed class DeviceExecutionVersionTests
         r.Service.Submit(r.Admin.Token, r.Manual() with { TimeoutMs = 30000 });
         var dispatch = r.Service.DispatchNextAsync(); await r.Driver.Started.Task;
         Save(r, d with { Name = "new display name" });
-        r.Driver.Completion.SetResult(new(StepStatus.Simulated, "matching response",
+        r.Driver.Completion.SetResult(new(DriverStatus.Simulated, "matching response",
             new Dictionary<DeviceOperation, int> { [DeviceOperation.Power] = 1 }));
         await dispatch;
         var state = r.Service.GetState(r.Admin.Token).DeviceStates[d.Id];

@@ -95,9 +95,9 @@ public sealed class LightBatchTests
         Assert.Equal("admin", after.Snapshot.RequesterName); Assert.Equal("next", after.CancellerName);
     }
     [Theory]
-    [InlineData(StepStatus.Unknown)]
-    [InlineData(StepStatus.Failed)]
-    public async Task Failure_or_uncertainty_stops_remaining_steps_and_never_replays(StepStatus status)
+    [InlineData(DriverStatus.Unknown)]
+    [InlineData(DriverStatus.Failed)]
+    public async Task Failure_or_uncertainty_stops_remaining_steps_and_never_replays(DriverStatus status)
     {
         using var r = new Rig(); r.Device(); r.Device("b");
         var job = r.Service.SubmitLightBatch(r.Admin.Token, await Request(r));

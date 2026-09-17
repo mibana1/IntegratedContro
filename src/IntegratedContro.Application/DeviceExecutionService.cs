@@ -165,11 +165,27 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
         if (s.UncertainDevices.Contains(device.Id) && (step.Kind != ScenarioStepKind.DeviceCommand || step.Operation != DeviceOperation.Stop)) return "장비 상태 대조 필요";
         return null;
     }
-    public Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken ct) =>
-        _drivers.Resolve(step.Target!).ExecuteAsync(JsonDefaults.Copy(step), ct);
+    public async Task<StepExecutionResult> ExecuteAsync(StepSnapshot step, CancellationToken ct)
+    {
+        if (step.Kind != ScenarioStepKind.DeviceCommand || step.Target is not { } target)
+            throw new InvalidOperationException("장비 명령 snapshot이 필요합니다.");
+        var command = new DeviceCommand(JsonDefaults.Copy(target), step.Operation, step.Value, step.Unit);
+        var result = await _drivers.Resolve(target).ExecuteAsync(command, ct).ConfigureAwait(false);
+        var status = result.Status switch
+        {
+            DriverStatus.Simulated => StepStatus.Simulated,
+            DriverStatus.Sent => StepStatus.Sent,
+            DriverStatus.Acknowledged => StepStatus.Acknowledged,
+            DriverStatus.Observed => StepStatus.Observed,
+            DriverStatus.Failed => StepStatus.Failed,
+            DriverStatus.Unknown => StepStatus.Unknown,
+            _ => StepStatus.Unknown
+        };
+        return NormalizeResult(step, new(status, result.Detail, result.Values, result.Evidence));
+    }
     public Task<DriverReading> ReadAsync(DeviceConfig target, CancellationToken ct) =>
         _drivers.Resolve(target).ReadAsync(JsonDefaults.Copy(target), ct);
-    public DriverResult NormalizeResult(StepSnapshot snapshot, DriverResult result)
+    private StepExecutionResult NormalizeResult(StepSnapshot snapshot, StepExecutionResult result)
     {
         if (snapshot.Target is { } resultTarget &&
             ((result.Status == StepStatus.Simulated && (!_drivers.Model(resultTarget.ModelId).IsSimulation || result.Evidence != DeviceEvidence.Simulation)) ||
@@ -179,7 +195,7 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
             result = new(StepStatus.Unknown, "드라이버 결과와 상태 증거 불일치 / 대조 필요");
         return result;
     }
-    public void RecordResult(StateContext context, StepSnapshot snapshot, DriverResult result)
+    public void RecordResult(StateContext context, StepSnapshot snapshot, StepExecutionResult result)
     {
         var next = _host.For(context);
         if (snapshot.Kind == ScenarioStepKind.DeviceCommand && snapshot.Target is { } target &&

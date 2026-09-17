@@ -23,7 +23,7 @@ internal sealed class GateDriver : IDeviceDriver
     public DeviceModel[] Models => [new("test", "Test model", [
         new(DeviceOperation.Power,0,1,"on/off"), new(DeviceOperation.Brightness,0,100,"%"),
         new(DeviceOperation.Lift,-1,1,"direction"), new(DeviceOperation.Stop,0,0,"STOP")], DeviceCategory.Lighting)];
-    public readonly List<StepSnapshot> Sent = [];
+    public readonly List<DeviceCommand> Sent = [];
     public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public readonly TaskCompletionSource<DriverResult> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public bool Hold { get; set; }
@@ -31,12 +31,12 @@ internal sealed class GateDriver : IDeviceDriver
     public bool HoldRead { get; set; }
     public readonly TaskCompletionSource ReadStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public readonly TaskCompletionSource ReadContinue = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    public StepStatus NextStatus { get; set; } = StepStatus.Simulated;
-    public async Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken ct)
+    public DriverStatus NextStatus { get; set; } = DriverStatus.Simulated;
+    public async Task<DriverResult> ExecuteAsync(DeviceCommand command, CancellationToken ct)
     {
-        Sent.Add(step); Started.TrySetResult();
+        Sent.Add(command); Started.TrySetResult();
         if (Hold) return await Completion.Task.WaitAsync(ct);
-        return new(NextStatus, "Test virtual result", new Dictionary<DeviceOperation, int> { [step.Operation] = step.Value });
+        return new(NextStatus, "Test virtual result", new Dictionary<DeviceOperation, int> { [command.Operation] = command.Value });
     }
     public async Task<DriverReading> ReadAsync(DeviceConfig device, CancellationToken ct)
     {

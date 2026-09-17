@@ -38,7 +38,7 @@ internal sealed partial class ScenarioJobLifecycle : IScenarioJobLifecycle
             : "미전송·대기 부분 취소 완료. 이미 열린 표시와 전송 결과는 유지합니다.";
         _host.Audit(s, session.Info.UserId, "JobCancellation", $"job={job.Id}; {reason}; status={job.Status}");
     }
-    public void FinishStep(StateContext context, Guid jobId, int index, DriverResult result)
+    public void FinishStep(StateContext context, Guid jobId, int index, StepExecutionResult result)
     {
         var next = _host.For(context); var job = FindJob(next.Jobs, jobId);
         var run = job.Steps[index]; var snapshot = job.Snapshot.Steps[index];

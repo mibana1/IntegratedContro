@@ -1,4 +1,5 @@
 using IntegratedContro.Core;
+using IntegratedContro.Application;
 
 namespace IntegratedContro.Tests;
 
@@ -92,7 +93,7 @@ public sealed class RoleUnassignmentTests
         Rig.Reject("role_in_use", () => r.Service.UnassignRole(r.Admin.Token, request));
         r.Service.Cancel(r.Admin.Token, new(r.Generation, job.Id));
         Rig.Reject("role_in_use", () => r.Service.UnassignRole(r.Admin.Token, request));
-        r.Driver.Completion.SetResult(new(StepStatus.Simulated, "Test completed"));
+        r.Driver.Completion.SetResult(new(DriverStatus.Simulated, "Test completed"));
         await dispatch;
         Assert.True(r.Service.UnassignRole(r.Admin.Token, request));
         Assert.Equal(JobStatus.Cancelled, r.Job(job.Id).Status);

@@ -25,7 +25,10 @@ public sealed class DeviceDriverSeparationTests
     {
         public string Id => id;
         public string Version { get; set; } = "1";
-        public StepStatus Status { get; set; } = StepStatus.Observed;
+        public List<DeviceCommand> Commands { get; } = [];
+        public bool OmitValues { get; set; }
+        public IReadOnlyDictionary<DeviceOperation, int>? ReturnedValues { get; set; }
+        public DriverStatus Status { get; set; } = DriverStatus.Observed;
         public DeviceEvidence Evidence { get; set; } = DeviceEvidence.Observed;
         public DeviceOperation Operation { get; set; } = DeviceOperation.Power;
         public DeviceModel[] Models => [new(model, id, [new(Operation, 0, 1, "on/off", canRead)], DeviceCategory.Lighting)
@@ -36,11 +39,13 @@ public sealed class DeviceDriverSeparationTests
                 device.Connection.Address.Length > 0 && device.Fault == VirtualFault.None && device.LatencyMs == 0,
                 "vendor_configuration", "Test endpoint and address required", 400);
         }
-        public async Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken ct)
+        public async Task<DriverResult> ExecuteAsync(DeviceCommand command, CancellationToken ct)
         {
-            var payload = transport == "test-stream" ? $"PWR {step.Value}\r\n" : $"{{\"power\":{step.Value}}}";
-            await wire.Send(step.Target!, payload, step.Value, ct);
-            return new(Status, "Fake vendor response", new Dictionary<DeviceOperation, int> { [step.Operation] = step.Value }, Evidence);
+            Commands.Add(command);
+            var payload = transport == "test-stream" ? $"PWR {command.Value}\r\n" : $"{{\"power\":{command.Value}}}";
+            await wire.Send(command.Target, payload, command.Value, ct);
+            return new(Status, "Fake vendor response", OmitValues ? null : ReturnedValues ??
+                new Dictionary<DeviceOperation, int> { [command.Operation] = command.Value }, Evidence);
         }
         public Task<DriverReading> ReadAsync(DeviceConfig target, CancellationToken ct) => Task.FromResult(
             new DriverReading(true, new Dictionary<DeviceOperation, int> { [DeviceOperation.Power] = wire.Power }, "Fake observation", Evidence));
@@ -142,10 +147,10 @@ public sealed class DeviceDriverSeparationTests
     }
 
     [Theory]
-    [InlineData(StepStatus.Acknowledged, DeviceEvidence.Acknowledged)]
-    [InlineData(StepStatus.Sent, DeviceEvidence.Sent)]
-    [InlineData(StepStatus.Acknowledged, DeviceEvidence.Observed)]
-    public async Task Transmission_and_ack_do_not_turn_returned_values_into_observation(StepStatus status, DeviceEvidence evidence)
+    [InlineData(DriverStatus.Acknowledged, DeviceEvidence.Acknowledged)]
+    [InlineData(DriverStatus.Sent, DeviceEvidence.Sent)]
+    [InlineData(DriverStatus.Acknowledged, DeviceEvidence.Observed)]
+    public async Task Transmission_and_ack_do_not_turn_returned_values_into_observation(DriverStatus status, DeviceEvidence evidence)
     {
         using var s = new Setup(); var d = s.Register(); s.First.Status = status; s.First.Evidence = evidence;
         s.Submit(); await s.Service.DispatchNextAsync();
@@ -156,7 +161,7 @@ public sealed class DeviceDriverSeparationTests
     [Fact]
     public async Task Physical_driver_cannot_report_simulation_or_use_ack_to_satisfy_a_condition()
     {
-        using var s = new Setup(); var d = s.Register(); s.First.Status = StepStatus.Simulated; s.First.Evidence = DeviceEvidence.Simulation;
+        using var s = new Setup(); var d = s.Register(); s.First.Status = DriverStatus.Simulated; s.First.Evidence = DeviceEvidence.Simulation;
         s.Submit(); await s.Service.DispatchNextAsync();
         Assert.Equal(StepStatus.Unknown, s.State.Jobs.Single().Steps.Single().Status);
         s.First.Evidence = DeviceEvidence.Acknowledged;
@@ -238,6 +243,96 @@ public sealed class DeviceDriverSeparationTests
         Assert.Empty(device.DriverOptions); Assert.Equal(3, device.ExecutionVersion);
     }
 
+    [Theory]
+    [InlineData(DriverStatus.Sent, DeviceEvidence.Sent, StepStatus.Sent, false, false)]
+    [InlineData(DriverStatus.Acknowledged, DeviceEvidence.Acknowledged, StepStatus.Acknowledged, false, false)]
+    [InlineData(DriverStatus.Observed, DeviceEvidence.Observed, StepStatus.Observed, true, false)]
+    [InlineData(DriverStatus.Failed, DeviceEvidence.Observed, StepStatus.Failed, false, false)]
+    [InlineData(DriverStatus.Unknown, DeviceEvidence.Observed, StepStatus.Unknown, false, true)]
+    [InlineData((DriverStatus)999, DeviceEvidence.Observed, StepStatus.Unknown, false, true)]
+    public async Task Device_outcomes_control_step_evidence_and_continue_policy(DriverStatus status,
+        DeviceEvidence evidence, StepStatus expected, bool observed, bool requiresReview)
+    {
+        using var s = new Setup(); var d = s.Register(); s.First.Status = status; s.First.Evidence = evidence;
+        var definition = s.Service.SaveScenario(s.Login.Token, new(s.Generation, Guid.NewGuid(), "Outcome policy",
+            [new("room.power", DeviceOperation.Power, 1, OnFailure: FailurePolicy.Continue),
+             new("room.power", DeviceOperation.Power, 0)]));
+        var accepted = s.Service.Submit(s.Login.Token, new(Guid.NewGuid(), s.Generation, null, ScenarioId: definition.Id));
+        await s.Service.DispatchNextAsync();
+        var state = s.State; var job = state.Jobs.Single(j => j.Id == accepted.Id);
+        Assert.Equal(expected, job.Steps[0].Status);
+        Assert.Equal(requiresReview ? JobStatus.NeedsReview : JobStatus.Running, job.Status);
+        Assert.Equal(requiresReview ? StepStatus.Skipped : StepStatus.Pending, job.Steps[1].Status);
+        Assert.Equal(requiresReview, state.UncertainDevices.Contains(d.Id));
+        Assert.Equal(observed, state.DeviceStates[d.Id].Observed.ContainsKey(DeviceOperation.Power));
+        Assert.Empty(state.DeviceStates[d.Id].Simulated);
+        Assert.Equal(1, state.DeviceStates[d.Id].Desired[DeviceOperation.Power]);
+        Assert.Equal(!requiresReview, await s.Service.DispatchNextAsync());
+        Assert.Equal(requiresReview ? 1 : 2, s.A.Sent.Count);
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("empty")]
+    [InlineData("out-of-range")]
+    [InlineData("unsupported")]
+    [InlineData("ack")]
+    public async Task Invalid_observation_blocks_followup_and_requires_reconciliation(string invalid)
+    {
+        using var s = new Setup(); var d = s.Register();
+        s.First.OmitValues = invalid == "missing";
+        s.First.ReturnedValues = invalid switch
+        {
+            "empty" => new Dictionary<DeviceOperation, int>(),
+            "out-of-range" => new Dictionary<DeviceOperation, int> { [DeviceOperation.Power] = 2 },
+            "unsupported" => new Dictionary<DeviceOperation, int> { [DeviceOperation.Brightness] = 1 },
+            _ => null
+        };
+        if (invalid == "ack") s.First.Evidence = DeviceEvidence.Acknowledged;
+        var definition = s.Service.SaveScenario(s.Login.Token, new(s.Generation, Guid.NewGuid(), "Invalid evidence",
+            [new("room.power", DeviceOperation.Power, 1, OnFailure: FailurePolicy.Continue),
+             new("room.power", DeviceOperation.Power, 0)]));
+        s.Service.Submit(s.Login.Token, new(Guid.NewGuid(), s.Generation, null, ScenarioId: definition.Id));
+        await s.Service.DispatchNextAsync();
+        var state = s.State; var job = Assert.Single(state.Jobs);
+        Assert.Equal(StepStatus.Unknown, job.Steps[0].Status);
+        Assert.Equal(StepStatus.Skipped, job.Steps[1].Status);
+        Assert.Equal(JobStatus.NeedsReview, job.Status);
+        Assert.Contains(d.Id, state.UncertainDevices);
+        Assert.Empty(state.DeviceStates[d.Id].Values);
+        Assert.False(await s.Service.DispatchNextAsync()); Assert.Single(s.A.Sent);
+    }
+
+    [Fact]
+    public async Task Driver_receives_admitted_command_and_cannot_mutate_job_or_config_options()
+    {
+        using var s = new Setup();
+        var request = s.Request() with { DriverOptions = new() { ["channel"] = "1" },
+            Connection = new("test-stream", "test://first", "1") { Options = new() { ["baud"] = "9600" } } };
+        var d = s.Service.SaveDevice(s.Login.Token, request);
+        s.Service.SaveRole(s.Login.Token, new(s.Generation, "room.power", d.Id));
+        var definition = s.Service.SaveScenario(s.Login.Token, new(s.Generation, Guid.NewGuid(), "Command projection",
+            [new("room.power", DeviceOperation.Power, 1, DelayBeforeMs: 1000, TimeoutMs: 30000,
+                OnFailure: FailurePolicy.Continue, ConditionOperation: DeviceOperation.Power, ConditionValue: 0)]));
+        var job = s.Service.Submit(s.Login.Token, new(Guid.NewGuid(), s.Generation, null, ScenarioId: definition.Id));
+        s.Storage.Clock.Advance(1); s.A.Hold = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatch = s.Service.DispatchNextAsync();
+        try
+        {
+            await s.A.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var command = Assert.Single(s.First.Commands);
+            Assert.Equal(new DeviceCommand(d, DeviceOperation.Power, 1, "on/off"), command);
+            command.Target.DriverOptions["channel"] = "99";
+            command.Target.Connection.Options["baud"] = "19200";
+            var state = s.State;
+            Assert.Equal(d, Assert.Single(state.Devices));
+            Assert.Equal(job.Snapshot.Steps[0], Assert.Single(state.Jobs).Snapshot.Steps[0]);
+        }
+        finally { s.A.Hold.TrySetResult(); await dispatch; }
+        Assert.Equal(JobStatus.Completed, Assert.Single(s.State.Jobs).Status);
+        Assert.Equal(1, s.State.DeviceStates[d.Id].Observed[DeviceOperation.Power].Value);
+    }
+
     private sealed class MemoryTransport : IVirtualDeviceTransport
     {
         public Dictionary<DeviceOperation, int> Values { get; } = [];
@@ -251,7 +346,9 @@ public sealed class DeviceDriverSeparationTests
     {
         var transport = new MemoryTransport(); var driver = new VirtualDeviceDriver(transport);
         var device = new DeviceConfig(Guid.NewGuid(), Guid.NewGuid(), "PC", "Lift", "memory", "virtual-lift", 1, true, VirtualFault.None, 0);
-        await driver.ExecuteAsync(new(null, device, DeviceOperation.Stop, 0, "STOP", 0, 100, FailurePolicy.Stop, null, null), default);
+        var result = await driver.ExecuteAsync(new(device, DeviceOperation.Stop, 0, "STOP"), default);
+        Assert.Equal(DriverStatus.Simulated, result.Status);
+        Assert.Equal(DeviceEvidence.Simulation, result.Evidence);
         Assert.Equal(0, Assert.Single(transport.Values).Value);
         Assert.Equal(DeviceOperation.Lift, Assert.Single(transport.Values).Key);
         Assert.DoesNotContain(DeviceOperation.Stop, (await driver.ReadAsync(device, default)).Values.Keys);

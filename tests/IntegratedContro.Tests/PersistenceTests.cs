@@ -137,10 +137,9 @@ public sealed class PersistenceTests
         var driver = new VirtualDeviceDriver(new SqliteVirtualDeviceTransport(r.Store.ConnectionString));
         var target = new DeviceConfig(Guid.NewGuid(), Guid.NewGuid(), Environment.MachineName, "simulator", "test",
             "virtual-light", 1, true, VirtualFault.ResponseLost, 0);
-        var step = new StepSnapshot(new("role", target.Id, 1), target, DeviceOperation.Brightness, 42, "%", 0, 100,
-            FailurePolicy.Stop, null, null);
+        var command = new DeviceCommand(target, DeviceOperation.Brightness, 42, "%");
         using (var timeout = new CancellationTokenSource(100))
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => driver.ExecuteAsync(step, timeout.Token));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => driver.ExecuteAsync(command, timeout.Token));
         var reading = await driver.ReadAsync(target, CancellationToken.None);
         Assert.True(reading.Available); Assert.Equal(42, reading.Values[DeviceOperation.Brightness]);
         var otherPc = await driver.ReadAsync(target with { PcId = Guid.NewGuid() }, CancellationToken.None);

@@ -42,7 +42,7 @@ public sealed class ExecutionTests
         r.Service.BeginManualSwitch(r.Admin.Token, new(r.Generation, job.Id));
         Assert.Equal(JobStatus.StopRequested, r.Job(job.Id).Status);
         Rig.Reject("device_reserved", () => r.Service.Submit(r.Admin.Token, r.Manual()));
-        r.Driver.Completion.SetResult(new(StepStatus.Simulated, "late simulated result"));
+        r.Driver.Completion.SetResult(new(DriverStatus.Simulated, "late simulated result"));
         await dispatch;
         Assert.Equal(StepStatus.Simulated, r.Job(job.Id).Steps[0].Status);
         Assert.Equal(StepStatus.Skipped, r.Job(job.Id).Steps[1].Status);
@@ -68,7 +68,7 @@ public sealed class ExecutionTests
         var first = r.Service.DispatchNextAsync();
         await r.Driver.Started.Task;
         Assert.False(await r.Service.DispatchNextAsync());
-        r.Driver.Completion.SetResult(new(StepStatus.Simulated, "done"));
+        r.Driver.Completion.SetResult(new(DriverStatus.Simulated, "done"));
         await first; Assert.Single(r.Driver.Sent);
     }
     [Theory]
@@ -111,7 +111,7 @@ public sealed class ExecutionTests
     [Fact]
     public async Task Unknown_result_stops_continue_scenario_and_requires_target_reconciliation()
     {
-        using var r = new Rig(); var d = r.Device(); r.Driver.NextStatus = StepStatus.Unknown;
+        using var r = new Rig(); var d = r.Device(); r.Driver.NextStatus = DriverStatus.Unknown;
         var job = r.SubmitScenario(r.Scenario(new ScenarioStep("light", DeviceOperation.Power, 1, OnFailure: FailurePolicy.Continue),
             new("light", DeviceOperation.Brightness, 80)));
         await r.Service.DispatchNextAsync();

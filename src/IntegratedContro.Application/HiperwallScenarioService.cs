@@ -59,7 +59,7 @@ internal sealed partial class HiperwallService
         Require(!state.HiperwallEdits.Any(e => e.Active) && !state.HiperwallDisplays.Any(d => d.Targets.Any(t => t.OpenState is HiperwallSendState.Pending or HiperwallSendState.Sending)),
             "hiperwall_busy", "진행 중인 Hiperwall 전송을 확인한 뒤 시나리오를 시작하세요.");
     }
-    public async Task<DriverResult?> PollScenarioDisplayAsync(Guid id, int index, StepSnapshot step, CancellationToken ct)
+    public async Task<StepExecutionResult?> PollScenarioDisplayAsync(Guid id, int index, StepSnapshot step, CancellationToken ct)
     {
         HiperwallConfiguration config;
         using (_host.Open())
@@ -117,7 +117,7 @@ internal sealed partial class HiperwallService
         }
     }
     // Called under the same authority lock as display dispatch/cancellation.
-    private DriverResult? ReadScenarioDisplayResult(Job parent, int index, HiperwallDisplayJob display)
+    private StepExecutionResult? ReadScenarioDisplayResult(Job parent, int index, HiperwallDisplayJob display)
     {
         if (display.Targets.Any(t => t.OpenState == HiperwallSendState.Unknown))
             return new(StepStatus.Unknown, "배치 표시 결과 불확실 / 후속 단계 차단, 표시 목록 대조 필요");

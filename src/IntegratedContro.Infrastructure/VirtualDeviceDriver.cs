@@ -28,23 +28,22 @@ public sealed class VirtualDeviceDriver(IVirtualDeviceTransport transport) : IDe
             "invalid_device", "가상 지연은 0~30000ms입니다.", 400);
     }
 
-    public async Task<DriverResult> ExecuteAsync(StepSnapshot step, CancellationToken cancellationToken)
+    public async Task<DriverResult> ExecuteAsync(DeviceCommand command, CancellationToken cancellationToken)
     {
-        if (step.Kind != ScenarioStepKind.DeviceCommand || step.Target is not { } target)
-            throw new InvalidOperationException("장비 명령 snapshot이 필요합니다.");
+        var target = command.Target;
         ValidateConfiguration(target);
-        var capability = Models.Single(m => m.Id == target.ModelId).Capabilities.SingleOrDefault(c => c.Operation == step.Operation);
-        Require(capability is not null && step.Value >= capability.Minimum && step.Value <= capability.Maximum,
+        var capability = Models.Single(m => m.Id == target.ModelId).Capabilities.SingleOrDefault(c => c.Operation == command.Operation);
+        Require(capability is not null && command.Unit == capability.Unit && command.Value >= capability.Minimum && command.Value <= capability.Maximum,
             "unsupported", "지원되는 장비 기능과 값을 확인하세요.", 400);
-        if (target.Fault == VirtualFault.Disconnected) return new(StepStatus.Failed, "가상 연결 끊김 / 전송 없음");
-        if (target.Fault == VirtualFault.Failure) return new(StepStatus.Failed, "주입된 가상 실패 / 전송 없음");
+        if (target.Fault == VirtualFault.Disconnected) return new(DriverStatus.Failed, "가상 연결 끊김 / 전송 없음");
+        if (target.Fault == VirtualFault.Failure) return new(DriverStatus.Failed, "주입된 가상 실패 / 전송 없음");
         await Task.Delay(target.LatencyMs, cancellationToken);
         if (target.Fault == VirtualFault.NoResponse) await Task.Delay(Timeout.Infinite, cancellationToken);
-        var operation = step.Operation == DeviceOperation.Stop ? DeviceOperation.Lift : step.Operation;
-        await transport.WriteAsync(target, operation, step.Value, cancellationToken);
+        var operation = command.Operation == DeviceOperation.Stop ? DeviceOperation.Lift : command.Operation;
+        await transport.WriteAsync(target, operation, command.Value, cancellationToken);
         if (target.Fault == VirtualFault.ResponseLost) await Task.Delay(Timeout.Infinite, cancellationToken);
-        return new(StepStatus.Simulated, "가상 장비 값 반영 / 실제 장비 관측 아님",
-            new Dictionary<DeviceOperation, int> { [operation] = step.Value });
+        return new(DriverStatus.Simulated, "가상 장비 값 반영 / 실제 장비 관측 아님",
+            new Dictionary<DeviceOperation, int> { [operation] = command.Value });
     }
 
     public async Task<DriverReading> ReadAsync(DeviceConfig device, CancellationToken cancellationToken)

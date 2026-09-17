@@ -1,4 +1,5 @@
 using IntegratedContro.Core;
+using IntegratedContro.Application;
 
 namespace IntegratedContro.Tests;
 
@@ -82,7 +83,7 @@ public sealed class ScenarioDeletionTests
         Rig.Reject("scenario_in_use", () => r.Service.DeleteScenario(r.Admin.Token, request));
         r.Service.Cancel(r.Admin.Token, new(r.Generation, job.Id));
         Rig.Reject("scenario_in_use", () => r.Service.DeleteScenario(r.Admin.Token, request));
-        r.Driver.Completion.SetResult(new(StepStatus.Simulated, "Test completed")); await dispatch;
+        r.Driver.Completion.SetResult(new(DriverStatus.Simulated, "Test completed")); await dispatch;
         Assert.True(r.Service.DeleteScenario(r.Admin.Token, request));
         Assert.Equal(JobStatus.Cancelled, r.Job(job.Id).Status);
         Assert.Equal(StepStatus.Simulated, r.Job(job.Id).Steps[0].Status);
