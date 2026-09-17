@@ -42,6 +42,7 @@ public sealed partial class HiperwallViewModel
     }
     public string SlotMessage { get => _slotMessage; private set => Set(ref _slotMessage, value); }
     private string? SlotAccessIssue => _client is null || _session is null ? "호스트에 로그인한 뒤 사용하세요." :
+        !_connected ? "호스트 연결이 복구된 뒤 사용할 수 있습니다." :
         _busy ? "현재 작업이 끝나면 사용할 수 있습니다." :
         !_slotsSupported ? "연결된 ControlHost가 저장 슬롯을 지원하지 않습니다. 슬롯 기능이 포함된 ControlHost로 전환하세요." :
         !_canOperate ? "사용 시작과 전체 장비 제어 권한이 필요합니다." :

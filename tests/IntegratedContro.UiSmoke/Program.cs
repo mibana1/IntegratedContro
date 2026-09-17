@@ -37,6 +37,7 @@ public static partial class Program
             try
             {
                 if (args.Contains("--login-only")) { await RunLogin(); await RunLoginClose(); }
+                else if (args.Contains("--draft-recovery-only")) await RunDraftRecovery();
                 else if (args.Contains("--camera-status-only")) await RunCameraStatus();
                 else if (args.Contains("--camera-input-only")) await RunCameraInput();
                 else if (args.Contains("--media-only")) { await RunRelay(); await RunMedia(); await RunPreview(); }
@@ -54,7 +55,7 @@ public static partial class Program
                 else if (args.Contains("--handover-only")) await RunHandover();
                 else
                 {
-                    if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); }
+                    if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); await RunDraftRecovery(); }
                     await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunPowerInputs(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunRelay(); await RunPreview();
                 }
                 result = 0;

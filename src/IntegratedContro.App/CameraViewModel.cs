@@ -11,7 +11,7 @@ public sealed class CameraViewModel : Bindable
 {
     private HostClient? _client;
     private Guid? _session;
-    private bool _configure, _supported, _busy, _refreshing, _visible, _updatingList;
+    private bool _configure, _supported, _busy, _refreshing, _visible, _updatingList, _connected;
     private readonly SemaphoreSlim _requestGate = new(1, 1);
     private CancellationTokenSource? _backgroundRefreshCancellation;
     private long _epoch;
@@ -35,8 +35,8 @@ public sealed class CameraViewModel : Bindable
     public long Generation { get; set; }
     public bool IsBusy => _busy || _refreshing;
     // Only explicit operations lock the controls; catalog polling must not interrupt interaction.
-    public bool CanConfigure => _configure && !_busy && _client is not null;
-    public bool CanPlay => _visible && _client is not null && Selected is { Enabled: true, Provisioning: CameraProvisioning.Ready };
+    public bool CanConfigure => _connected && _configure && !_busy && _client is not null;
+    public bool CanPlay => _connected && _visible && _client is not null && Selected is { Enabled: true, Provisioning: CameraProvisioning.Ready };
     public bool IsPlaying => _player is not null;
     public Func<VlcVideoPlayer> PlayerFactory { get; set; } = () => new VlcVideoPlayer();
     public long DecodedFrames => _player?.DecodedFrames ?? 0;
@@ -126,7 +126,7 @@ public sealed class CameraViewModel : Bindable
     public CameraViewModel(HiperwallViewModel hiperwall)
     {
         _hiperwall = hiperwall;
-        RefreshCommand = Command(Refresh, () => _client is not null && _supported);
+        RefreshCommand = Command(Refresh, () => _connected && _client is not null && _supported);
         NewCommand = Command(_ => { NewDraft(); return Task.CompletedTask; }, () => CanConfigure);
         LoadCommand = Command(_ =>
         {
@@ -150,7 +150,7 @@ public sealed class CameraViewModel : Bindable
                 PublishCameraSuccess(result, isNew);
                 await Refresh(ct);
             }
-            finally { ClearSecrets(); }
+            finally { if (!ct.IsCancellationRequested) ClearSecrets(); }
         }, () => CanConfigure, "카메라 저장 오류");
         LoadSettingsCommand = Command(async ct => { await Refresh(ct); ct.ThrowIfCancellationRequested(); LoadSettings(); }, () => CanConfigure);
         SaveSettingsCommand = Command(async ct =>
@@ -163,7 +163,7 @@ public sealed class CameraViewModel : Bindable
                 ct.ThrowIfCancellationRequested(); _settings = settings;
                 PublishStatus("MediaMTX 설정 저장 완료 · 등록 카메라는 호스트에서 재동기화됩니다."); Changed(nameof(AppliedMedia));
             }
-            finally { ClearSecrets(); }
+            finally { if (!ct.IsCancellationRequested) ClearSecrets(); }
         }, () => CanConfigure);
         SyncCommand = Command(async ct =>
         {
@@ -184,7 +184,7 @@ public sealed class CameraViewModel : Bindable
         }, () => CanPlay);
         PlayCommand = Command(StartPlayback, () => CanPlay);
         StopCommand = new(StopPlaybackAsync);
-        _timer.Tick += async (_, _) => { if (!_busy && _visible && _client is not null && _supported) await Run(Refresh, backgroundRefresh: true); };
+        _timer.Tick += async (_, _) => { if (_connected && !_busy && _visible && _client is not null && _supported) await Run(Refresh, backgroundRefresh: true); };
     }
     private CameraActionRequest Action(bool force = false) => new(Generation, Selected!.Id, Selected.Version, force);
     private async Task Delete(bool force, CancellationToken ct)
@@ -213,7 +213,7 @@ public sealed class CameraViewModel : Bindable
     }
     private async Task Run(Func<CancellationToken, Task> action, bool backgroundRefresh = false, string failureTitle = "카메라 목록 조회 오류")
     {
-        if (_busy || (backgroundRefresh && _refreshing)) return;
+        if (!_connected || _busy || (backgroundRefresh && _refreshing)) return;
         var epoch = _epoch;
         using var refreshCancellation = backgroundRefresh ? CancellationTokenSource.CreateLinkedTokenSource(_context.Token) : null;
         var ct = refreshCancellation?.Token ?? _context.Token;
@@ -258,12 +258,15 @@ public sealed class CameraViewModel : Bindable
             }
         }
     }
-    public void UpdateContext(HostClient? client, Guid? session, bool configure, bool supported, int mediaVersion)
+    public void UpdateContext(HostClient? client, Guid? session, bool configure, bool supported, int mediaVersion, bool connected = true)
     {
+        var connectionChanged = _connected != (connected && client is not null && session is not null);
+        _connected = connected && client is not null && session is not null;
         _configure = configure; _supported = supported;
-        if (!ReferenceEquals(client, _client) || session != _session)
+        var sessionChanged = !ReferenceEquals(client, _client) || session != _session;
+        if (sessionChanged)
         {
-            _epoch++; _context.Cancel(); _context.Dispose(); _context = new(); _busy = false; _refreshing = false;
+            CancelRequests();
             _playEpoch++; _ = StopPlaybackAsync();
             _client = client; _session = session; _settings = new(0, "", "", "", "", false);
             _pendingRegistrations.Clear();
@@ -271,18 +274,30 @@ public sealed class CameraViewModel : Bindable
             ApiEndpoint = ""; HlsEndpoint = ""; ApiUser = ""; HlsUser = "";
             CleanupSummary = "경로 정리 대기 0건"; Changed(nameof(CleanupSummary)); Changed(nameof(AppliedMedia));
             Message = client is null ? "로그인 후 카메라 목록을 조회하세요." : "목록 새로 고침으로 등록 카메라를 확인하세요.";
-            if (_visible && client is not null && supported) _ = Run(Refresh, backgroundRefresh: true);
+            if (_connected && _visible && supported) _ = Run(Refresh, backgroundRefresh: true);
         }
+        else if (connectionChanged && !_connected)
+        {
+            // Suspend network work without replacing the authenticated session or its local draft.
+            CancelRequests(); _playEpoch++; _ = StopPlaybackAsync();
+        }
+        if (connectionChanged && !sessionChanged && session is not null)
+            Message = _connected ? "호스트 연결 복구 · 작성 중인 카메라 입력을 유지했습니다." :
+                "호스트 연결 끊김 · 작성 중인 카메라 입력은 유지되며 연결 복구 전까지 전송할 수 없습니다.";
         if (_mediaVersion != mediaVersion) { _mediaVersion = mediaVersion; _playEpoch++; _ = StopPlaybackAsync(); }
         Raise();
+    }
+    private void CancelRequests()
+    {
+        _epoch++; _context.Cancel(); _context.Dispose(); _context = new(); _busy = false; _refreshing = false;
     }
     public void SetVisible(bool visible)
     {
         _visible = visible;
-        if (visible) { _timer.Start(); if (_client is not null && !_busy && _supported) _ = Run(Refresh, backgroundRefresh: true); }
+        if (visible) { _timer.Start(); if (_connected && _client is not null && !_busy && _supported) _ = Run(Refresh, backgroundRefresh: true); }
         else
         {
-            _timer.Stop(); _epoch++; _context.Cancel(); _context.Dispose(); _context = new(); _busy = false; _refreshing = false;
+            _timer.Stop(); CancelRequests();
             _playEpoch++; _ = StopPlaybackAsync(); ClearSecrets();
         }
         Raise();

@@ -471,11 +471,11 @@ public sealed partial class MainViewModel : Bindable
         RefreshHandover();
         Hiperwall.UpdateDisplayJobs(_state?.HiperwallDisplayJobs ?? [], _state?.HiperwallLayoutsSupported == true);
         Cameras.Generation = Generation;
-        Cameras.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
-            CanConfigure, _state?.CameraSupported ?? false, _state?.MediaConfigurationVersion ?? 0);
+        Cameras.UpdateContext(IsLoggedIn && !_closing ? _client : null, !_closing ? _login?.Session.Id : null,
+            CanConfigure, _state?.CameraSupported ?? false, _state?.MediaConfigurationVersion ?? 0, connected: _connected);
         Hiperwall.Generation = Generation;
-        Hiperwall.UpdateContext(_connected && !_closing ? _client : null, _connected && !_closing ? _login?.Session.Id : null,
-            IsAdmin, CanConfigure, _state?.HiperwallReadSupported ?? false, _state?.HiperwallConfigurationVersion ?? 0, CanControl && (_state?.CanControlHiperwall ?? false), _state?.HiperwallWriteSupported ?? false);
+        Hiperwall.UpdateContext(IsLoggedIn && !_closing ? _client : null, !_closing ? _login?.Session.Id : null,
+            IsAdmin, CanConfigure, _state?.HiperwallReadSupported ?? false, _state?.HiperwallConfigurationVersion ?? 0, CanControl && (_state?.CanControlHiperwall ?? false), _state?.HiperwallWriteSupported ?? false, connected: _connected);
         Hiperwall.UpdateSlots(_state?.HiperwallSlots ?? [], _state?.HiperwallSlotsSupported == true);
         foreach (var command in _commands) command.Raise();
     }

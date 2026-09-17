@@ -34,7 +34,7 @@ public sealed partial class HiperwallViewModel : Bindable
 {
     private HostClient? _client;
     private Guid? _session;
-    private bool _canConfigure, _admin, _supported, _busy;
+    private bool _canConfigure, _admin, _supported, _busy, _connected;
     private int _hostVersion = -1, _editorVersion;
     private long _epoch;
     private CancellationTokenSource? _operation;
@@ -51,11 +51,11 @@ public sealed partial class HiperwallViewModel : Bindable
     public Action ClearSecret { get; set; } = () => { };
     public string SecretStatus { get; private set; } = "저장된 토큰 정보는 적용 설정을 불러온 뒤 확인하세요.";
     public string AppliedSettings { get; private set; } = "적용 설정 없음";
-    public bool CanEdit => _canConfigure && !_busy;
+    public bool CanEdit => _connected && _canConfigure && !_busy;
     public bool IsBusy => _busy;
     public string CurrentConnection => _view is null ? "현재 연결 정보 없음" : _view.ConfigurationVersion == 0 ? "설정되지 않음" :
         $"{_view.ConnectionName} · {_view.Endpoint} · 설정 v{_view.ConfigurationVersion}";
-    public string Status => _busy ? "연결 확인 중" : _view is null ? "조회 전" : HiperwallLabels.State(_view.State);
+    public string Status => _session is not null && !_connected ? "호스트 연결 끊김 · 이전 조회 상태" : _busy ? "연결 확인 중" : _view is null ? "조회 전" : HiperwallLabels.State(_view.State);
     public string ControllerInfo => _view?.Controller is not { } c ? "Controller 버전: 확인되지 않음" :
         $"Controller 응답 버전: {c.Version} · 인증: {c.Authentication} · 역할: {c.Role}";
     public string LastSuccess => $"마지막 연결 성공: {Time(_view?.LastSuccessAt)}";
@@ -101,7 +101,7 @@ public sealed partial class HiperwallViewModel : Bindable
         SaveCommand = new(SaveSettings, () => Ready && _canConfigure);
     }
     public long PreviewEpoch => _epoch;
-    public bool CanPreview => _client is not null && _session is not null && _view?.Contents.State == HiperwallListState.Available;
+    public bool CanPreview => _connected && _client is not null && _session is not null && _view?.Contents.State == HiperwallListState.Available;
     public async Task<MediaPayload> ReadPreview(string selector, string value, CancellationToken ct)
     {
         if (!CanPreview) throw new InvalidOperationException("현재 Contents 목록이 필요합니다.");
@@ -109,15 +109,17 @@ public sealed partial class HiperwallViewModel : Bindable
             new HiperwallPreviewRequest(ConfigurationVersion, selector, value), ct, 10000);
     }
     public int ConfigurationVersion => _view?.ConfigurationVersion ?? 0;
-    private bool Ready => _client is not null && _session is not null && _supported && !_busy;
-    public void UpdateContext(HostClient? client, Guid? session, bool admin, bool canConfigure, bool supported, int version, bool canOperate = false, bool writeSupported = false)
+    private bool Ready => _connected && _client is not null && _session is not null && _supported && !_busy;
+    public void UpdateContext(HostClient? client, Guid? session, bool admin, bool canConfigure, bool supported, int version, bool canOperate = false, bool writeSupported = false, bool connected = true)
     {
+        var connectionChanged = _connected != (connected && client is not null && session is not null);
+        _connected = connected && client is not null && session is not null;
         _canOperate = canOperate; _writeSupported = writeSupported;
         _admin = admin; _canConfigure = canConfigure; _supported = supported;
-        var changed = _session != session || !ReferenceEquals(_client, client) || _hostVersion != version;
+        var sessionChanged = _session != session || !ReferenceEquals(_client, client);
+        var changed = sessionChanged || _hostVersion != version;
         if (changed)
         {
-            var sessionChanged = _session != session || !ReferenceEquals(_client, client);
             Cancel();
             if (sessionChanged)
             {
@@ -131,15 +133,19 @@ public sealed partial class HiperwallViewModel : Bindable
             InvalidateLists(session is null ? "로그인 후 조회할 수 있습니다." : "연결 설정이 변경되었거나 새 세션입니다. 새로 고침하세요.");
             ClearSecret();
             if (session is null) { AppliedSettings = "적용 설정 조회 전"; SecretStatus = "토큰 입력이 비워졌습니다."; }
-            if (session is not null && supported) _ = LoadStatus();
+            if (_connected && supported) _ = LoadStatus();
         }
+        else if (connectionChanged && !_connected) Cancel(clearSecret: false);
+        if (connectionChanged && !sessionChanged && session is not null)
+            Message = _connected ? "호스트 연결 복구 · 작성 중인 초안을 유지했습니다." :
+                "호스트 연결 끊김 · 작성 중인 초안은 유지되며 연결 복구 전까지 전송할 수 없습니다.";
         if (!supported && session is not null) Message = "현재 호스트가 Hiperwall 조회를 지원하지 않습니다. 호스트 배포본을 확인하세요.";
         Notify();
     }
     private async Task LoadStatus() => await Run(async (client, ct) => { await LoadLayouts(client, ct); return await client.Get<HiperwallSnapshot>("/api/hiperwall/status", ct); });
     private async Task Run(Func<HostClient, CancellationToken, Task<HiperwallSnapshot?>> action)
     {
-        if (_client is null || _busy) return;
+        if (!_connected || _client is null || _busy) return;
         var epoch = _epoch;
         var cts = new CancellationTokenSource();
         _operation = cts; _busy = true; Notify();
@@ -235,11 +241,11 @@ public sealed partial class HiperwallViewModel : Bindable
     private static string ListStatus(HiperwallList? list) => list is null ? "조회 전" :
         $"{(list.State switch { HiperwallListState.Available => list.Items.Length == 0 ? "조회 성공 · 빈 목록" : $"조회 성공 · {list.Items.Length}개",
             HiperwallListState.Unsupported => "미지원", HiperwallListState.Failed => "조회 실패", _ => "조회 필요" })}\n{list.Reason}\n마지막 목록 조회 성공: {Time(list.SucceededAt)}";
-    public void Cancel()
+    public void Cancel(bool clearSecret = true)
     {
-        _epoch++; _operation?.Cancel(); _operation = null; _busy = false; ClearSecret();
+        _epoch++; _operation?.Cancel(); _operation = null; _busy = false; if (clearSecret) ClearSecret();
     }
-    public void Close() { Cancel(); ClearLayouts(); _client = null; _session = null; _view = null; InvalidateLists("조회가 종료되었습니다."); }
+    public void Close() { Cancel(); ClearLayouts(); _connected = false; _client = null; _session = null; _view = null; InvalidateLists("조회가 종료되었습니다."); }
     private void Notify()
     {
         foreach (var name in new[] { nameof(IsBusy), nameof(CanEdit), nameof(Status), nameof(CurrentConnection), nameof(ControllerInfo),
