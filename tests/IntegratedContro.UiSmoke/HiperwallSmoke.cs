@@ -43,6 +43,8 @@ public static partial class Program
             tabs.SelectedItem = window.FindName("AdminTab"); window.UpdateLayout();
             await Hiper(vm.Hiperwall.LoadSettingsCommand);
             var h = vm.Hiperwall;
+            IHiperwallContentLookup lookup = h;
+            var cameraChoices = vm.Cameras.MappingContents;
             h.Name = "가짜 Controller 검증"; h.Endpoint = server.Endpoint; h.User = "3";
             h.TimeoutText = "3000"; h.Authentication = HiperwallAuthentication.Token;
             var settings = (IntegratedContro.App.HiperwallSettingsView)window.FindName("HiperwallSettings");
@@ -54,6 +56,8 @@ public static partial class Program
             window.UpdateLayout(); Capture(window, Path.Combine(output, "hiperwall-settings.png"));
             await Hiper(h.TestCommand);
             Require(h.Contents.Count == 3 && h.Zones.Count == 2 && h.Walls.Count == 0, h.Message);
+            Require(ReferenceEquals(cameraChoices, lookup.Contents) && cameraChoices.SequenceEqual(h.Contents) && lookup.ConfigurationVersion == 1,
+                "Camera lookup did not receive the current wall inventory/version");
             Require(h.Status == "연결 성공" && h.WallState.Contains("미지원"), "Inventory status was conflated");
             await Hiper(h.LoadSettingsCommand);
             Require(token.Password == "" && h.SecretStatus.Contains("저장됨"), "Saved token was returned to editor");
@@ -74,6 +78,7 @@ public static partial class Program
             ((TextBox)inventory.FindName("ContentSearch")).SetCurrentValue(TextBox.TextProperty, "uuid-2");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Require(h.FilteredContents.Cast<object>().Count() == 1 && h.Search == "uuid-2", "Search binding did not filter by UUID");
+            Require(cameraChoices.Count == 3, "Wall filtering changed the camera mapping catalog");
             h.Search = "없는 검색어"; Require(h.FilteredContents.IsEmpty && h.ContentCount.Contains("검색 0"), "No-match search was not distinct from inventory");
             h.Search = ""; h.TypeFilter = "image";
             Require(h.FilteredContents.Cast<object>().Count() == 3, "Type filter lost response items");
@@ -110,6 +115,7 @@ public static partial class Program
             server.Contents = "<broken/>";
             await Hiper(h.RefreshCommand);
             Require(h.Contents.Count == 0 && h.ContentState.Contains("미지원"), "Invalid response retained stale content");
+            Require(ReferenceEquals(cameraChoices, vm.Cameras.MappingContents) && cameraChoices.Count == 0, "Invalid contents left stale camera choices");
             Capture(window, Path.Combine(output, "hiperwall-unsupported.png"));
 
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -131,6 +137,7 @@ public static partial class Program
             await Wait(() => !h.IsBusy && h.CurrentConnection.Contains("v2"));
             await Task.Delay(1500);
             Require(h.Contents.Count == 0 && h.CanvasItems.Count == 0 && h.Instances.Count == 0 && h.CurrentConnection.Contains("변경된"), "Late previous-settings result was displayed");
+            Require(cameraChoices.Count == 0 && lookup.ConfigurationVersion == 2, "Settings change did not invalidate the camera lookup/version");
             Require(server.Operations.Count <= before + 1, "Duplicate refresh reached the fixture");
             await HostProcess.Post<Lease>(admin, "/api/lease/release", new LeaseRequest(lease.Generation));
 
@@ -138,6 +145,7 @@ public static partial class Program
             h.RefreshCommand.Execute(null); await started.Task;
             await Execute(vm, vm.LogoutCommand);
             Require(h.Contents.Count == 0 && h.CanvasItems.Count == 0 && h.Instances.Count == 0 && !h.RefreshCommand.CanExecute(null), "Logout retained inventory/read access");
+            Require(cameraChoices.Count == 0 && lookup.ConfigurationVersion == 0, "Logout retained camera lookup state");
             vm.LoginName = "admin"; await Execute(vm, vm.LoginCommand); await Wait(() => !h.IsBusy);
             started = new(TaskCreationOptions.RunContinuationsAsynchronously);
             h.RefreshCommand.Execute(null); await started.Task;

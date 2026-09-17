@@ -11,7 +11,7 @@ public static partial class Program
         // No host, MediaMTX or native engine: a registered snapshot and an injected player are sufficient.
         using var client = new HostClient("https://127.0.0.1:1", new string('A', 64));
         var first = new FakeVideoPresentation();
-        var camera = new CameraViewModel(new HiperwallViewModel(), _ => Task.FromResult<IVideoPresentation>(first));
+        var camera = new CameraViewModel(new FakeContentLookup(), _ => Task.FromResult<IVideoPresentation>(first));
         try
         {
             camera.UpdateContext(client, Guid.NewGuid(), false, false, 0);

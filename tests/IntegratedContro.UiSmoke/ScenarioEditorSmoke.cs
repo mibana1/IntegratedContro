@@ -24,10 +24,10 @@ public static partial class Program
             window.Show(); vm.Endpoint = host.Endpoint; vm.Fingerprint = host.Fingerprint;
             vm.LoginName = "admin"; vm.ReadLoginPassword = () => host.Password;
             await Execute(vm, vm.LoginCommand); await Execute(vm, vm.AcquireCommand);
-            vm.SelectedModel = vm.Models.Single(m => m.Id == "virtual-light");
-            vm.DeviceName = "순서 검증 조명"; vm.ConnectionId = "scenario-editor-smoke";
-            await Execute(vm, vm.SaveDeviceCommand); vm.SelectedDevice = vm.Devices.Single(); vm.RoleName = "light";
-            await Execute(vm, vm.SaveRoleCommand);
+            vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == "virtual-light");
+            vm.DeviceSettings.DeviceName = "순서 검증 조명"; vm.DeviceSettings.ConnectionId = "scenario-editor-smoke";
+            await Execute(vm, vm.DeviceSettings.SaveDeviceCommand); vm.DeviceSettings.SelectedDevice = vm.DeviceSettings.Devices.Single(); vm.DeviceSettings.RoleName = "light";
+            await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("ScenarioTab"); window.UpdateLayout();
             var grid = (DataGrid)window.FindName("ScenarioStepGrid");
             Button Button(string name) => (Button)window.FindName(name);
@@ -80,8 +80,8 @@ public static partial class Program
             Capture(window, Path.Combine(output, "scenario-editor-small.png"));
             Require(moves.All(button => button.IsVisible && button.ActualWidth > 0) && grid.ActualHeight > 100,
                 "Compact layout hid movement controls or steps");
-            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand); await Wait(() => vm.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
-            var completed = vm.Jobs.Single().Job;
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand); await Wait(() => vm.JobManagement.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
+            var completed = vm.JobManagement.Jobs.Single().Job;
             Require(completed.Snapshot.Steps.Select(s => (s.Kind, s.Operation, s.Value))
                 .SequenceEqual(expected.Select(s => (s.Kind, s.Operation, s.Value))), "Execution ignored saved order");
             Require(completed.Steps.Select(s => s.Status).SequenceEqual(new[] {
@@ -98,15 +98,15 @@ public static partial class Program
             vm.ScenarioEditor.DraftSteps[0] = vm.ScenarioEditor.DraftSteps[0] with { DelayBeforeMs = 60000 };
             await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(!delete.IsEnabled && vm.ScenarioEditor.ScenarioDeletionHint.Contains("진행 중"), "Active scenario allowed deletion");
-            vm.SelectedJob = vm.Jobs.Single(j => j.Job.Active); await Execute(vm, vm.CancelCommand);
+            vm.JobManagement.SelectedJob = vm.JobManagement.Jobs.Single(j => j.Job.Active); await Execute(vm, vm.JobManagement.CancelCommand);
             Require(delete.IsEnabled, "Cancellation left definition locked");
             await Execute(vm, vm.ReleaseCommand);
             Require(!delete.IsEnabled && vm.ScenarioEditor.ScenarioDeletionHint.Contains("사용"), "Deletion enabled without ownership");
             await Execute(vm, vm.AcquireCommand); await Click(vm, delete);
             Require(vm.ScenarioEditor.Scenarios.Count == 0 && vm.ScenarioEditor.DraftSteps.Count == 0 && vm.ScenarioEditor.ScenarioName == "" && !delete.IsEnabled &&
-                vm.Jobs.Any(j => j.Id == completed.Id && j.Job.Status == JobStatus.Completed), "Deletion left stale editor or lost history");
+                vm.JobManagement.Jobs.Any(j => j.Id == completed.Id && j.Job.Status == JobStatus.Completed), "Deletion left stale editor or lost history");
             await Execute(vm, vm.LogoutCommand); await Execute(vm, vm.LoginCommand);
-            Require(vm.ScenarioEditor.Scenarios.Count == 0 && vm.Jobs.Count == 2, "Reconnect restored deleted definition or lost history");
+            Require(vm.ScenarioEditor.Scenarios.Count == 0 && vm.JobManagement.Jobs.Count == 2, "Reconnect restored deleted definition or lost history");
 
             // Single-step boundaries and 100-step endpoint selection.
             vm.ScenarioEditor.DraftSteps.Add(a); await Select(0);

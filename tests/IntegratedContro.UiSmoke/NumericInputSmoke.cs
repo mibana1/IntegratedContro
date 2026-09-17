@@ -25,16 +25,16 @@ public static partial class Program
             await Execute(vm, vm.LoginCommand); await Execute(vm, vm.AcquireCommand);
             foreach (var (model, role) in new[] { ("virtual-light", "numeric.light"), ("virtual-projector", "numeric.projector"), ("virtual-lift", "numeric.lift") })
             {
-                await Execute(vm, vm.NewDeviceCommand); vm.SelectedModel = vm.Models.Single(m => m.Id == model);
-                vm.DeviceName = role; vm.ConnectionId = "numeric-input-fixture";
-                await Execute(vm, vm.SaveDeviceCommand);
-                vm.SelectedDevice = vm.Devices.Single(d => d.Name == role); vm.RoleName = role;
-                await Execute(vm, vm.SaveRoleCommand);
+                await Execute(vm, vm.DeviceSettings.NewDeviceCommand); vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == model);
+                vm.DeviceSettings.DeviceName = role; vm.DeviceSettings.ConnectionId = "numeric-input-fixture";
+                await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
+                vm.DeviceSettings.SelectedDevice = vm.DeviceSettings.Devices.Single(d => d.Name == role); vm.DeviceSettings.RoleName = role;
+                await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
             }
             var tabs = (TabControl)window.FindName("MainTabs"); tabs.SelectedIndex = 0;
             vm.DeviceViewIndex = 1;
-            vm.SelectedRole = vm.Roles.Single(r => r.Id == "numeric.light");
-            vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
+            vm.DeviceControl.SelectedRole = vm.DeviceControl.Roles.Single(r => r.Id == "numeric.light");
+            vm.DeviceControl.SelectedCapability = vm.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
             window.UpdateLayout();
             var value = (TextBox)window.FindName("ManualNumericValue");
             var delay = (TextBox)window.FindName("ManualDelayInput");
@@ -48,13 +48,13 @@ public static partial class Program
             }
             async Task Blocked(TextBox input, string text)
             {
-                var count = vm.Jobs.Count;
+                var count = vm.JobManagement.Jobs.Count;
                 await Input(input, text);
-                Require(!submit.IsEnabled && !vm.SubmitCommand.CanExecute(null) && error.IsVisible && error.Text.Length > 0,
+                Require(!submit.IsEnabled && !vm.DeviceControl.SubmitCommand.CanExecute(null) && error.IsVisible && error.Text.Length > 0,
                     "Invalid numeric text left submission enabled or hid the reason: " + text);
-                vm.SubmitCommand.Execute(null);
+                vm.DeviceControl.SubmitCommand.Execute(null);
                 await Execute(vm, vm.RefreshCommand);
-                Require(vm.Jobs.Count == count && vm.PendingSummary == "" && input.Text == text && !submit.IsEnabled,
+                Require(vm.JobManagement.Jobs.Count == count && vm.PendingSummary == "" && input.Text == text && !submit.IsEnabled,
                     "Invalid input accepted a job, created a pending request or was replaced during refresh: " + text);
             }
             foreach (var invalid in new[] { "abc", "", " ", "2147483648", "37.5", "-1", "101" })
@@ -66,8 +66,8 @@ public static partial class Program
             await Input(value, "abc"); window.UpdateLayout(); Capture(window, Path.Combine(output, "numeric-input-error.png"));
             await Input(value, "37");
             Require(submit.IsEnabled && !error.IsVisible, "Correcting to the previous valid value did not restore submission");
-            await Click(vm, submit); await Wait(() => vm.Jobs.All(j => !j.Job.Active));
-            Require(vm.Jobs.Count == 1 && vm.Jobs.Single().Job.Snapshot.Steps[0].Value == 37, "Corrected input was not accepted exactly once");
+            await Click(vm, submit); await Wait(() => vm.JobManagement.Jobs.All(j => !j.Job.Active));
+            Require(vm.JobManagement.Jobs.Count == 1 && vm.JobManagement.Jobs.Single().Job.Snapshot.Steps[0].Value == 37, "Corrected input was not accepted exactly once");
             foreach (var invalid in new[] { "abc", "", "2147483648", "-1", "3600001" })
             { await Input(delay, "0"); await Blocked(delay, invalid); }
             await Input(delay, "0");
@@ -77,18 +77,18 @@ public static partial class Program
             await Input(value, "100"); Require(submit.IsEnabled, "Upper brightness boundary was rejected");
             await Input(value, "0"); Require(submit.IsEnabled, "Zero brightness was rejected");
 
-            vm.SelectedRole = vm.Roles.Single(r => r.Id == "numeric.projector");
-            vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Input);
+            vm.DeviceControl.SelectedRole = vm.DeviceControl.Roles.Single(r => r.Id == "numeric.projector");
+            vm.DeviceControl.SelectedCapability = vm.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Input);
             await Blocked(value, "0"); await Input(value, "4"); Require(submit.IsEnabled, "Capability-specific upper boundary was rejected");
-            vm.SelectedRole = vm.Roles.Single(r => r.Id == "numeric.lift");
-            vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Lift);
+            vm.DeviceControl.SelectedRole = vm.DeviceControl.Roles.Single(r => r.Id == "numeric.lift");
+            vm.DeviceControl.SelectedCapability = vm.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Lift);
             await Input(value, "-1"); Require(submit.IsEnabled, "Supported negative lift value was rejected");
             await Input(value, "abc");
-            vm.SelectedRole = vm.Roles.Single(r => r.Id == "numeric.light");
-            vm.SelectedCapability = vm.Capabilities.Single(c => c.Operation == DeviceOperation.Power);
+            vm.DeviceControl.SelectedRole = vm.DeviceControl.Roles.Single(r => r.Id == "numeric.light");
+            vm.DeviceControl.SelectedCapability = vm.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Power);
             var power = (PowerButtons)window.FindName("ManualPowerButtons"); window.UpdateLayout();
             await Click(vm, (Button)power.FindName("OnButton"));
-            Require(submit.IsEnabled && vm.CommandValue == 1, "Switching from invalid numeric input broke ON/OFF selection");
+            Require(submit.IsEnabled && vm.DeviceControl.CommandValue == 1, "Switching from invalid numeric input broke ON/OFF selection");
 
             tabs.SelectedItem = window.FindName("ScenarioTab");
             SetScenarioValue(vm, "numeric.light", DeviceOperation.Brightness, 42);
@@ -108,10 +108,10 @@ public static partial class Program
                 Require(vm.ScenarioEditor.DraftSteps.Count == count && input.Text == invalid, "Invalid scenario timing added a step or polling replaced the text");
             }
             await Input(scenarioDelay, "0"); await Input(scenarioTimeout, "60000");
-            Require(vm.DelayMsText == "0" && vm.TimeoutMsText == "3000", "Scenario timing changed manual input");
-            vm.DelayMsText = "invalid manual delay";
+            Require(vm.DeviceControl.DelayMsText == "0" && vm.DeviceControl.TimeoutMsText == "3000", "Scenario timing changed manual input");
+            vm.DeviceControl.DelayMsText = "invalid manual delay";
             Require(vm.ScenarioEditor.DelayMsText == "0" && vm.ScenarioEditor.TimeoutMsText == "60000", "Manual timing changed scenario input");
-            vm.DelayMsText = "0";
+            vm.DeviceControl.DelayMsText = "0";
             vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.WaitUntil;
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Require(add.IsEnabled && vm.ScenarioEditor.ScenarioTimingError == "", "Condition-wait timeout incorrectly used the manual 30-second maximum");
@@ -123,9 +123,9 @@ public static partial class Program
             Require(vm.ScenarioEditor.DraftSteps.Count == 1 && vm.ScenarioEditor.DraftSteps[0].TimeoutMs == 3000 && vm.ScenarioEditor.DraftSteps[0].Value == 42,
                 "Corrected scenario timing did not produce the intended step");
             vm.ScenarioEditor.ScenarioName = "숫자 입력 검증"; await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
-            await Input(scenarioDelay, "abc"); await Input(scenarioTimeout, ""); vm.CommandValueText = "invalid manual draft";
-            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand); await Wait(() => vm.Jobs.Any(j => j.Job.Kind == JobKind.Scenario && !j.Job.Active));
-            var job = vm.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job;
+            await Input(scenarioDelay, "abc"); await Input(scenarioTimeout, ""); vm.DeviceControl.CommandValueText = "invalid manual draft";
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand); await Wait(() => vm.JobManagement.Jobs.Any(j => j.Job.Kind == JobKind.Scenario && !j.Job.Active));
+            var job = vm.JobManagement.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job;
             Require(job.Snapshot.Steps[0].Value == 42 && job.Snapshot.Steps[0].TimeoutMs == 3000 && job.Steps[0].Status == StepStatus.Simulated,
                 "Saved scenario execution read unrelated invalid editor inputs");
             listener.Flush(); Require(string.IsNullOrWhiteSpace(bindingLog.ToString()), "Numeric input binding warnings: " + bindingLog);

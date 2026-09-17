@@ -12,12 +12,12 @@ internal sealed partial class HiperwallService
     private readonly SemaphoreSlim _hiperwallWrites = new(1, 1);
     public HiperwallDisplayView GetHiperwallDisplays(string token)
     {
-        lock (_host.Gate)
+        using (_host.Open())
         {
             HiperwallReaderSession(token);
-            var recent = _host.State.HiperwallDisplays.TakeLast(100).Select(j => j.Request.RequestId).ToHashSet();
-            return JsonDefaults.Copy(new HiperwallDisplayView(_host.State.HiperwallLayouts.ToArray(),
-                _host.State.HiperwallDisplays.Where(j => j.Outstanding || recent.Contains(j.Request.RequestId)).Reverse().ToArray()));
+            var recent = _host.Current.HiperwallDisplays.TakeLast(100).Select(j => j.Request.RequestId).ToHashSet();
+            return JsonDefaults.Copy(new HiperwallDisplayView(_host.Current.HiperwallLayouts.ToArray(),
+                _host.Current.HiperwallDisplays.Where(j => j.Outstanding || recent.Contains(j.Request.RequestId)).Reverse().ToArray()));
         }
     }
     private Session DisplayOwner(string token, long generation, int version) =>
@@ -60,29 +60,29 @@ internal sealed partial class HiperwallService
     {
         request = JsonDefaults.Copy(request); // Freeze caller-owned arrays before awaiting.
         Require(request.RequestId != Guid.Empty, "invalid_request", "요청 ID가 필요합니다.", 400);
-        lock (_host.Gate)
+        using (_host.Open())
         {
             var session = HiperwallReaderSession(token);
-            if (_host.State.HiperwallDisplays.SingleOrDefault(j => j.Request.RequestId == request.RequestId) is { } prior)
+            if (_host.Current.HiperwallDisplays.SingleOrDefault(j => j.Request.RequestId == request.RequestId) is { } prior)
             {
                 Require(prior.Requester.UserId == session.Info.UserId && JsonSerializer.Serialize(prior.Request, JsonDefaults.Options) ==
                     JsonSerializer.Serialize(request, JsonDefaults.Options), "request_conflict", "같은 요청 ID의 내용 또는 요청자가 다릅니다.");
                 return JsonDefaults.Copy(prior);
             }
-            Require(!_host.State.HiperwallEdits.Any(e => e.Request.RequestId == request.RequestId), "request_conflict", "LIVE 요청 ID가 이미 사용되었습니다.");
+            Require(!_host.Current.HiperwallEdits.Any(e => e.Request.RequestId == request.RequestId), "request_conflict", "LIVE 요청 ID가 이미 사용되었습니다.");
         }
         Require(await _hiperwallAdmission.WaitAsync(0, ct), "hiperwall_busy", "다른 표시 요청을 확인 중입니다.");
         try
         {
             HiperwallConfiguration config; HiperwallPlacement[] placements; DisplayDuration duration; string name;
-            lock (_host.Gate)
+            using (_host.Open())
             {
-                DisplayOwner(token, request.Generation, request.ConfigurationVersion); RequireHiperwallScenarioAvailable(_host.State); RequireNoSlotRestore(); config = _host.State.Hiperwall!;
-                Require(_host.State.HiperwallDisplays.Count(j => j.Outstanding) < 100, "display_limit", "남은 표시 작업을 먼저 정리하세요.");
+                DisplayOwner(token, request.Generation, request.ConfigurationVersion); RequireHiperwallScenarioAvailable(_host.Current); RequireNoSlotRestore(); config = _host.Current.Hiperwall!;
+                Require(_host.Current.HiperwallDisplays.Count(j => j.Outstanding) < 100, "display_limit", "남은 표시 작업을 먼저 정리하세요.");
                 if (request.LayoutId is { } id)
                 {
                     Require(request.TestPlacements is null, "invalid_request", "저장 배치와 테스트 초안을 함께 지정할 수 없습니다.", 400);
-                    var layout = _host.State.HiperwallLayouts.SingleOrDefault(l => l.Id == id);
+                    var layout = _host.Current.HiperwallLayouts.SingleOrDefault(l => l.Id == id);
                     Require(layout is not null && layout.Version == request.LayoutVersion && layout.ConfigurationVersion == config.Version,
                         "layout_changed", "배치 또는 연결 설정이 변경되었습니다. 검토 후 다시 저장하세요.");
                     placements = JsonDefaults.Copy(layout!.Placements); duration = layout.Duration; name = layout.Name;
@@ -103,20 +103,20 @@ internal sealed partial class HiperwallService
             var commands = placements.Select((p, i) => new HiperwallWireCommand(HiperwallEditAction.Open,
                 $"integrated-{request.RequestId:N}-{i}", p.Selector, p.ContentValue, p.ZoneId, p.Layout, p.Volume, p.Muted)).ToArray();
             foreach (var c in commands) ValidateDisplayContent(c, reading);
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 ct.ThrowIfCancellationRequested();
-                var session = DisplayOwner(token, request.Generation, request.ConfigurationVersion); RequireHiperwallScenarioAvailable(_host.State); RequireNoSlotRestore();
-                if (request.LayoutId is { } id) Require(_host.State.HiperwallLayouts.Any(l => l.Id == id && l.Version == request.LayoutVersion),
+                var session = DisplayOwner(token, request.Generation, request.ConfigurationVersion); RequireHiperwallScenarioAvailable(_host.Current); RequireNoSlotRestore();
+                if (request.LayoutId is { } id) Require(_host.Current.HiperwallLayouts.Any(l => l.Id == id && l.Version == request.LayoutVersion),
                     "layout_changed", "확인 중 배치가 변경되었습니다. 다시 선택하세요.");
-                var next = JsonDefaults.Copy(_host.State);
+                var next = _host.Draft();
                 var job = new HiperwallDisplayJob { Request = request, Requester = session.Info, Endpoint = config.Endpoint,
                     Name = name, Duration = duration, AcceptedAt = _host.Now,
                     CloseAt = duration.EffectiveSeconds is { } seconds ? _host.Now.AddSeconds(seconds) : null,
                     Targets = commands.Select(c => new HiperwallDisplayTarget { Command = c, NextAttemptAt = _host.Now }).ToList() };
                 next.HiperwallDisplays.Add(job);
                 _host.Audit(next, session.Info.UserId, "HiperwallDisplayAccepted", $"request={request.RequestId}; targets={commands.Length}");
-                _host.Persist(next); return JsonDefaults.Copy(job);
+                _host.Commit(next); return JsonDefaults.Copy(job);
             }
         }
         finally { _hiperwallAdmission.Release(); }
@@ -128,7 +128,7 @@ internal sealed partial class HiperwallService
         var job = s.HiperwallDisplays.SingleOrDefault(j => j.Request.RequestId == request.JobId);
         Require(job is not null, "request_not_found", "표시 작업이 없습니다.", 404);
         if (job!.ScenarioJobId is { } parentId && s.Jobs.SingleOrDefault(j => j.Id == parentId) is { Active: true } parent)
-            _jobs.StopJob(s, parent, session, "시나리오 표시 종료 요청");
+            _jobs.StopJob(s, parent.Id, session, "시나리오 표시 종료 요청");
         if (s.HiperwallEdits.SingleOrDefault(e => e.Request.RequestId == request.JobId && e.Request.Action == HiperwallEditAction.RestoreSlot) is { } restore)
             foreach (var step in restore.Steps.Where(step => step.State == HiperwallSendState.Pending))
             { step.State = HiperwallSendState.Rejected; step.Message = "표시 종료 요청으로 슬롯 불러오기 후속 전송을 중단했습니다."; }

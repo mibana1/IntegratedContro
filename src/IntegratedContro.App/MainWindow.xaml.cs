@@ -13,13 +13,11 @@ public partial class MainWindow : Window
     {
         _showLoginPrompts = showLoginOnStart;
         InitializeComponent();
-        _viewModel = new MainViewModel
-        {
-            ReadNewPassword = () => NewAccountPassword.Password,
-            ClearNewPassword = NewAccountPassword.Clear,
-            ConfirmManualSwitch = text => MessageBox.Show(this, text, "시나리오 중단 후 수동 전환",
-                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes
-        };
+        _viewModel = new MainViewModel();
+        _viewModel.AccountManagement.ReadNewPassword = () => NewAccountPassword.Password;
+        _viewModel.AccountManagement.ClearNewPassword = NewAccountPassword.Clear;
+        _viewModel.JobManagement.ConfirmManualSwitch = text => MessageBox.Show(this, text, "시나리오 중단 후 수동 전환",
+            MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
         DataContext = _viewModel;
         _viewModel.PropertyChanged += ModelChanged;
         if (showLoginOnStart) Loaded += (_, _) => Dispatcher.InvokeAsync(ShowLogin);

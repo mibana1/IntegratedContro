@@ -9,7 +9,7 @@ namespace IntegratedContro.Application;
 internal sealed partial class HiperwallService
 {
     private static bool DisplayDue(HiperwallDisplayJob j, DateTimeOffset now) => j.StopRequested || j.CloseAt <= now;
-    private static void TrackLiveOpen(HostState s, HiperwallEditReceipt edit, DateTimeOffset now)
+    private static void TrackLiveOpen(HiperwallStateScope s, HiperwallEditReceipt edit, DateTimeOffset now)
     {
         if (edit.Request.Action is not (HiperwallEditAction.Open or HiperwallEditAction.RestoreSlot)) return;
         foreach (var step in edit.Steps.Where(t => t.Command.Action == HiperwallEditAction.Open &&
@@ -30,8 +30,9 @@ internal sealed partial class HiperwallService
                 job.Targets.Add(new() { Command = step.Command, OpenState = step.State, OpenAttempted = true, NextAttemptAt = now });
         }
     }
-    internal void RecoverHiperwallDisplays(HostState next)
+    internal void RecoverHiperwallDisplays(StateContext context)
     {
+        var next = _host.For(context);
         foreach (var edit in next.HiperwallEdits.Where(e => e.Request.Action is (HiperwallEditAction.Open or HiperwallEditAction.RestoreSlot) &&
             e.Steps.Any(t => t.State is HiperwallSendState.Sending or HiperwallSendState.Acknowledged or HiperwallSendState.Unknown)))
             TrackLiveOpen(next, edit, _host.Now);
@@ -49,20 +50,20 @@ internal sealed partial class HiperwallService
     private void MarkDisplaysForShutdown()
     {
         if (_host.StorageFailed) return;
-        var next = JsonDefaults.Copy(_host.State);
+        var next = _host.Draft();
         foreach (var j in next.HiperwallDisplays.Where(j => j.Outstanding))
         {
             j.StopRequested = true;
             foreach (var t in j.Targets.Where(t => t.Outstanding)) t.NextAttemptAt = _host.Now;
         }
-        _host.Persist(next); // Preserve cleanup intent even if the shutdown deadline expires.
+        _host.Commit(next); // Preserve cleanup intent even if the shutdown deadline expires.
     }
     public async Task CleanupHiperwallOnShutdownAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
             bool pending;
-            lock (_host.Gate) pending = !_host.StorageFailed && _hiperwall is IHiperwallWriter && _credentials is not null && _host.State.HiperwallDisplays.Any(j => j.Targets.Any(t =>
+            using (_host.Open()) pending = !_host.StorageFailed && _hiperwall is IHiperwallWriter && _credentials is not null && _host.Current.HiperwallDisplays.Any(j => j.Targets.Any(t =>
                 t.Outstanding && t.CleanupState != DisplayCleanupState.NeedsReview && t.NextAttemptAt <= _host.Now));
             if (!pending) return;
             await ReconcileHiperwallDisplaysAsync(ct, shutdown: true).ConfigureAwait(false);
@@ -74,12 +75,12 @@ internal sealed partial class HiperwallService
         try
         {
             HiperwallDisplayJob snapshot; int index; HiperwallConfiguration config;
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 if (_host.StorageFailed || (_host.Stopping && !shutdown) || ct.IsCancellationRequested || _hiperwall is not IHiperwallWriter || _credentials is null) return;
                 // Keep cleanup from removing the source view during an accepted replacement.
-                if (!shutdown && _host.State.HiperwallEdits.Any(e => e.Active && e.Request.Action == HiperwallEditAction.RestoreSlot)) return;
-                var job = _host.State.HiperwallDisplays.Where(j => j.Targets.Any(t => t.Outstanding &&
+                if (!shutdown && _host.Current.HiperwallEdits.Any(e => e.Active && e.Request.Action == HiperwallEditAction.RestoreSlot)) return;
+                var job = _host.Current.HiperwallDisplays.Where(j => j.Targets.Any(t => t.Outstanding &&
                         t.CleanupState != DisplayCleanupState.NeedsReview && (t.NextAttemptAt <= _host.Now || DisplayDue(j, _host.Now) && t.CleanupAttempts == 0)))
                     .OrderByDescending(j => DisplayDue(j, _host.Now)).ThenBy(j => j.AcceptedAt).FirstOrDefault();
                 if (job is null) return;
@@ -95,7 +96,7 @@ internal sealed partial class HiperwallService
                     });
                     return;
                 }
-                if (_host.State.Hiperwall is not { } current || current.Endpoint != job.Endpoint)
+                if (_host.Current.Hiperwall is not { } current || current.Endpoint != job.Endpoint)
                 {
                     UpdateDisplay(job.Request.RequestId, index, t => { t.CleanupState = DisplayCleanupState.NeedsReview;
                         t.Message = "원 Controller 연결을 복구한 뒤 표시 종료·정리를 다시 요청하세요."; });
@@ -120,16 +121,16 @@ internal sealed partial class HiperwallService
                     {
                         if (observed is null)
                         {
-                            lock (_host.Gate) UpdateDisplay(id, index, t => { t.CleanupState = DisplayCleanupState.Closed;
+                            using (_host.Open()) UpdateDisplay(id, index, t => { t.CleanupState = DisplayCleanupState.Closed;
                                 t.Message = "Controller 목록에서 인스턴스 없음 확인"; });
                             return;
                         }
                         Require(MatchesDisplaySource(observed, command), "display_identity", "같은 ID의 콘텐츠가 변경되었습니다. 자동 정리를 차단했습니다.");
                         Task<HiperwallWriteResult>? closing = null;
-                        lock (_host.Gate)
+                        using (_host.Open())
                         {
-                            if (_host.StorageFailed || _host.State.Hiperwall?.Version != config.Version || (_host.Stopping && !shutdown)) return;
-                            var current = _host.State.HiperwallDisplays.Single(j => j.Request.RequestId == id);
+                            if (_host.StorageFailed || _host.Current.Hiperwall?.Version != config.Version || (_host.Stopping && !shutdown)) return;
+                            var current = _host.Current.HiperwallDisplays.Single(j => j.Request.RequestId == id);
                             if (DisplayDue(current, _host.Now))
                             {
                                 ct.ThrowIfCancellationRequested(); timeout.Token.ThrowIfCancellationRequested();
@@ -149,7 +150,7 @@ internal sealed partial class HiperwallService
                         var after = await _hiperwall.ReadAsync(config, secret, verify.Token).ConfigureAwait(false);
                         RequireWritableInventory(after);
                         var absent = after.Instances.Items.All(i => i.Id != command.InstanceId);
-                        lock (_host.Gate)
+                        using (_host.Open())
                         {
                             if (absent) UpdateDisplay(id, index, t => { t.CleanupState = DisplayCleanupState.Closed; t.Message = "닫기 후 목록에서 없음 확인"; });
                             else ScheduleCleanupRetry(id, index, result.State == HiperwallSendState.Rejected,
@@ -160,9 +161,9 @@ internal sealed partial class HiperwallService
                     {
                         ValidateDisplayContent(command, reading);
                         Task<HiperwallWriteResult> opening;
-                        lock (_host.Gate)
+                        using (_host.Open())
                         {
-                            var current = _host.State.HiperwallDisplays.Single(j => j.Request.RequestId == id);
+                            var current = _host.Current.HiperwallDisplays.Single(j => j.Request.RequestId == id);
                             if (!CanOpenDisplay(current) || DisplayDue(current, _host.Now)) return;
                             ct.ThrowIfCancellationRequested(); timeout.Token.ThrowIfCancellationRequested();
                             UpdateDisplay(id, index, t => { t.OpenState = HiperwallSendState.Sending; t.OpenAttempted = true; t.Message = "열기 전송 의도 저장"; });
@@ -170,7 +171,7 @@ internal sealed partial class HiperwallService
                             opening = ((IHiperwallWriter)_hiperwall!).WriteAsync(config, secret, command, timeout.Token);
                         }
                         var result = await opening.ConfigureAwait(false);
-                        lock (_host.Gate) UpdateDisplay(id, index, t => { t.OpenState = result.State; t.Message = result.Message;
+                        using (_host.Open()) UpdateDisplay(id, index, t => { t.OpenState = result.State; t.Message = result.Message;
                             t.NextAttemptAt = _host.Now; }); // Even rejected replies are reconciled; never replay open.
                     }
                 }
@@ -178,7 +179,7 @@ internal sealed partial class HiperwallService
             }
             catch (Exception e) when (e is not OutOfMemoryException)
             {
-                lock (_host.Gate)
+                using (_host.Open())
                 {
                     if (_host.StorageFailed) return;
                     if (!attempted && !sent)
@@ -197,11 +198,11 @@ internal sealed partial class HiperwallService
         finally { _hiperwallWrites.Release(); }
     }
     private bool CanOpenDisplay(HiperwallDisplayJob j) => !_host.Stopping && !_host.StorageFailed && ScenarioAllowsDisplay(j) &&
-        _host.State.Hiperwall?.Version == j.Request.ConfigurationVersion &&
-        _host.State.Accounts.Any(a => a.Id == j.Requester.UserId && HiperwallPermission(a));
+        _host.Current.Hiperwall?.Version == j.Request.ConfigurationVersion &&
+        (_host.FindAccount(_host.Current, j.Requester.UserId) is { } user && HiperwallPermission(user));
     private void UpdateDisplay(Guid id, int index, Action<HiperwallDisplayTarget> update)
     {
-        var next = JsonDefaults.Copy(_host.State);
+        var next = _host.Draft();
         var job = next.HiperwallDisplays.Single(j => j.Request.RequestId == id);
         var target = job.Targets[index]; var wasClosed = !target.Outstanding;
         update(target);
@@ -218,14 +219,14 @@ internal sealed partial class HiperwallService
             var status = target.OpenState == HiperwallSendState.Unknown ? StepStatus.Unknown :
                 invalid is not null ? StepStatus.Skipped : _host.Now >= parent.Steps[stepIndex].DeadlineAt ? StepStatus.Failed :
                 !target.OpenAttempted ? StepStatus.Skipped : StepStatus.Failed;
-            _jobs.FinishStep(next, parent, stepIndex, new(status, invalid ?? target.Message));
+            _jobs.FinishStep(next, parent.Id, stepIndex, new(status, invalid ?? target.Message));
         }
         // Reconciled LIVE opens no longer remain unknown in handover history.
         if (next.HiperwallEdits.SingleOrDefault(e => e.Request.RequestId == id) is { } edit &&
             edit.Steps[0].State == HiperwallSendState.Unknown && (target.OpenState == HiperwallSendState.Acknowledged || !target.Outstanding))
         { edit.Steps[0].State = target.OpenState == HiperwallSendState.Acknowledged ? HiperwallSendState.Acknowledged : HiperwallSendState.Rejected;
           edit.Steps[0].Message = target.Message; }
-        _host.Persist(next);
+        _host.Commit(next);
     }
     private void ScheduleCleanupRetry(Guid id, int index, bool permanent, string message) => UpdateDisplay(id, index, t =>
     {

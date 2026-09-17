@@ -3,7 +3,7 @@ using IntegratedContro.Core;
 
 namespace IntegratedContro.App;
 
-public sealed partial class MainViewModel
+public sealed partial class DeviceControlViewModel
 {
     // Keep the actual editor text, including invalid input. Never retain an older numeric value for dispatch.
     private string _commandValueText = "1", _delayMsText = "0", _timeoutMsText = "3000";

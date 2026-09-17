@@ -24,27 +24,27 @@ public static partial class Program
             window.Show(); vm.Endpoint = host.Endpoint; vm.Fingerprint = host.Fingerprint;
             vm.LoginName = "admin"; vm.ReadLoginPassword = () => host.Password;
             await Execute(vm, vm.LoginCommand); await Execute(vm, vm.AcquireCommand);
-            vm.SelectedModel = vm.Models.Single(m => m.Id == "virtual-light");
-            vm.DeviceName = "입구 조명"; vm.ConnectionId = "unassign-test";
-            await Execute(vm, vm.SaveDeviceCommand);
-            var first = vm.Devices.Single(); vm.SelectedDevice = first; vm.RoleName = "room.main";
-            await Execute(vm, vm.SaveRoleCommand); vm.RoleName = "room.alias"; await Execute(vm, vm.SaveRoleCommand);
-            await Execute(vm, vm.NewDeviceCommand); vm.DeviceName = "복도 조명";
-            await Execute(vm, vm.SaveDeviceCommand);
-            var other = vm.Devices.Single(d => d.Id != first.Id); vm.SelectedDevice = other; vm.RoleName = "room.other";
-            await Execute(vm, vm.SaveRoleCommand);
+            vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == "virtual-light");
+            vm.DeviceSettings.DeviceName = "입구 조명"; vm.DeviceSettings.ConnectionId = "unassign-test";
+            await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
+            var first = vm.DeviceSettings.Devices.Single(); vm.DeviceSettings.SelectedDevice = first; vm.DeviceSettings.RoleName = "room.main";
+            await Execute(vm, vm.DeviceSettings.SaveRoleCommand); vm.DeviceSettings.RoleName = "room.alias"; await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
+            await Execute(vm, vm.DeviceSettings.NewDeviceCommand); vm.DeviceSettings.DeviceName = "복도 조명";
+            await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
+            var other = vm.DeviceSettings.Devices.Single(d => d.Id != first.Id); vm.DeviceSettings.SelectedDevice = other; vm.DeviceSettings.RoleName = "room.other";
+            await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
             var tabs = (TabControl)window.FindName("MainTabs");
             tabs.SelectedItem = window.FindName("AdminTab"); window.UpdateLayout();
             ((ComboBox)window.FindName("RoleDevicePicker")).SetCurrentValue(ComboBox.SelectedItemProperty, first);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(vm.AssignedRoles.Select(r => r.Id).Order().SequenceEqual(new[] { "room.alias", "room.main" }),
+            Require(vm.DeviceSettings.AssignedRoles.Select(r => r.Id).Order().SequenceEqual(new[] { "room.alias", "room.main" }),
                 "Assignment list included another device or omitted an alias");
-            var mainRow = vm.AssignedRoles.Single(r => r.Id == "room.main");
-            var aliasRow = vm.AssignedRoles.Single(r => r.Id == "room.alias");
+            var mainRow = vm.DeviceSettings.AssignedRoles.Single(r => r.Id == "room.main");
+            var aliasRow = vm.DeviceSettings.AssignedRoles.Single(r => r.Id == "room.alias");
             var view = (RoleAssignmentsView)window.FindName("AssignedRoleIds");
             Button ButtonFor(RoleAssignmentRow row) => FindAll<Button>(view).Single(b => ReferenceEquals(b.DataContext, row));
             await Execute(vm, vm.RefreshCommand); await Task.Delay(1300);
-            Require(ReferenceEquals(mainRow, vm.AssignedRoles.Single(r => r.Id == "room.main")), "Polling rebuilt assignment rows");
+            Require(ReferenceEquals(mainRow, vm.DeviceSettings.AssignedRoles.Single(r => r.Id == "room.main")), "Polling rebuilt assignment rows");
             await Execute(vm, vm.ReleaseCommand);
             Require(!ButtonFor(mainRow).IsEnabled && !ButtonFor(aliasRow).IsEnabled, "Unassignment enabled without ownership");
             await Execute(vm, vm.AcquireCommand);
@@ -74,37 +74,37 @@ public static partial class Program
             ((TextBox)window.FindName("RoleIdInput")).SetCurrentValue(TextBox.TextProperty, "draft.unrelated");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Click(vm, ButtonFor(aliasRow));
-            Require(!vm.Roles.Any(r => r.Id == "room.alias") && vm.Roles.Any(r => r.Id == "room.main") &&
-                vm.RoleName == "draft.unrelated" && vm.Jobs.Single().Job.Active, "Unassignment changed another binding/draft or cancelled work");
-            vm.SelectedJob = vm.Jobs.Single(); await Execute(vm, vm.CancelCommand);
+            Require(!vm.DeviceControl.Roles.Any(r => r.Id == "room.alias") && vm.DeviceControl.Roles.Any(r => r.Id == "room.main") &&
+                vm.DeviceSettings.RoleName == "draft.unrelated" && vm.JobManagement.Jobs.Single().Job.Active, "Unassignment changed another binding/draft or cancelled work");
+            vm.JobManagement.SelectedJob = vm.JobManagement.Jobs.Single(); await Execute(vm, vm.JobManagement.CancelCommand);
             Require(ButtonFor(mainRow).IsEnabled, "Completed cancellation left role locked");
-            vm.SelectedRole = vm.Roles.Single(r => r.Id == "room.main");
+            vm.DeviceControl.SelectedRole = vm.DeviceControl.Roles.Single(r => r.Id == "room.main");
             await Click(vm, ButtonFor(mainRow));
-            Require(vm.AssignedRoles.Count == 0 && vm.Devices.Count == 2 && vm.Roles.Single().Id == "room.other" &&
+            Require(vm.DeviceSettings.AssignedRoles.Count == 0 && vm.DeviceSettings.Devices.Count == 2 && vm.DeviceControl.Roles.Single().Id == "room.other" &&
                 vm.ScenarioEditor.Scenarios.Count == 1 && vm.ScenarioEditor.SelectedScenarioTarget is null && vm.ScenarioEditor.ScenarioSettings.Count == 0 &&
-                vm.SelectedRole is null, "Deleted binding remained usable or device/definition was lost");
+                vm.DeviceControl.SelectedRole is null, "Deleted binding remained usable or device/definition was lost");
             Require(!mainRow.UnassignCommand.CanExecute(null) && !aliasRow.UnassignCommand.CanExecute(null),
                 "Detached command still enabled");
-            var count = vm.Jobs.Count;
+            var count = vm.JobManagement.Jobs.Count;
             vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single(); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
-            Require(vm.Jobs.Count == count && vm.Message.Contains("역할을 찾을 수 없습니다"), "Definition with missing role accepted");
-            vm.RoleName = "room.main"; await Execute(vm, vm.SaveRoleCommand);
-            Require(vm.Roles.Single(r => r.Id == "room.main").Version > mainRow.Binding.Version &&
+            Require(vm.JobManagement.Jobs.Count == count && vm.Message.Contains("역할을 찾을 수 없습니다"), "Definition with missing role accepted");
+            vm.DeviceSettings.RoleName = "room.main"; await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
+            Require(vm.DeviceControl.Roles.Single(r => r.Id == "room.main").Version > mainRow.Binding.Version &&
                 !mainRow.UnassignCommand.CanExecute(null), "Recreation revived stale binding command");
             await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
-            Require(vm.Jobs.Count == count + 1, "Reassigned role did not restore definition execution");
-            vm.SelectedJob = vm.Jobs.Single(j => j.Job.Active); await Execute(vm, vm.CancelCommand);
+            Require(vm.JobManagement.Jobs.Count == count + 1, "Reassigned role did not restore definition execution");
+            vm.JobManagement.SelectedJob = vm.JobManagement.Jobs.Single(j => j.Job.Active); await Execute(vm, vm.JobManagement.CancelCommand);
 
-            tabs.SelectedIndex = 0; vm.DeviceViewIndex = 1; vm.SelectedDevice = other;
+            tabs.SelectedIndex = 0; vm.DeviceViewIndex = 1; vm.DeviceSettings.SelectedDevice = other;
             window.UpdateLayout(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             var quick = (RoleAssignmentsView)window.FindName("QuickRoleAssignments");
             quick.BringIntoView(); window.UpdateLayout();
             Capture(window, Path.Combine(output, "quick-role-unassignment.png"));
             await Click(vm, FindAll<Button>(quick).Single());
-            Require(vm.Roles.Single().Id == "room.main" && vm.Devices.Count == 2 &&
-                vm.RoleName == "" && vm.AssignedRoleSummary.Contains("없음"), "Quick unassignment chose another target or kept stale input");
+            Require(vm.DeviceControl.Roles.Single().Id == "room.main" && vm.DeviceSettings.Devices.Count == 2 &&
+                vm.DeviceSettings.RoleName == "" && vm.DeviceSettings.AssignedRoleSummary.Contains("없음"), "Quick unassignment chose another target or kept stale input");
             await Execute(vm, vm.LogoutCommand); await Execute(vm, vm.LoginCommand);
-            Require(vm.Roles.Single().Id == "room.main" && vm.Devices.Count == 2, "Reconnecting restored removed assignments");
+            Require(vm.DeviceControl.Roles.Single().Id == "room.main" && vm.DeviceSettings.Devices.Count == 2, "Reconnecting restored removed assignments");
             var (observer, _) = await host.Login();
             using (observer)
             {

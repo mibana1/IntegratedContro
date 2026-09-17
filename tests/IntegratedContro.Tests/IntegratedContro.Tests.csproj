@@ -13,4 +13,16 @@
 <Compile Include="../../src/IntegratedContro.App/ScenarioDeviceViewModel.cs" Link="ViewModels/ScenarioDeviceViewModel.cs" />
 <Compile Include="../../src/IntegratedContro.App/ScenarioInputViewModel.cs" Link="ViewModels/ScenarioInputViewModel.cs" />
 <Compile Include="../../src/IntegratedContro.App/ScenarioSetting.cs" Link="ViewModels/ScenarioSetting.cs" />
+<Compile Include="../../src/IntegratedContro.App/ManagementContracts.cs" Link="ViewModels/ManagementContracts.cs" />
+<Compile Include="../../src/IntegratedContro.App/DeviceRow.cs" Link="ViewModels/DeviceRow.cs" />
+<Compile Include="../../src/IntegratedContro.App/DeviceSettingsViewModel.cs" Link="ViewModels/DeviceSettingsViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/RoleAssignmentViewModel.cs" Link="ViewModels/RoleAssignmentViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/DeviceControlViewModel.cs" Link="ViewModels/DeviceControlViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/CommandInputViewModel.cs" Link="ViewModels/CommandInputViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/PowerInputViewModel.cs" Link="ViewModels/PowerInputViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/AccountManagementViewModel.cs" Link="ViewModels/AccountManagementViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/JobManagementViewModel.cs" Link="ViewModels/JobManagementViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/HandoverViewModel.cs" Link="ViewModels/HandoverViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/RecoveryViewModel.cs" Link="ViewModels/RecoveryViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/AuditRow.cs" Link="ViewModels/AuditRow.cs" />
 </ItemGroup></Project>

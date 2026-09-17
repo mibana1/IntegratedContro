@@ -35,8 +35,10 @@ public abstract class FeatureViewModel(IFeatureSession session) : Bindable
     private readonly List<AsyncCommand> _commands = [];
     protected FeatureContext Context { get; private set; } = new();
     protected StateView? State => Context.State;
-    protected bool CanControl => Context.CanControl;
-    protected bool CanConfigure => Context.CanConfigure;
+    public bool CanControl => Context.CanControl;
+    public bool CanConfigure => Context.CanConfigure;
+    public bool IsLoggedIn => State is not null;
+    public bool IsAdmin => Context.Connected && State?.Session.Role == AccountRole.Administrator;
     protected bool HasPending => Context.HasPending;
     protected long Generation => State?.Lease.Generation ?? 0;
     protected void ReportStatus(string message) => session.ReportStatus(message);
@@ -46,6 +48,7 @@ public abstract class FeatureViewModel(IFeatureSession session) : Bindable
         var previous = Context;
         Context = context;
         OnContextChanged(previous);
+        Changed(nameof(CanControl)); Changed(nameof(CanConfigure)); Changed(nameof(IsLoggedIn)); Changed(nameof(IsAdmin));
         RefreshCommands();
     }
 

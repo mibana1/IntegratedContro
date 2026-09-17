@@ -9,7 +9,15 @@ namespace IntegratedContro.Application;
 // Shared transaction operations for parent jobs; a display result cannot bypass cancellation policy.
 internal interface IScenarioJobLifecycle
 {
-    void StopJob(HostState state, Job job, Session session, string reason);
-    void FinishStep(HostState state, Job job, int index, DriverResult result);
-    void StopScenarioPendingDisplays(HostState state, Job job, string reason);
+    void StopJob(StateContext state, Guid jobId, Session session, string reason);
+    void FinishStep(StateContext state, Guid jobId, int index, DriverResult result);
+    void StopScenarioPendingDisplays(StateContext state, Guid jobId, string reason);
+    ScenarioDisplayProgress DisplayProgress(StateContext context, Guid jobId, int? index = null);
+    void ReportDisplayWaiting(StateContext context, Guid jobId, int index, string message, bool admitted = false);
+}
+internal sealed record ScenarioDisplayProgress(bool Sending, bool Unknown);
+internal interface IHiperwallJobLifecycle
+{
+    void StopPending(StateContext context, Guid jobId, string reason);
+    ScenarioDisplayProgress Progress(StateContext context, Guid jobId, int? index);
 }

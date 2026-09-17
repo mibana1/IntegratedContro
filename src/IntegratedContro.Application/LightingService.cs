@@ -8,14 +8,15 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class DeviceExecutionService
 {
-    private Guid[] OrderedLightIds(HostState s)
+    private Guid[] OrderedLightIds(DeviceStateScope s)
     {
         var ids = s.Devices.Where(d => _drivers.Models.Any(m => m.Id == d.ModelId && m.Category == DeviceCategory.Lighting))
             .Select(d => d.Id).ToArray();
         return s.LightLayout.DeviceIds.Where(ids.Contains).Concat(ids).Distinct().ToArray();
     }
-    public LightLayout CurrentLightLayout(HostState s)
+    public LightLayout CurrentLightLayout(StateContext context)
     {
+        var s = _host.For(context);
         var ids = OrderedLightIds(s);
         return new(s.LightLayout.Version, ids) { Groups = s.LightLayout.Groups.Select(g =>
             g with { DeviceIds = ids.Where(g.DeviceIds.Contains).ToArray() }).ToArray() };
@@ -44,8 +45,9 @@ internal sealed partial class DeviceExecutionService
         _host.Audit(s, session.Info.UserId, "LightOrderSaved", $"version={s.LightLayout.Version}; count={ids.Length}");
         return s.LightLayout;
     });
-    public void ValidateCardPower(HostState s, SubmitRequest request, StepSnapshot[] snapshots)
+    public void ValidateCardPower(StateContext context, SubmitRequest request, StepSnapshot[] snapshots)
     {
+        var s = _host.For(context);
         if (request.CardPower is not { } expected) return;
         Require(request.ScenarioId is null && request.Operation == DeviceOperation.Power && request.DelayBeforeMs == 0,
             "invalid_card_request", "조명 카드는 즉시 전원 명령만 접수합니다.", 400);

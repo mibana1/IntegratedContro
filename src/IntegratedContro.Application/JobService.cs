@@ -55,7 +55,7 @@ internal sealed partial class ScenarioService
             {
                 Require(CanControlJob(_host.User(s, session), job),
                     "target_forbidden", "연결된 시나리오의 중단 권한이 없습니다.", 403);
-                _jobs.StopJob(s, job, session, "STOP 우선 요청: 시나리오 후속 단계 차단");
+                _jobs.StopJob(s, job.Id, session, "STOP 우선 요청: 시나리오 후속 단계 차단");
             }
         }
         else
@@ -78,23 +78,22 @@ internal sealed partial class ScenarioService
     public Job Cancel(string token, JobActionRequest request) => _host.Change(s =>
     {
         var session = _host.Owner(s, token, request.Generation);
-        var job = FindJob(s, request.JobId);
+        var job = FindJob(s.Jobs, request.JobId);
         Require(CanControlJob(_host.User(s, session), job),
             "target_forbidden", "작업 대상 전체에 대한 제어 권한이 필요합니다.", 403);
-        _jobs.StopJob(s, job, session, "선택 취소");
+        _jobs.StopJob(s, job.Id, session, "선택 취소");
         return job;
     });
     public Job BeginManualSwitch(string token, JobActionRequest request) => _host.Change(s =>
     {
         var session = _host.Owner(s, token, request.Generation);
-        var job = FindJob(s, request.JobId);
+        var job = FindJob(s.Jobs, request.JobId);
         Require(job.Kind == JobKind.Scenario, "scenario_required", "전환할 시나리오를 선택하세요.");
         Require(CanControlJob(_host.User(s, session), job),
             "target_forbidden", "시나리오 대상 전체 제어 권한이 필요합니다.", 403);
-        _jobs.StopJob(s, job, session, "시나리오 중단 후 수동 전환 요청");
+        _jobs.StopJob(s, job.Id, session, "시나리오 중단 후 수동 전환 요청");
         // Reconciliation is a separate explicit operation. Never enqueue the earlier conflicting click.
-        foreach (var id in job.Snapshot.Steps.Where(x => x.Target is not null).Select(x => x.Target!.Id).Distinct())
-            if (!s.UncertainDevices.Contains(id)) s.UncertainDevices.Add(id);
+        _devices.MarkUncertain(s, job.Snapshot.Steps.Where(x => x.Target is not null).Select(x => x.Target!.Id).Distinct());
         job.Result += " / 장비는 상태 대조, Hiperwall은 남은 전송·불확실 표시를 확인한 뒤 새 수동 조작을 선택하세요.";
         return job;
     });

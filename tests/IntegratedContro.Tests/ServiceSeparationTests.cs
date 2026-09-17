@@ -11,9 +11,9 @@ public sealed class ServiceSeparationTests
         typeof(ControlService).Assembly.GetType("IntegratedContro.Application." + name, throwOnError: true)!;
 
     [Theory]
-    [InlineData("CameraService", new[] { "HostAuthority", "ICameraContentCatalog", "IMediaMtxClient", "IMediaSecretStore", "Int32", "SemaphoreSlim", "CancellationTokenSource" })]
-    [InlineData("DeviceExecutionService", new[] { "HostAuthority", "DeviceDriverRegistry" })]
-    [InlineData("ScenarioService", new[] { "HostAuthority", "IDeviceScenarioOperations", "IScenarioDisplayOperations", "IScenarioJobLifecycle", "Int32" })]
+    [InlineData("CameraService", new[] { "ICameraStateAccess", "ICameraContentCatalog", "IMediaMtxClient", "IMediaSecretStore", "Int32", "SemaphoreSlim", "CancellationTokenSource" })]
+    [InlineData("DeviceExecutionService", new[] { "IDeviceStateAccess", "DeviceDriverRegistry" })]
+    [InlineData("ScenarioService", new[] { "IScenarioStateAccess", "IDeviceScenarioOperations", "IScenarioDisplayOperations", "IScenarioJobLifecycle", "Int32" })]
     public void Domain_services_have_only_their_declared_dependencies(string name, string[] allowed)
     {
         var type = Service(name);

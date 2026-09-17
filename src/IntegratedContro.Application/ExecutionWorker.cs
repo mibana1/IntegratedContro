@@ -8,34 +8,29 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class ScenarioService
 {
-    internal void RecoverJobs(HostState next)
+    internal void RecoverJobs(StateContext context)
     {
+        var next = _host.For(context);
         foreach (var job in next.Jobs.Where(j => j.Active))
         {
             foreach (var (run, index) in job.Steps.Select((x, i) => (x, i)))
             {
                 if (run.Status == StepStatus.Waiting)
                 {
-                    var display = next.HiperwallDisplays.SingleOrDefault(d => d.ScenarioJobId == job.Id && d.ScenarioStepIndex == index);
-                    run.Status = display?.Targets.Any(t => t.OpenState is HiperwallSendState.Sending or HiperwallSendState.Unknown) == true
+                    var display = _jobs.DisplayProgress(next, job.Id, index);
+                    run.Status = display.Sending || display.Unknown
                         ? StepStatus.Unknown : StepStatus.Skipped;
                     run.Result = "호스트 재시작: 대기·시나리오 자동 재개 금지 / 표시 기록 유지"; run.FinishedAt = _host.Now;
                     continue;
                 }
                 if (run.Status != StepStatus.Dispatching) continue;
                 run.Status = StepStatus.Unknown; run.Result = "호스트 중단: 전송/결과 불확실. 자동 재전송 금지.";
-                var target = job.Snapshot.Steps[index].Target;
-                if (target is not null && next.Devices.Any(d => d.MatchesExecutionTarget(target)) &&
-                    next.DeviceStates.TryGetValue(target.Id, out var recoveredDevice))
-                {
-                    recoveredDevice.Connection = "호스트 중단 / 상태 대조 필요"; recoveredDevice.LastResult = run.Result;
-                    if (!next.UncertainDevices.Contains(target.Id)) next.UncertainDevices.Add(target.Id);
-                }
+                _devices.RecoverInterrupted(next, job.Snapshot.Steps[index], run.Result);
             }
             if (job.Kind == JobKind.Scenario || (job.IsLightBatch && job.Steps.Any(x => x.SentAt is not null)) ||
                 job.Steps.Any(x => x.Status == StepStatus.Unknown) || job.Status == JobStatus.StopRequested)
             {
-                _jobs.StopScenarioPendingDisplays(next, job, "호스트 재시작: 미전송 표시 자동 재개 금지");
+                _jobs.StopScenarioPendingDisplays(next, job.Id, "호스트 재시작: 미전송 표시 자동 재개 금지");
                 foreach (var step in job.Steps.Where(x => x.Status == StepStatus.Pending))
                 { step.Status = StepStatus.Skipped; step.Result = "호스트 재시작: 자동 재개 금지"; }
                 job.Status = job.Steps.Any(x => x.Status == StepStatus.Unknown) ? JobStatus.NeedsReview : JobStatus.Interrupted;
@@ -49,11 +44,11 @@ internal sealed partial class ScenarioService
         try
         {
             Guid jobId; int stepIndex; StepSnapshot snapshot;
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 if (_host.Stopping || _host.StorageFailed || hostStopping.IsCancellationRequested) return false;
-                _host.CheckConnectionUnsafe();
-                var next = JsonDefaults.Copy(_host.State);
+                _host.CheckConnections();
+                var next = _host.Draft();
                 var job = next.Jobs.Where(j => j.Active && j.ReadyAt <= _host.Now &&
                         j.Steps.Any(s => s.Status is StepStatus.Pending or StepStatus.Waiting))
                     .OrderByDescending(j => j.Kind == JobKind.Manual && j.Snapshot.Steps[0].Operation == DeviceOperation.Stop)
@@ -64,12 +59,12 @@ internal sealed partial class ScenarioService
                 var invalid = Revalidate(next, job, snapshot);
                 if (invalid is not null && job.CancelRequestedAt is null)
                 {
-                    _jobs.StopScenarioPendingDisplays(next, job, invalid);
+                    _jobs.StopScenarioPendingDisplays(next, job.Id, invalid);
                     // An in-flight display may already have been transmitted. Preserve it as unknown.
-                    var uncertain = next.HiperwallDisplays.Any(d => d.ScenarioJobId == jobId &&
-                        d.Targets.Any(t => t.OpenState is HiperwallSendState.Sending or HiperwallSendState.Unknown));
-                    _jobs.FinishStep(next, job, stepIndex, new(uncertain ? StepStatus.Unknown : StepStatus.Skipped, "전송 차단: " + invalid));
-                    _host.Persist(next); return true;
+                    var display = _jobs.DisplayProgress(next, jobId);
+                    var uncertain = display.Sending || display.Unknown;
+                    _jobs.FinishStep(next, job.Id, stepIndex, new(uncertain ? StepStatus.Unknown : StepStatus.Skipped, "전송 차단: " + invalid));
+                    _host.Commit(next); return true;
                 }
                 var run = job.Steps[stepIndex];
                 if (run.Status == StepStatus.Pending)
@@ -79,12 +74,12 @@ internal sealed partial class ScenarioService
                     if (snapshot.Kind == ScenarioStepKind.DeviceCommand)
                     {
                         run.SentAt = _host.Now; run.Result = "전송 의도 영속화 / 결과 대기";
-                        next.DeviceStates[snapshot.Target!.Id].Desired[snapshot.Operation] = snapshot.Value;
+                        _devices.RecordDispatchIntent(next, snapshot);
                     }
                     else { run.DeadlineAt = _host.Now.AddMilliseconds(snapshot.TimeoutMs); run.Result = "단계 시작 / 확인 대기"; }
                     job.Status = JobStatus.Running;
                     _host.Audit(next, null, "DispatchIntent", $"job={job.Id}; step={stepIndex}; kind={snapshot.Kind}");
-                    _host.Persist(next);
+                    _host.Commit(next);
                 }
             }
             DriverResult? result;
@@ -112,14 +107,14 @@ internal sealed partial class ScenarioService
             }
             if (result is null) return true;
             result = _devices.NormalizeResult(snapshot, result);
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 if (_host.StorageFailed) return false;
-                var next = JsonDefaults.Copy(_host.State); var job = FindJob(next, jobId);
+                var next = _host.Draft(); var job = FindJob(next.Jobs, jobId);
                 // A cancelled read-only wait cannot be resurrected by a late reading.
                 if (job.Steps[stepIndex].Status is not (StepStatus.Dispatching or StepStatus.Waiting)) return true;
                 _devices.RecordResult(next, snapshot, result);
-                _jobs.FinishStep(next, job, stepIndex, result); _host.Persist(next);
+                _jobs.FinishStep(next, job.Id, stepIndex, result); _host.Commit(next);
             }
             return true;
         }
@@ -127,9 +122,9 @@ internal sealed partial class ScenarioService
     }
     private Task<DriverResult> ExecuteIfStillAllowedAsync(Guid jobId, int index, StepSnapshot step, CancellationToken ct)
     {
-        lock (_host.Gate)
+        using (_host.Open())
         {
-            var job = FindJob(_host.State, jobId); var invalid = Revalidate(_host.State, job, step);
+            var job = FindJob(_host.Current.Jobs, jobId); var invalid = Revalidate(_host.Current, job, step);
             if (_host.Stopping || _host.StorageFailed || job.CancelRequestedAt is not null || invalid is not null)
                 return Task.FromResult(new DriverResult(StepStatus.Skipped, invalid ?? "전송 진입 전 취소/저장 실패/호스트 종료 확인"));
             return _devices.ExecuteAsync(step, ct);

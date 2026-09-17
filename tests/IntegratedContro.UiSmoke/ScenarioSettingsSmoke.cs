@@ -35,11 +35,11 @@ public static partial class Program
             await Execute(vm, vm.LoginCommand); await Execute(vm, vm.AcquireCommand);
             async Task AddDevice(string model, string role, string name)
             {
-                await Execute(vm, vm.NewDeviceCommand); vm.SelectedModel = vm.Models.Single(m => m.Id == model);
-                vm.DeviceName = name; vm.ConnectionId = "scenario-settings"; vm.DeviceLatencyMs = 10;
-                await Execute(vm, vm.SaveDeviceCommand);
-                vm.SelectedDevice = vm.Devices.Single(d => d.Name == name); vm.RoleName = role;
-                await Execute(vm, vm.SaveRoleCommand);
+                await Execute(vm, vm.DeviceSettings.NewDeviceCommand); vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == model);
+                vm.DeviceSettings.DeviceName = name; vm.DeviceSettings.ConnectionId = "scenario-settings"; vm.DeviceSettings.DeviceLatencyMs = 10;
+                await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
+                vm.DeviceSettings.SelectedDevice = vm.DeviceSettings.Devices.Single(d => d.Name == name); vm.DeviceSettings.RoleName = role;
+                await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
                 Require(vm.ScenarioEditor.ScenarioTargets.Any(t => t.Role.Id == role), "Newly registered device missing from scenarios");
             }
             await AddDevice("virtual-light", "room.light", "회의실 조명");
@@ -47,33 +47,33 @@ public static partial class Program
             await AddDevice("virtual-audio", "room.audio", "회의실 음향");
             await AddDevice("virtual-projector", "room.projector", "회의실 프로젝터");
             await AddDevice("virtual-lift", "room.lift", "스크린 승강");
-            var audio = vm.Devices.Single(d => d.Model == "virtual-audio");
-            var basic = vm.Devices.Single(d => d.Model == "virtual-light-basic");
+            var audio = vm.DeviceSettings.Devices.Single(d => d.Model == "virtual-audio");
+            var basic = vm.DeviceSettings.Devices.Single(d => d.Model == "virtual-light-basic");
             var tabs = (TabControl)window.FindName("MainTabs");
             tabs.SelectedItem = window.FindName("AdminTab"); window.UpdateLayout();
             var roleTarget = (ComboBox)window.FindName("RoleDevicePicker");
             var roleId = (TextBox)window.FindName("RoleIdInput");
             roleTarget.SetCurrentValue(ComboBox.SelectedItemProperty, audio);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(vm.RoleName == "room.audio" && roleId.Text == "room.audio" &&
+            Require(vm.DeviceSettings.RoleName == "room.audio" && roleId.Text == "room.audio" &&
                 FindAll<TextBlock>((RoleAssignmentsView)window.FindName("AssignedRoleIds")).Any(t => t.Text == "room.audio"), "Assigned role ID did not populate admin fields");
             roleId.SetCurrentValue(TextBox.TextProperty, "room.audio.secondary");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Execute(vm, vm.RefreshCommand);
-            Require(vm.RoleName == "room.audio.secondary", "Refresh overwrote edited role ID");
-            await Execute(vm, vm.SaveRoleCommand);
-            Require(vm.RoleName == "room.audio.secondary" && vm.AssignedRoleSummary.Contains("room.audio") && vm.AssignedRoleSummary.Contains("room.audio.secondary"),
+            Require(vm.DeviceSettings.RoleName == "room.audio.secondary", "Refresh overwrote edited role ID");
+            await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
+            Require(vm.DeviceSettings.RoleName == "room.audio.secondary" && vm.DeviceSettings.AssignedRoleSummary.Contains("room.audio") && vm.DeviceSettings.AssignedRoleSummary.Contains("room.audio.secondary"),
                 "Multiple assigned IDs not shown");
             roleId.SetCurrentValue(TextBox.TextProperty, "");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Execute(vm, vm.RefreshCommand);
-            Require(vm.RoleName == "" && !vm.SaveRoleCommand.CanExecute(null), "Refresh overwrote intentionally cleared role ID");
+            Require(vm.DeviceSettings.RoleName == "" && !vm.DeviceSettings.SaveRoleCommand.CanExecute(null), "Refresh overwrote intentionally cleared role ID");
             roleTarget.SetCurrentValue(ComboBox.SelectedItemProperty, basic);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(vm.RoleName == "room.basic", "Changing target retained another device's role ID");
+            Require(vm.DeviceSettings.RoleName == "room.basic", "Changing target retained another device's role ID");
             roleTarget.SetCurrentValue(ComboBox.SelectedItemProperty, audio);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            FindAll<Button>(window).Single(b => b.IsVisible && ReferenceEquals(b.Command, vm.SaveRoleCommand)).BringIntoView(); window.UpdateLayout();
+            FindAll<Button>(window).Single(b => b.IsVisible && ReferenceEquals(b.Command, vm.DeviceSettings.SaveRoleCommand)).BringIntoView(); window.UpdateLayout();
             Capture(window, Path.Combine(output, "registered-role-ids.png"));
 
             tabs.SelectedItem = window.FindName("ScenarioTab"); window.UpdateLayout();
@@ -126,7 +126,7 @@ public static partial class Program
             Require(!mute.Included && volume.Value == 37 && volume.Included && power.Included && on.IsSelected,
                 "Buttons, slider or inclusion checkbox failed to update settings");
             await Click(vm, FindAll<Button>(settingsView).Single(b => ReferenceEquals(b.DataContext, mute.Options.Single(o => o.Value == 0))));
-            vm.SelectedRole = vm.Roles.Single(r => r.Id == "room.basic"); vm.CommandValue = 0;
+            vm.DeviceControl.SelectedRole = vm.DeviceControl.Roles.Single(r => r.Id == "room.basic"); vm.DeviceControl.CommandValue = 0;
             await Execute(vm, vm.RefreshCommand); await Task.Delay(1300);
             Require(ReferenceEquals(volume, vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Volume)) &&
                 volume.Value == 37 && power.Value == 1 && mute.Included, "Manual-control target or polling reset scenario settings");
@@ -140,7 +140,7 @@ public static partial class Program
             vm.ScenarioEditor.ScenarioName = "회의실 음향 켜기"; vm.ScenarioEditor.DelayMs = 100; vm.ScenarioEditor.TimeoutMs = 3000;
             await Click(vm, add);
             Require(vm.ScenarioEditor.DraftSteps.Select(s => s.Value).SequenceEqual(new[] { 1, 37, 0 }) &&
-                vm.ScenarioEditor.DraftSteps.Select(s => s.DelayBeforeMs).SequenceEqual(new[] { 100, 0, 0 }) && vm.Jobs.Count == 0,
+                vm.ScenarioEditor.DraftSteps.Select(s => s.DelayBeforeMs).SequenceEqual(new[] { 100, 0, 0 }) && vm.JobManagement.Jobs.Count == 0,
                 "Grouped steps lost order/values, repeated initial delay, or sent while editing");
             await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
             await Execute(vm, vm.ScenarioEditor.LoadScenarioCommand);
@@ -154,8 +154,8 @@ public static partial class Program
             Require(location.Y + add.ActualHeight < window.ActualHeight && add.IsVisible, "Add button scrolled outside compact window");
             Capture(window, Path.Combine(output, "scenario-device-settings-small.png"));
             await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
-            await Wait(() => vm.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
-            var job = vm.Jobs.Single().Job;
+            await Wait(() => vm.JobManagement.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
+            var job = vm.JobManagement.Jobs.Single().Job;
             Require(job.Steps.All(s => s.Status == StepStatus.Simulated) && job.Snapshot.Steps.All(s => s.Target?.Id == audio.Id) &&
                 job.Snapshot.Steps.Select(s => s.Value).SequenceEqual(new[] { 1, 37, 0 }), "Audio sequence failed or sent to another target");
             var (observer, _) = await host.Login();

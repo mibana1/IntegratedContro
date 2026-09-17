@@ -8,22 +8,22 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class ScenarioService
 {
-    private readonly HostAuthority _host;
+    private readonly IScenarioStateAccess _host;
     private readonly IDeviceScenarioOperations _devices;
     private readonly IScenarioDisplayOperations _displays;
     private readonly IScenarioJobLifecycle _jobs;
     private int _dispatching;
-    internal ScenarioService(HostAuthority host, IDeviceScenarioOperations devices,
+    internal ScenarioService(IScenarioStateAccess host, IDeviceScenarioOperations devices,
         IScenarioDisplayOperations displays, IScenarioJobLifecycle jobs)
     { _host = host; _devices = devices; _displays = displays; _jobs = jobs; }
-    private StepSnapshot Resolve(HostState state, Account user, ScenarioStep step)
+    private StepSnapshot Resolve(ScenarioStateScope state, AccountView user, ScenarioStep step)
     {
         ValidateStep(step);
         return step.Kind == ScenarioStepKind.DisplayLayout
             ? _displays.ResolveDisplay(state, user, step) : _devices.Resolve(state, user, step);
     }
-    private string? Revalidate(HostState state, Job job, StepSnapshot step) =>
-        RevalidateJob(state, job, _host.Now) ?? (step.Kind == ScenarioStepKind.DisplayLayout
+    private string? Revalidate(ScenarioStateScope state, Job job, StepSnapshot step) =>
+        RevalidateJob(state.SiteId, state.Scenarios, job, _host.Now) ?? (step.Kind == ScenarioStepKind.DisplayLayout
             ? _displays.RevalidateDisplay(state, job, step) : _devices.RevalidateTarget(state, job, step));
     public ScenarioDefinition SaveScenario(string token, ScenarioRequest request) => _host.Change(s =>
     {

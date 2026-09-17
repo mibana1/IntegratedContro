@@ -25,7 +25,7 @@ public sealed record HiperwallJobRow(HiperwallEditReceipt? Receipt, bool Previou
         string.Join("\n", Receipt.Steps.Select((s, i) => $"{i + 1}. {s.Command.InstanceId ?? "Hiperwall 전체"} | 콘텐츠: {s.Command.ContentValue ?? "-"} | Zone: {s.Command.ZoneId ?? "-"} | {s.State} · {s.Message}"));
 }
 
-public sealed partial class MainViewModel
+public sealed partial class JobManagementViewModel
 {
     public ObservableCollection<HiperwallJobRow> HiperwallJobs { get; } = [];
     private HiperwallJobRow? _selectedHiperwallJob;
@@ -48,25 +48,25 @@ public sealed partial class MainViewModel
         {
             if (SelectedHiperwallJob!.Display is not null)
             {
-                await Client.Post<HiperwallDisplayJob>("/api/hiperwall/displays/stop", new JobActionRequest(Generation, SelectedHiperwallJob.Id));
-                Message = "선택 표시의 미전송 부분 중단과 열린 인스턴스 정리를 요청했습니다.";
+                await _host.StopDisplayAsync(new JobActionRequest(Generation, SelectedHiperwallJob.Id));
+                ReportStatus("선택 표시의 미전송 부분 중단과 열린 인스턴스 정리를 요청했습니다.");
             }
             else
             {
-                var result = await Client.Post<HiperwallEditReceipt>("/api/hiperwall/edits/cancel", new JobActionRequest(Generation, SelectedHiperwallJob.Id));
-                Message = $"Hiperwall 미전송 부분 취소 처리: {result.Summary}. 이미 전송한 명령은 결과 확인이 필요합니다.";
+                var result = await _host.CancelEditAsync(new JobActionRequest(Generation, SelectedHiperwallJob.Id));
+                ReportStatus($"Hiperwall 미전송 부분 취소 처리: {result.Summary}. 이미 전송한 명령은 결과 확인이 필요합니다.");
             }
-        }, () => CanControl && _state?.CanControlHiperwall == true && SelectedHiperwallJob?.CanCancel == true);
+        }, () => CanControl && State?.CanControlHiperwall == true && SelectedHiperwallJob?.CanCancel == true);
     }
     private void RefreshHandover()
     {
         var selectedId = _selectedHiperwallJob?.Id;
-        var displays = _state?.OutstandingHiperwallDisplays ?? [];
+        var displays = State?.OutstandingHiperwallDisplays ?? [];
         var tracked = displays.Select(j => j.Request.RequestId).ToHashSet();
-        Replace(HiperwallJobs, (_state?.OutstandingHiperwallEdits ?? []).Where(r => r.NeedsAttention && !tracked.Contains(r.Request.RequestId))
-            .Select(r => new HiperwallJobRow(r, r.Requester.Id != _login?.Session.Id,
-                CanControl && _state?.CanControlHiperwall == true && r.Steps.Any(s => s.State == HiperwallSendState.Pending)))
-            .Concat(displays.Select(j => new HiperwallJobRow(null, j.Requester.Id != _login?.Session.Id, CanControl && _state?.CanControlHiperwall == true, j))));
+        Replace(HiperwallJobs, (State?.OutstandingHiperwallEdits ?? []).Where(r => r.NeedsAttention && !tracked.Contains(r.Request.RequestId))
+            .Select(r => new HiperwallJobRow(r, r.Requester.Id != State?.Session.Id,
+                CanControl && State?.CanControlHiperwall == true && r.Steps.Any(s => s.State == HiperwallSendState.Pending)))
+            .Concat(displays.Select(j => new HiperwallJobRow(null, j.Requester.Id != State?.Session.Id, CanControl && State?.CanControlHiperwall == true, j))));
         _selectedHiperwallJob = HiperwallJobs.FirstOrDefault(r => r.Id == selectedId);
         Changed(nameof(SelectedHiperwallJob)); Changed(nameof(HiperwallJobDetails)); Changed(nameof(HiperwallJobsSummary)); Changed(nameof(HiperwallCancelLabel));
     }

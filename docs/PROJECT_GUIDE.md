@@ -538,6 +538,81 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 
 ## 10. 구현 단계와 완료 기준
 
+### 서비스별 상태 접근 범위 제한 (2026-09-17)
+
+- 장비·시나리오·영상벽·카메라 서비스에서 `HostAuthority` 직접 의존을 제거하고
+  `IDeviceStateAccess`·`IScenarioStateAccess`·`IHiperwallStateAccess`·`ICameraStateAccess`로 교체했다.
+  각 상태 계약은 자기 기능의 변경만 허용하며 다른 기능의 조회는 중첩 객체까지 복사한다.
+  계정 조회에는 암호 해시를 포함하지 않는다. 카메라에는 다른 계정 조회 계약도 제공하지 않는다.
+- 전체 `HostState`, 실제 잠금과 저장은 호스트 내부에 유지한다. 봉인된 `StateContext` 토큰을 통해
+  여러 서비스가 같은 트랜잭션에 참여하며 다른 기능의 상태 타입으로 변환하는 경로를 두지 않는다.
+  종료된 구간·다른 호스트·이미 저장되었거나 기준 버전이 지난 문맥의 재사용을 거절한다.
+  저장한 객체를 서비스가 나중에 바꿔도 권한 상태에 반영되지 않는다.
+- 시나리오의 장비 상태 변경은 장비 계약으로, 영상벽의 부모 작업 변경은 `ScenarioJobLifecycle`로 위임한다.
+  미전송 표시 차단과 표시 전송 상태 판단은 `HiperwallJobLifecycle`이 소유한다.
+  표시 결과·부모 작업·장비 상태·감사는 기존 공통 트랜잭션을 유지한다.
+- 호스트 시작 시 사용권 차단·작업/장비 복구·영상벽 표시 추적·카메라 동기화 예약을 한 번에 저장한다.
+  저장 실패 시 전체 변경을 반영하지 않고 전 서비스의 신규 작업·전송을 차단한다.
+- 공통 복구 코드의 Hiperwall 검토 대상 선택·변경 지문은 `HiperwallRecovery.cs`로 옮겼다.
+  재시도 시각만 바뀐 경우와 전송·정리 증거가 바뀐 경우를 구분하는 기존 승인 규칙을 보존한다.
+  공개 호스트 API·HTTP/DB 스키마, 원 요청자 snapshot·교대·자동 재전송 금지 규칙은 유지한다.
+- 상세 계약·수정 위치·검증 절차는 [서비스 상태 접근 안내](SERVICE_STATE_BOUNDARIES.md)를 따른다.
+- 검증: 상태 경계 신규 22개를 포함한 서비스·통합 테스트 총 372개 통과.
+  최종 계약 집중 검증 31개 통과, 솔루션 빌드 경고/오류 0.
+  `scripts/verify.ps1` 전체 WPF 회귀도 통과했다. 카메라·영상벽·시나리오·교대·계정/복구 화면을 포함한다.
+  근거: `artifacts/state-boundary-final-focused.log`, `artifacts/state-boundary-final-verify.log`,
+  `artifacts/test-results/state-boundary-final.trx`. 실장비·현장 카메라·물리 두 PC 검수는 수행하지 않았다.
+- 배포: `scripts/publish.ps1`로 `artifacts/publish/Build-20260917-134142-378`의 App·ControlHost 생성.
+  작업 공간 `IntegratedContro.lnk`의 최신 대상과 배포 App·Application·ControlHost DLL의 Release 일치를 확인했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 근거: `artifacts/state-boundary-publish.log`.
+
+### 메인의 장비·계정·작업·복구 ViewModel 책임 분리 (2026-09-17)
+
+- `DeviceSettingsViewModel`을 실제 독립 객체로 바꾸고 장비 목록·선택, 모델·통신 설정 초안,
+  PC/장비 ID·편집 기준 버전, 역할 배정·해제와 상태 대조를 옮겼다.
+  `RoleAssignmentViewModel.cs`는 이 기능 객체의 일부이며 더 이상 `MainViewModel`을 확장하지 않는다.
+- 수동 역할·기능 선택, 값·대기·제한시간 입력과 일반 명령 요청은 `DeviceControlViewModel`이 소유한다.
+  장비 설정과 수동 조작이 서로의 편집 상태를 변경하지 않으며, 역할 배정 완료 시 역할 ID 이벤트로 연결한다.
+- `AccountManagementViewModel`은 계정 등록·권한 편집·선택과 암호 입력 콜백,
+  `JobManagementViewModel`은 일반/Hiperwall 작업 조회·선택·취소·수동 전환·표시 정리를 소유한다.
+  `RecoveryViewModel`은 감사 로그·복구 확인·승인 토큰과 사용권 세대를 소유한다.
+- WPF는 각 기능 객체에 직접 바인딩한다. 메인에 기존 편집 속성을 우회 위임하는 경로는 두지 않는다.
+  메인은 세션·사용권·폴링·공통 busy/오류·접수 불확실 요청 재확인과 화면 연결을 담당한다.
+  HTTP는 `FeatureHost`, 기능별 형식화 계약은 `ManagementContracts.cs`에 둔다.
+- 같은 세션의 조회·연결 실패에서는 초안과 편집 버전을 보존하고, 로그아웃·다른 세션에서는 초기화한다.
+  복구 확인 결과는 세션/사용권 세대 변경·연결 단절·종료 때 폐기하며 늦은 이전 세션 응답을 적용하지 않는다.
+  작업 원 요청자·snapshot과 호스트 권한·버전 검증, HTTP/DB 계약은 유지한다.
+- 수정 위치와 검증 명령은 [기능별 ViewModel 안내](FEATURE_VIEWMODELS.md)를 따른다.
+- 검증: 독립 ViewModel 테스트 신규 20개를 포함한 서비스·통합 테스트 총 350개,
+  `scripts/verify.ps1` 전체 WPF 회귀와 장비 설정·계정/복구 전용 WPF 검증을 통과했다.
+  계정 등록/권한 변경, 비밀번호 정리, heartbeat 만료 → 복구 확인 → 승인, 로그아웃 초기화를 실제 바인딩으로 확인했다.
+  최종 빌드 경고/오류 0. 근거: `artifacts/management-separation-unit.log`, `management-separation-verify.log`,
+  `management-device-ui.log`, `management-separation-focused-ui.log`, `artifacts/test-results/management-separation.trx`.
+  격리된 로컬 호스트·가짜 장비 검증이며, 실장비·현장 카메라·물리 두 PC 검수는 수행하지 않았다.
+- 배포: `scripts/publish.ps1`로 `artifacts/publish/Build-20260917-131543-361`의 App·ControlHost 생성.
+  작업 공간 `IntegratedContro.lnk`의 최신 App 대상과 Release/배포 App DLL 일치를 확인했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 근거: `artifacts/management-separation-publish.log`.
+
+### 카메라·영상벽 ViewModel 조회 의존 분리 (2026-09-17)
+
+- `CameraViewModel`은 `HiperwallViewModel` 대신 `IHiperwallContentLookup`을 주입받는다.
+  계약은 현재 콘텐츠 목록과 설정 버전 두 속성만 제공한다. 앱 구성은 `MainViewModel`에서 연결한다.
+- `HiperwallViewModel`이 기존 Contents를 하나의 `ReadOnlyObservableCollection`으로 감싸 계약을 구현한다.
+  카메라가 목록을 수정할 수 없으며, 새로 고침·무효화·설정 변경·로그아웃의 변경 알림을 그대로 전달한다.
+  화면 검색/필터는 카메라 매핑 목록을 바꾸지 않는다. 별도 캐시·이벤트 중계·목록 복제는 추가하지 않았다.
+- 공용 목록 항목 `HiperwallItemRow`는 ViewModel 파일 밖으로 옮겼다.
+  UUID 우선·UUID 없는 원문 전체 이름·기존 매핑 유지·명시적 해제 규칙을 유지하고,
+  저장 요청을 만들 때 조회 계약의 최신 설정 버전을 읽는다.
+- 가짜 조회 공급자로 영상벽 ViewModel 없이 카메라 저장·영상 엔진 검증을 실행한다.
+  조회 구현을 바꿀 때 유지할 계약과 검증 명령은 [기능별 ViewModel 안내](FEATURE_VIEWMODELS.md)를 따른다.
+- 검증: 빌드 경고/오류 0, 서비스·통합 테스트 330개와 `scripts/verify.ps1` 전체 WPF 회귀 통과.
+  독립 조회 공급자의 저장·버전 충돌 검증과 실제 공급자의 목록 수명, 기존 카메라 초안·영상 엔진 검증을 포함한다.
+  근거: `artifacts/camera-content-lookup-focused.log`, `camera-content-lookup-verify.log`,
+  `artifacts/test-results/camera-content-lookup.trx`. 실장비·현장 카메라 재검증은 수행하지 않았다.
+- 배포: `scripts/publish.ps1`로 `artifacts/publish/Build-20260917-113832-046`의 App·ControlHost 생성.
+  작업 공간 `IntegratedContro.lnk`의 최신 App 대상과 Release/배포 App DLL 일치를 확인했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 근거: `artifacts/camera-content-lookup-publish.log`.
+
 ### 장비 실행·시나리오·카메라·영상벽 서비스 책임 분리 (2026-09-17)
 
 - 파일만 나뉘어 있던 단일 `ControlService` partial 구현을 실제 독립 클래스로 분리했다.

@@ -15,7 +15,7 @@
      <TabItem Header="조명 모아보기"><local:LightingView DataContext="{Binding Lighting}"/></TabItem>
      <TabItem Header="장비 목록 · 상세 조작">
     <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="330"/></Grid.ColumnDefinitions>
-     <Grid Margin="0,0,16,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <Grid Margin="0,0,16,0" DataContext="{Binding DeviceSettings}"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel><TextBlock Text="등록 장비와 상태" Style="{StaticResource SectionTitle}"/><TextBlock Text="요청값·가상 상태·장비 관측을 구분합니다. 실제 PC 이름은 표시용이며, 제어 대상은 PC ID·장비 ID로 고정됩니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,0,0,12"/></StackPanel>
       <DataGrid x:Name="DeviceGrid" Grid.Row="1" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" AutomationProperties.AutomationId="DeviceGrid">
        <DataGrid.Columns><DataGridTextColumn Header="장비" Binding="{Binding Name}" Width="140"/><DataGridTextColumn Header="대상 PC 이름" Binding="{Binding PcName}" Width="170"/><DataGridTextColumn Header="상태 · 증거 · 확인 시각" Binding="{Binding State}" Width="*"/><DataGridTextColumn Header="요청값" Binding="{Binding Desired}" Width="130"/><DataGridTextColumn Header="제한" Binding="{Binding Restriction}" Width="110"/></DataGrid.Columns>
@@ -31,7 +31,7 @@
        </StackPanel></Border>
       </StackPanel>
      </Grid>
-     <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+     <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0" DataContext="{Binding DeviceControl}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
       <TextBlock Text="역할로 조작" Style="{StaticResource SectionTitle}"/><TextBlock Text="역할"/><ComboBox x:Name="ControlRolePicker" ItemsSource="{Binding Roles}" DisplayMemberPath="Id" SelectedItem="{Binding SelectedRole}" AutomationProperties.AutomationId="ControlRole"/>
       <TextBlock Text="지원 기능"/><ComboBox x:Name="ControlCapabilityPicker" ItemsSource="{Binding Capabilities}" DisplayMemberPath="Operation" SelectedItem="{Binding SelectedCapability}"/>
       <TextBlock Text="{Binding CommandRange}" Foreground="#156D68" TextWrapping="Wrap"/>
@@ -116,7 +116,7 @@
      </DataGrid.Columns></DataGrid></DockPanel>
     </Grid>
    </TabItem>
-   <TabItem x:Name="HandoverTab" Header="작업 · 교대">
+   <TabItem x:Name="HandoverTab" Header="작업 · 교대" DataContext="{Binding JobManagement}">
     <Grid Margin="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MaxHeight="120"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MaxHeight="150"/></Grid.RowDefinitions>
      <StackPanel><TextBlock Text="{Binding PreviousSummary}" Style="{StaticResource SectionTitle}"/><TextBlock Text="원 요청자·세션·snapshot을 유지합니다. 다음 사용권자는 자신의 권한 범위에서 이전 작업을 선택 취소할 수 있습니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,0,0,12"/></StackPanel>
      <DataGrid Grid.Row="1" ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}" AutomationProperties.AutomationId="JobGrid"><DataGrid.Columns>
@@ -141,7 +141,7 @@
    </TabItem>
    <TabItem x:Name="AdminTab" Header="관리자 설정" Visibility="{Binding IsAdmin, Converter={StaticResource BoolVisibility}}">
     <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-     <Border Style="{StaticResource Card}"><StackPanel>
+     <Border Style="{StaticResource Card}" DataContext="{Binding DeviceSettings}"><StackPanel>
       <TextBlock Text="장비 등록 · 변경" Style="{StaticResource SectionTitle}"/><TextBlock Text="기존 장비는 장비 제어 탭에서 선택한 뒤 편집에 불러옵니다." TextWrapping="Wrap" Foreground="#65778E"/>
       <WrapPanel><Button Content="새 장비 ID" Command="{Binding NewDeviceCommand}"/><TextBlock Text="{Binding DeviceExpectedVersion, StringFormat=편집 기준 버전: {0}}" VerticalAlignment="Center"/></WrapPanel>
       <TextBlock Text="장비 ID"/><TextBox Text="{Binding DeviceIdText}"/><TextBlock Text="대상 PC ID"/><TextBox Text="{Binding PcIdText}"/><TextBlock Text="대상 PC의 실제 이름"/><TextBox Text="{Binding PcName}"/>
@@ -170,6 +170,7 @@
      </StackPanel></Border>
      <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
       <local:HiperwallSettingsView x:Name="HiperwallSettings" DataContext="{Binding Hiperwall}"/>
+      <StackPanel DataContext="{Binding AccountManagement}">
       <TextBlock Text="앱 계정 등록 · 권한" Style="{StaticResource SectionTitle}"/><TextBlock Text="계정 이름"/><TextBox Text="{Binding NewAccountName}"/><TextBlock Text="새 계정 비밀번호 (12자 이상)"/><PasswordBox x:Name="NewAccountPassword"/>
       <TextBlock Text="앱 역할"/><ComboBox ItemsSource="{Binding AccountRoles}" SelectedItem="{Binding NewAccountRole}"/>
       <CheckBox Content="현장 전체 장비 제어 범위" IsChecked="{Binding AccountAllDevices}" Margin="0,8"/>
@@ -179,10 +180,11 @@
       <Button Content="선택 계정의 권한 불러오기" Command="{Binding LoadAccountCommand}"/><CheckBox Content="계정 활성화" IsChecked="{Binding AccountEnabled}" Margin="0,8"/><Button Content="선택 계정에 활성/제어 범위 반영" Command="{Binding UpdateAccountCommand}"/>
       <TextBlock Text="계정 비활성화·제어 권한 회수는 이후 전송을 차단합니다. 기존 사용자 ID와 작업·감사 이력은 보존합니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,12"/>
       <TextBlock Text="최초 관리자 생성은 호스트 PC의 setup 명령에서만 수행합니다. 호스트 실행 계정·데이터 경로 변경과 비밀번호 분실 복구는 운영 절차를 확인하세요." TextWrapping="Wrap" Foreground="#65778E"/>
+      </StackPanel>
      </StackPanel></Border>
     </Grid></ScrollViewer>
    </TabItem>
-   <TabItem Header="복구 · 진단">
+   <TabItem Header="복구 · 진단" DataContext="{Binding Recovery}">
     <Grid Margin="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
      <TextBlock Text="{Binding RecoverySummary}" TextWrapping="Wrap" FontSize="14" Margin="0,0,0,10"/>
      <WrapPanel Grid.Row="1"><Button Content="3. 진행 작업 확인" Command="{Binding ReviewCommand}"/><Button Content="4. 관리자 복구 인계 승인" Command="{Binding ApproveCommand}" Style="{StaticResource Primary}"/></WrapPanel>
@@ -247,7 +249,7 @@
   <Border Grid.Row="1" Background="#E7EEF6" Padding="18,10"><StackPanel>
    <DockPanel>
     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-     <TextBlock Text="{Binding DeviceModeSummary}" FontSize="11" Foreground="#0C6657" Margin="0,0,16,0"/>
+     <TextBlock Text="{Binding DeviceSettings.DeviceModeSummary}" FontSize="11" Foreground="#0C6657" Margin="0,0,16,0"/>
      <TextBlock Text="{Binding ConnectionSummary}" FontSize="11" Foreground="#536C85"/>
     </StackPanel>
     <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,18,0" AutomationProperties.AutomationId="StatusMessage"/>

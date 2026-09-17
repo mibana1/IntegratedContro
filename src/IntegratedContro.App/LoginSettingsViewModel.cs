@@ -100,12 +100,12 @@ public sealed partial class MainViewModel
     {
         _preferences = result.Preferences;
         Endpoint = _preferences.Endpoint; Fingerprint = _preferences.Fingerprint;
-        PcIdText = _preferences.PcId.ToString(); LoginName = _preferences.LastLoginName;
+        DeviceSettings.SetDefaultPc(_preferences.PcId); LoginName = _preferences.LastLoginName;
         ConnectionEndpoint = Endpoint; ConnectionFingerprint = Fingerprint; ConnectionSettingsMessage = "";
         UpdatePreferencesRecovery(result);
         IsEditingConnectionSettings = result.RecoveryRequired;
         if (result.RecoveryRequired) Message = result.Message;
-        foreach (var name in new[] { nameof(Endpoint), nameof(Fingerprint), nameof(PcIdText), nameof(LoginName), nameof(LoginHostSummary) }) Changed(name);
+        foreach (var name in new[] { nameof(Endpoint), nameof(Fingerprint), nameof(LoginName), nameof(LoginHostSummary) }) Changed(name);
         NotifyMyInfo();
     }
     private void UpdatePreferencesRecovery(ClientPreferencesLoadResult result)

@@ -1,4 +1,4 @@
-global using Session = IntegratedContro.Application.HostAuthority.Session;
+global using Session = IntegratedContro.Application.SessionIdentity;
 using System.Security.Cryptography;
 using System.Text.Json;
 using IntegratedContro.Core;
@@ -9,7 +9,7 @@ using static IntegratedContro.Application.AcceptedJobRules;
 namespace IntegratedContro.Application;
 
 /// <summary>One lock, durable aggregate and authorization boundary. No device or media adapters.</summary>
-internal sealed class HostAuthority
+internal sealed partial class HostAuthority
 {
     private readonly object _gate = new();
     private readonly IStateStore _store;
@@ -25,10 +25,7 @@ internal sealed class HostAuthority
     internal sealed record Session(SessionInfo Info, DateTimeOffset CreatedAt)
     { public DateTimeOffset LastSeen { get; set; } = CreatedAt; }
     private sealed record ReviewTicket(Guid UserId, long Generation, DateTimeOffset At, string Fingerprint);
-    internal object Gate => _gate;
-    internal HostState State => _state;
-    internal bool StorageFailed => _storageFailed;
-    internal bool Stopping => _stopping;
+    internal HostState Snapshot { get { RequireScope(); return JsonDefaults.Copy(_state); } }
     internal int HeartbeatTimeoutSeconds => (int)_heartbeatTimeout.TotalSeconds;
     internal HostAuthority(IStateStore store, IPasswordHasher passwords, TimeProvider? time, int heartbeatTimeoutSeconds)
     {
@@ -48,15 +45,15 @@ internal sealed class HostAuthority
     }
     internal void StopAccepting() => _stopping = true;
     internal void Healthy() => Require(!_storageFailed && !_stopping, "host_unavailable", "호스트 저장 또는 종료 상태를 확인하세요.", 503);
-    internal void Persist(HostState next)
+    private void Persist(HostState next)
     {
         next.Revision++;
         try { _store.Save(next); _state = next; }
         catch { _storageFailed = true; throw; } // No in-memory success or alternate database on failed commit.
     }
-    internal T Change<T>(Func<HostState, T> action)
+    private T Change<T>(Func<HostState, T> action)
     {
-        lock (_gate)
+        using (Open())
         {
             Healthy(); CheckConnectionUnsafe();
             var next = JsonDefaults.Copy(_state);
@@ -93,7 +90,7 @@ internal sealed class HostAuthority
         Require(User(s, session).Role == AccountRole.Administrator, "admin_required", "관리자 권한이 필요합니다.", 403);
         return session;
     }
-    internal void Fence(HostState s, string reason)
+    private void Fence(HostState s, string reason)
     {
         s.Lease.Mode = LeaseMode.RecoveryRequired;
         s.Lease.Generation++;
@@ -113,10 +110,10 @@ internal sealed class HostAuthority
         Fence(next, "사용 세션 생존 확인 시간 초과");
         Persist(next);
     }
-    public void CheckConnections() { lock (_gate) { Healthy(); CheckConnectionUnsafe(); } }
+    public void CheckConnections() { using (Open()) { Healthy(); CheckConnectionUnsafe(); } }
     public LoginResult Login(LoginRequest request)
     {
-        lock (_gate)
+        using (Open())
         {
             Healthy(); CheckConnectionUnsafe();
             AccountName(request.UserName); Text(request.PcName, "앱 PC 이름");
@@ -153,7 +150,7 @@ internal sealed class HostAuthority
     });
     public Lease Heartbeat(string token, long generation)
     {
-        lock (_gate)
+        using (Open())
         {
             Healthy(); CheckConnectionUnsafe(); // An overdue heartbeat cannot revive a fenced session.
             var session = Owner(_state, token, generation);
@@ -170,7 +167,7 @@ internal sealed class HostAuthority
     });
     public bool Logout(string token)
     {
-        lock (_gate)
+        using (Open())
         {
             Healthy(); CheckConnectionUnsafe();
             var session = Authenticate(token);
@@ -185,38 +182,35 @@ internal sealed class HostAuthority
             return true;
         }
     }
-    public RecoveryReview ReviewRecovery(string token)
+    public RecoveryReview ReviewRecovery(string token, Func<StateContext, RecoveryContribution> describeRecovery)
     {
-        lock (_gate)
+        using (Open())
         {
             Healthy(); CheckConnectionUnsafe();
             var session = Admin(_state, token);
             Require(_state.Lease.Mode == LeaseMode.RecoveryRequired && _state.Lease.FencedAt is not null,
                 "recovery_order", "이전 세션 차단 확인 후 진행 작업을 검토할 수 있습니다.");
+            var contribution = describeRecovery(ReadContext);
             var id = Guid.NewGuid();
             _reviews.Clear();
-            _reviews[id] = new(session.Info.UserId, _state.Lease.Generation, Now, RecoveryFingerprint(_state));
+            _reviews[id] = new(session.Info.UserId, _state.Lease.Generation, Now, RecoveryFingerprint(_state, contribution.Fingerprint));
             var next = JsonDefaults.Copy(_state);
             Audit(next, session.Info.UserId, "RecoveryReviewed", $"review={id}");
             Persist(next);
-            return new RecoveryReview(id, _state.Lease.Generation, Now, JsonDefaults.Copy(_state.Jobs.ToArray()), _state.UncertainDevices.ToArray())
-                { HiperwallEdits = JsonDefaults.Copy(_state.HiperwallEdits.Where(r => r.Active || r.Steps.Any(s => s.State == HiperwallSendState.Unknown)).ToArray()),
-                  HiperwallDisplays = JsonDefaults.Copy(_state.HiperwallDisplays.Where(j => j.Outstanding).ToArray()) };
+            return contribution.Enrich(new RecoveryReview(id, _state.Lease.Generation, Now,
+                JsonDefaults.Copy(_state.Jobs.ToArray()), _state.UncertainDevices.ToArray()));
         }
     }
-    private static string RecoveryFingerprint(HostState state) => Digest(System.Text.Json.JsonSerializer.Serialize(
-        new { state.Jobs, state.UncertainDevices, HiperwallDisplays = state.HiperwallDisplays.Where(j => j.Outstanding).Select(j => new {
-            j.Request, j.Requester, j.CloseAt, j.StopRequested, j.StoppedBy,
-            Targets = j.Targets.Select(t => new { t.Command, t.OpenState, t.CleanupState, t.OpenAttempted, t.CleanupAttempts, t.Message })
-        }).ToArray(), HiperwallEdits = state.HiperwallEdits.Where(r => r.Active || r.Steps.Any(s => s.State == HiperwallSendState.Unknown)).ToArray() }, JsonDefaults.Options));
-    public Lease ApproveRecovery(string token, Guid reviewId) => Change(s =>
+    private static string RecoveryFingerprint(HostState state, string featureFingerprint) => Digest(JsonSerializer.Serialize(
+        new { state.Jobs, state.UncertainDevices, featureFingerprint }, JsonDefaults.Options));
+    public Lease ApproveRecovery(string token, Guid reviewId, Func<StateContext, RecoveryContribution> describeRecovery) => Change(s =>
     {
         var session = Admin(s, token);
         Require(_reviews.TryGetValue(reviewId, out _), "review_required", "진행 작업을 먼저 확인하세요.");
         var review = _reviews[reviewId];
         Require(s.Lease.Mode == LeaseMode.RecoveryRequired && s.Lease.FencedAt is not null &&
             review.UserId == session.Info.UserId && review.Generation == s.Lease.Generation &&
-            Now - review.At < TimeSpan.FromMinutes(5) && review.Fingerprint == RecoveryFingerprint(s),
+            Now - review.At < TimeSpan.FromMinutes(5) && review.Fingerprint == RecoveryFingerprint(s, describeRecovery(ReadContext).Fingerprint),
             "review_stale", "작업 상태가 바뀌었습니다. 진행 작업을 다시 확인하세요.");
         s.Lease = new Lease { Mode = LeaseMode.Free, Generation = s.Lease.Generation + 1 };
         Audit(s, session.Info.UserId, "RecoveryApproved", $"review={reviewId}; 작업 및 불확실 장비 보존");

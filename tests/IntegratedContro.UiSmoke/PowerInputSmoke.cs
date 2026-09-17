@@ -29,45 +29,45 @@ public static partial class Program
             foreach (var (model, role, name) in new[] { ("virtual-light", "light", "버튼 검증 조명"),
                 ("virtual-projector", "projector", "버튼 검증 프로젝터"), ("virtual-lift", "lift", "승강 검증") })
             {
-                await Execute(vm, vm.NewDeviceCommand); vm.SelectedModel = vm.Models.Single(m => m.Id == model);
-                vm.DeviceName = name; vm.ConnectionId = "power-input-smoke";
-                await Execute(vm, vm.SaveDeviceCommand);
-                vm.SelectedDevice = vm.Devices.Single(d => d.Name == name); vm.RoleName = role;
-                await Execute(vm, vm.SaveRoleCommand);
+                await Execute(vm, vm.DeviceSettings.NewDeviceCommand); vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == model);
+                vm.DeviceSettings.DeviceName = name; vm.DeviceSettings.ConnectionId = "power-input-smoke";
+                await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
+                vm.DeviceSettings.SelectedDevice = vm.DeviceSettings.Devices.Single(d => d.Name == name); vm.DeviceSettings.RoleName = role;
+                await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
             }
             var tabs = (TabControl)window.FindName("MainTabs");
             tabs.SelectedIndex = 0; vm.DeviceViewIndex = 1; window.UpdateLayout();
             var rolePicker = (ComboBox)window.FindName("ControlRolePicker");
-            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.Roles.Single(r => r.Id == "light"));
+            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.Roles.Single(r => r.Id == "light"));
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             var power = (PowerButtons)window.FindName("ManualPowerButtons");
             var numeric = (TextBox)window.FindName("ManualNumericValue");
             var on = (Button)power.FindName("OnButton"); var off = (Button)power.FindName("OffButton");
-            Require(power.IsVisible && !numeric.IsVisible && vm.IsPowerCommand, "Power retained numeric editor");
+            Require(power.IsVisible && !numeric.IsVisible && vm.DeviceControl.IsPowerCommand, "Power retained numeric editor");
             await Click(vm, on);
-            Require(vm.CommandValue == 1 && vm.Jobs.Count == 0 &&
+            Require(vm.DeviceControl.CommandValue == 1 && vm.JobManagement.Jobs.Count == 0 &&
                 ((SolidColorBrush)on.Background).Color == Color.FromRgb(0x15, 0x6D, 0x68), "ON choice lost value/highlight or dispatched early");
-            await Execute(vm, vm.SubmitCommand); await Wait(() => vm.Jobs.All(j => !j.Job.Active));
-            Require(vm.Jobs.Single().Job.Snapshot.Steps[0].Value == 1, "ON button did not submit numeric 1");
+            await Execute(vm, vm.DeviceControl.SubmitCommand); await Wait(() => vm.JobManagement.Jobs.All(j => !j.Job.Active));
+            Require(vm.JobManagement.Jobs.Single().Job.Snapshot.Steps[0].Value == 1, "ON button did not submit numeric 1");
             await Click(vm, off); await Execute(vm, vm.RefreshCommand); await Task.Delay(1300);
-            Require(vm.CommandValue == 0 && power.Value == 0 &&
+            Require(vm.DeviceControl.CommandValue == 0 && power.Value == 0 &&
                 ((SolidColorBrush)off.Background).Color == Color.FromRgb(0x15, 0x6D, 0x68), "OFF choice lost value/highlight during refresh");
-            await Execute(vm, vm.SubmitCommand); await Wait(() => vm.Jobs.All(j => !j.Job.Active));
-            Require(vm.Jobs.First().Job.Snapshot.Steps[0].Value == 0, "OFF button did not submit numeric 0");
+            await Execute(vm, vm.DeviceControl.SubmitCommand); await Wait(() => vm.JobManagement.Jobs.All(j => !j.Job.Active));
+            Require(vm.JobManagement.Jobs.First().Job.Snapshot.Steps[0].Value == 0, "OFF button did not submit numeric 0");
             var capability = (ComboBox)window.FindName("ControlCapabilityPicker");
-            capability.SetCurrentValue(ComboBox.SelectedItemProperty, vm.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness));
+            capability.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness));
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Require(!power.IsVisible && numeric.IsVisible, "Brightness did not restore numeric input");
             numeric.SetCurrentValue(TextBox.TextProperty, "42");
-            await Execute(vm, vm.RefreshCommand); Require(vm.CommandValue == 42, "Non-power draft lost during refresh");
-            capability.SetCurrentValue(ComboBox.SelectedItemProperty, vm.Capabilities.Single(c => c.Operation == DeviceOperation.Power));
+            await Execute(vm, vm.RefreshCommand); Require(vm.DeviceControl.CommandValue == 42, "Non-power draft lost during refresh");
+            capability.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Power));
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            await Click(vm, on); await Execute(vm, vm.SubmitCommand); await Wait(() => vm.Jobs.All(j => !j.Job.Active));
-            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.Roles.Single(r => r.Id == "projector"));
+            await Click(vm, on); await Execute(vm, vm.DeviceControl.SubmitCommand); await Wait(() => vm.JobManagement.Jobs.All(j => !j.Job.Active));
+            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.Roles.Single(r => r.Id == "projector"));
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Require(power.IsVisible && !numeric.IsVisible, "Another power-capable model retained numeric input");
             await Click(vm, on); await Execute(vm, vm.RefreshCommand);
-            Require(vm.CommandValue == 1 && vm.SelectedRole?.Id == "projector", "Other target's power choice changed");
+            Require(vm.DeviceControl.CommandValue == 1 && vm.DeviceControl.SelectedRole?.Id == "projector", "Other target's power choice changed");
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             Capture(window, Path.Combine(output, "manual-power-buttons.png"));
 
@@ -84,15 +84,15 @@ public static partial class Program
             Require(conditionPower.IsVisible && !conditionNumber.IsVisible, "Power precondition retained numeric input");
             await Click(vm, (Button)conditionPower.FindName("OnButton"));
             await Execute(vm, vm.RefreshCommand);
-            Require(vm.ScenarioEditor.ConditionValueText == "1" && vm.CommandValue == 1, "Condition button or polling changed another editor");
-            var before = vm.Jobs.Count;
+            Require(vm.ScenarioEditor.ConditionValueText == "1" && vm.DeviceControl.CommandValue == 1, "Condition button or polling changed another editor");
+            var before = vm.JobManagement.Jobs.Count;
             await Execute(vm, vm.ScenarioEditor.AddStepCommand);
             SetScenarioValue(vm, "light", DeviceOperation.Power, 0); await Execute(vm, vm.ScenarioEditor.AddStepCommand);
             SetScenarioValue(vm, "light", DeviceOperation.Brightness, 20);
             await Click(vm, (Button)conditionPower.FindName("OffButton"));
-            Require(vm.CommandValue == 1 && vm.ScenarioEditor.ConditionValueText == "0", "Condition and manual ON/OFF controls shared draft values");
+            Require(vm.DeviceControl.CommandValue == 1 && vm.ScenarioEditor.ConditionValueText == "0", "Condition and manual ON/OFF controls shared draft values");
             await Execute(vm, vm.ScenarioEditor.AddStepCommand);
-            Require(vm.Jobs.Count == before && vm.ScenarioEditor.DraftSteps.Select(s => s.ConditionValue).SequenceEqual(new int?[] { 1, 1, 0 }) &&
+            Require(vm.JobManagement.Jobs.Count == before && vm.ScenarioEditor.DraftSteps.Select(s => s.ConditionValue).SequenceEqual(new int?[] { 1, 1, 0 }) &&
                 vm.ScenarioEditor.DraftSteps.All(s => s.ConditionOperation == DeviceOperation.Power), "Condition buttons lost step expectations or sent while editing");
             await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
             await Execute(vm, vm.ScenarioEditor.LoadScenarioCommand);
@@ -100,8 +100,8 @@ public static partial class Program
             conditionPower.BringIntoView(); window.UpdateLayout();
             Capture(window, Path.Combine(output, "scenario-power-condition.png"));
             await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
-            await Wait(() => vm.Jobs.Any(j => j.Job.Kind == JobKind.Scenario && !j.Job.Active));
-            Require(vm.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Steps.All(s => s.Status == StepStatus.Simulated),
+            await Wait(() => vm.JobManagement.Jobs.Any(j => j.Job.Kind == JobKind.Scenario && !j.Job.Active));
+            Require(vm.JobManagement.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Steps.All(s => s.Status == StepStatus.Simulated),
                 "Actual virtual ON/OFF preconditions did not match button choices");
 
             conditionKind.SetCurrentValue(ComboBox.SelectedValueProperty, "Brightness");

@@ -8,10 +8,10 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class HiperwallService : ICameraContentCatalog, IScenarioDisplayOperations
 {
-    private readonly HostAuthority _host;
+    private readonly IHiperwallStateAccess _host;
     private readonly IScenarioJobLifecycle _jobs;
     private readonly CancellationTokenSource _previewStopping = new();
-    internal HiperwallService(HostAuthority host, IHiperwallReader? reader, ICredentialStore? credentials, IScenarioJobLifecycle jobs)
+    internal HiperwallService(IHiperwallStateAccess host, IHiperwallReader? reader, ICredentialStore? credentials, IScenarioJobLifecycle jobs)
     { _host = host; _hiperwall = reader; _credentials = credentials; _jobs = jobs; }
     internal bool ReadSupported => _hiperwall is not null;
     internal bool WriteSupported => _hiperwall is IHiperwallWriter;
@@ -23,7 +23,7 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
     public void ValidateMapping(int configurationVersion, string? selector, string? value)
     {
         if (string.IsNullOrEmpty(selector) && string.IsNullOrEmpty(value)) return;
-        Require(_host.State.Hiperwall?.Version == configurationVersion &&
+        Require(_host.Current.Hiperwall?.Version == configurationVersion &&
             _hiperwallView?.ConfigurationVersion == configurationVersion &&
             _hiperwallView.Contents.State == HiperwallListState.Available,
             "mapping_inventory_required", "현재 Hiperwall Contents를 조회하고 매핑 대상을 선택하세요.");
@@ -40,7 +40,7 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
     {
         _host.Healthy();
         var session = _host.Authenticate(token);
-        Require(!_host.State.FencedSessions.Contains(session.Info.Id), "session_fenced", "이전 세션이 차단되었습니다. 다시 로그인하세요.", 403);
+        Require(!_host.IsFenced(session.Info.Id), "session_fenced", "이전 세션이 차단되었습니다. 다시 로그인하세요.", 403);
         // Current account policy grants every enabled authenticated role site-wide read access.
         return session;
     }
@@ -48,7 +48,7 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
         new(c.Version, c.Name, c.Endpoint, c.Authentication, c.User, c.TimeoutMs, c.CredentialId is not null);
     private HiperwallView EmptyHiperwall(HiperwallConnectionState? state = null, string? message = null)
     {
-        var c = _host.State.Hiperwall;
+        var c = _host.Current.Hiperwall;
         var status = state ?? (c is null ? HiperwallConnectionState.NotConfigured : HiperwallConnectionState.NotChecked);
         return new(c?.Version ?? 0, c?.Name ?? "", c?.Endpoint ?? "", status,
             message ?? (c is null ? "관리자가 연결 설정을 저장해야 합니다." : "저장된 설정입니다. 아직 연결을 확인하지 않았습니다."),
@@ -56,22 +56,22 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
     }
     public HiperwallSettingsView GetHiperwallSettings(string token)
     {
-        lock (_host.Gate)
+        using (_host.Open())
         {
-            HiperwallReaderSession(token); _host.Admin(_host.State, token);
-            return _host.State.Hiperwall is { } c ? Settings(c) : new(0, "", "", HiperwallAuthentication.Token, "", 3000, false);
+            HiperwallReaderSession(token); _host.Admin(_host.Current, token);
+            return _host.Current.Hiperwall is { } c ? Settings(c) : new(0, "", "", HiperwallAuthentication.Token, "", 3000, false);
         }
     }
     public HiperwallView GetHiperwallStatus(string token)
     {
-        lock (_host.Gate) { HiperwallReaderSession(token); return JsonDefaults.Copy(_hiperwallView ?? EmptyHiperwall()); }
+        using (_host.Open()) { HiperwallReaderSession(token); return JsonDefaults.Copy(_hiperwallView ?? EmptyHiperwall()); }
     }
     public HiperwallSettingsView SaveHiperwallSettings(string token, SaveHiperwallRequest request)
     {
-        lock (_host.Gate)
+        using (_host.Open())
         {
-            _host.Healthy(); _host.CheckConnectionUnsafe();
-            var session = _host.Owner(_host.State, token, request.Generation); _host.Admin(_host.State, token);
+            _host.Healthy(); _host.CheckConnections();
+            var session = _host.Owner(_host.Current, token, request.Generation); _host.Admin(_host.Current, token);
             Require(_hiperwall is not null && _credentials is not null, "hiperwall_unavailable", "호스트의 Hiperwall 어댑터를 확인하세요.", 503);
             Text(request.Name, "연결 이름");
             Require(request.Endpoint is { Length: <= 2048 } &&
@@ -83,7 +83,7 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
                 "invalid_endpoint", "주소·포트를 명시하세요: http(s)://주소:포트 (경로·인증정보 제외).", 400);
             Require(Enum.IsDefined(request.Authentication), "invalid_authentication", "None 또는 Token 인증을 선택하세요.", 400);
             Require(request.TimeoutMs is >= 100 and <= 30000, "invalid_timeout", "전체 조회 제한시간은 100~30000ms입니다.", 400);
-            var old = _host.State.Hiperwall;
+            var old = _host.Current.Hiperwall;
             Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "다른 설정이 적용되었습니다. 적용 설정을 다시 불러오세요.");
             Guid? reference = null;
             var user = "";
@@ -104,11 +104,11 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
                 }
                 else reference = old!.CredentialId;
             }
-            var next = JsonDefaults.Copy(_host.State);
+            var next = _host.Draft();
             next.Hiperwall = new((old?.Version ?? 0) + 1, request.Name.Trim(), request.Endpoint.TrimEnd('/'),
                 request.Authentication, user, request.TimeoutMs, reference);
             _host.Audit(next, session.Info.UserId, "HiperwallSettingsSaved", $"version={next.Hiperwall.Version}");
-            _host.Persist(next);
+            _host.Commit(next);
             _hiperwallSequence++;
             foreach (var query in _hiperwallQueries.Values.ToArray()) query.Cancel();
             _hiperwallView = EmptyHiperwall();
@@ -136,23 +136,23 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
         long sequence;
         DateTimeOffset? previousSuccess;
         HiperwallView? previousView;
-        lock (_host.Gate)
+        using (_host.Open())
         {
             session = HiperwallReaderSession(token);
-            if (connectionTest) _host.Admin(_host.State, token);
-            if (_host.State.Hiperwall is null)
+            if (connectionTest) _host.Admin(_host.Current, token);
+            if (_host.Current.Hiperwall is null)
             {
                 if (connectionTest)
                 {
-                    var next = JsonDefaults.Copy(_host.State);
+                    var next = _host.Draft();
                     _host.Audit(next, session.Info.UserId, "HiperwallConnectionTest", "version=0; result=NotConfigured");
-                    _host.Persist(next);
+                    _host.Commit(next);
                 }
                 return EmptyHiperwall();
             }
             Require(_hiperwall is not null && _credentials is not null, "hiperwall_unavailable", "호스트의 Hiperwall 어댑터를 확인하세요.", 503);
             Require(!_hiperwallQueries.ContainsKey(session.Info.Id), "hiperwall_busy", "이 세션의 조회가 진행 중입니다.");
-            config = _host.State.Hiperwall;
+            config = _host.Current.Hiperwall;
             query = CancellationTokenSource.CreateLinkedTokenSource(ct);
             query.CancelAfter(config.TimeoutMs);
             _hiperwallQueries.Add(session.Info.Id, query);
@@ -174,10 +174,10 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
                 }
                 finally { secret = null; }
             }, query.Token).ConfigureAwait(false);
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 HiperwallReaderSession(token);
-                Require(_host.State.Hiperwall?.Version == config.Version, "hiperwall_settings_changed", "설정이 변경되어 이전 연결의 응답을 폐기했습니다.");
+                Require(_host.Current.Hiperwall?.Version == config.Version, "hiperwall_settings_changed", "설정이 변경되어 이전 연결의 응답을 폐기했습니다.");
                 query.Token.ThrowIfCancellationRequested();
                 var success = reading.State == HiperwallConnectionState.Connected ? _host.Now : previousSuccess;
                 var result = new HiperwallView(config.Version, config.Name, config.Endpoint, reading.State, reading.Message,
@@ -187,52 +187,52 @@ internal sealed partial class HiperwallService : ICameraContentCatalog, IScenari
                 if (sequence == _hiperwallSequence) _hiperwallView = result;
                 if (connectionTest)
                 {
-                    var next = JsonDefaults.Copy(_host.State);
+                    var next = _host.Draft();
                     _host.Audit(next, session.Info.UserId, "HiperwallConnectionTest", $"version={config.Version}; result={reading.State}");
-                    _host.Persist(next);
+                    _host.Commit(next);
                 }
                 return JsonDefaults.Copy(result);
             }
         }
         catch (DomainException e) when (e.Code == "credential_store_unavailable")
         {
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 HiperwallReaderSession(token);
-                Require(_host.State.Hiperwall?.Version == config.Version, "hiperwall_settings_changed", "설정이 변경되어 이전 연결의 결과를 폐기했습니다.");
+                Require(_host.Current.Hiperwall?.Version == config.Version, "hiperwall_settings_changed", "설정이 변경되어 이전 연결의 결과를 폐기했습니다.");
                 var result = FailedHiperwall(HiperwallConnectionState.ConnectionFailed, e.Message, previousView);
                 if (sequence == _hiperwallSequence) _hiperwallView = result;
                 if (connectionTest)
                 {
-                    var next = JsonDefaults.Copy(_host.State);
+                    var next = _host.Draft();
                     _host.Audit(next, session.Info.UserId, "HiperwallConnectionTest", $"version={config.Version}; result=ConnectionFailed");
-                    _host.Persist(next);
+                    _host.Commit(next);
                 }
                 return result;
             }
         }
         catch (OperationCanceledException)
         {
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 HiperwallReaderSession(token);
-                Require(_host.State.Hiperwall?.Version == config.Version, "hiperwall_settings_changed", "설정이 변경되어 이전 연결의 응답을 폐기했습니다.");
+                Require(_host.Current.Hiperwall?.Version == config.Version, "hiperwall_settings_changed", "설정이 변경되어 이전 연결의 응답을 폐기했습니다.");
                 var state = ct.IsCancellationRequested || _host.Stopping ? HiperwallConnectionState.ConnectionFailed : HiperwallConnectionState.TimedOut;
                 var reason = ct.IsCancellationRequested ? "조회가 취소되었습니다. 다시 조회하세요." : "전체 조회 제한시간을 초과했습니다.";
                 var result = FailedHiperwall(state, reason, previousView);
                 if (sequence == _hiperwallSequence) _hiperwallView = result;
                 if (connectionTest && !ct.IsCancellationRequested)
                 {
-                    var next = JsonDefaults.Copy(_host.State);
+                    var next = _host.Draft();
                     _host.Audit(next, session.Info.UserId, "HiperwallConnectionTest", $"version={config.Version}; result={state}");
-                    _host.Persist(next);
+                    _host.Commit(next);
                 }
                 return result;
             }
         }
         finally
         {
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 _hiperwallQueries.Remove(session.Info.Id);
                 if (sequence == _hiperwallSequence && _hiperwallView?.State == HiperwallConnectionState.Checking)

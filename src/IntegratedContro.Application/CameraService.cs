@@ -9,9 +9,9 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class CameraService
 {
-    private readonly HostAuthority _host;
+    private readonly ICameraStateAccess _host;
     private readonly ICameraContentCatalog _contents;
-    internal CameraService(HostAuthority host, IMediaMtxClient? media, IMediaSecretStore? secrets, ICameraContentCatalog contents)
+    internal CameraService(ICameraStateAccess host, IMediaMtxClient? media, IMediaSecretStore? secrets, ICameraContentCatalog contents)
     { _host = host; _media = media; _mediaSecrets = secrets; _contents = contents; }
     internal bool Supported => _media is not null;
     internal void Stop() => _mediaStopping.Cancel();
@@ -28,12 +28,12 @@ internal sealed partial class CameraService
         c.StreamPath, c.Enabled, c.Provisioning, c.Message, c.UpdatedAt, c.ContentSelector, c.ContentValue);
     public CameraCatalog GetCameras(string token)
     {
-        lock (_host.Gate)
+        using (_host.Open())
         {
             _host.Healthy(); _host.Authenticate(token);
-            return new(_host.State.Cameras.Select(CameraInfo).OrderBy(c => c.Name).ToArray(),
-                _host.State.CameraCleanup.Select(c => new CameraCleanupView(c.Id, c.StreamPath, c.RequesterName, c.Attempts, c.Message)).ToArray(),
-                MediaSettings(_host.State.Media));
+            return new(_host.Current.Cameras.Select(CameraInfo).OrderBy(c => c.Name).ToArray(),
+                _host.Current.CameraCleanup.Select(c => new CameraCleanupView(c.Id, c.StreamPath, c.RequesterName, c.Attempts, c.Message)).ToArray(),
+                MediaSettings(_host.Current.Media));
         }
     }
     private static string MediaEndpoint(string value)
@@ -49,30 +49,30 @@ internal sealed partial class CameraService
         "media_unavailable", "호스트 영상 어댑터를 확인하세요.", 503);
     public MediaSettingsView SaveMediaSettings(string token, SaveMediaSettingsRequest request)
     {
-        lock (_host.Gate)
+        using (_host.Open())
         {
-            _host.Healthy(); _host.CheckConnectionUnsafe(); var session = _host.Owner(_host.State, token, request.Generation); _host.Admin(_host.State, token); MediaAvailable();
+            _host.Healthy(); _host.CheckConnections(); var session = _host.Owner(_host.Current, token, request.Generation); _host.Admin(_host.Current, token); MediaAvailable();
             var api = MediaEndpoint(request.ApiEndpoint); var hls = MediaEndpoint(request.HlsEndpoint);
             Text(request.ApiUser, "API 사용자", 128); Text(request.HlsUser, "HLS 사용자", 128);
             Require(!request.ApiUser.Contains(':') && !request.HlsUser.Contains(':') && request.ApiUser != request.HlsUser,
                 "media_accounts", "API 제어와 HLS 읽기에 서로 다른 전용 사용자 이름을 지정하세요.", 400);
-            var old = _host.State.Media;
+            var old = _host.Current.Media;
             Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "영상 설정을 다시 불러오세요.");
             var sameTarget = old is not null && old.ApiEndpoint == api && old.HlsEndpoint == hls &&
                 old.ApiUser == request.ApiUser && old.HlsUser == request.HlsUser;
-            Require(sameTarget || _host.State.Cameras.Count + _host.State.CameraCleanup.Count == 0,
+            Require(sameTarget || _host.Current.Cameras.Count + _host.Current.CameraCleanup.Count == 0,
                 "media_in_use", "등록 카메라와 경로 정리 큐가 비워진 뒤 MediaMTX 대상을 변경하세요.");
             MediaCredentials? previous = sameTarget ? Credentials(old!) : null;
             var apiPassword = string.IsNullOrEmpty(request.ApiPassword) ? previous?.ApiPassword : request.ApiPassword;
             var hlsPassword = string.IsNullOrEmpty(request.HlsPassword) ? previous?.HlsPassword : request.HlsPassword;
             MediaPassword(apiPassword); MediaPassword(hlsPassword);
             var secret = _mediaSecrets!.Save(JsonSerializer.Serialize(new MediaCredentials(apiPassword!, hlsPassword!), JsonDefaults.Options));
-            var next = JsonDefaults.Copy(_host.State);
+            var next = _host.Draft();
             next.Media = new((old?.Version ?? 0) + 1, api, hls, request.ApiUser, request.HlsUser, secret);
             if (old is not null) next.MediaSecretsToDelete.Add(old.CredentialId);
             next.Cameras = next.Cameras.Select(c => c with { NextSyncAt = _host.Now }).ToList();
             _host.Audit(next, session.Info.UserId, "MediaSettingsSaved", $"version={next.Media.Version}");
-            try { _host.Persist(next); } catch { TryDeleteUncommittedSecret(secret); throw; }
+            try { _host.Commit(next); } catch { TryDeleteUncommittedSecret(secret); throw; }
             return MediaSettings(next.Media);
         }
     }
@@ -100,34 +100,34 @@ internal sealed partial class CameraService
     }
     public CameraView SaveCamera(string token, SaveCameraRequest request)
     {
-        lock (_host.Gate)
+        using (_host.Open())
         {
-            _host.Healthy(); _host.CheckConnectionUnsafe(); var session = _host.Owner(_host.State, token, request.Generation); _host.Admin(_host.State, token); MediaAvailable();
-            Require(_host.State.Media is not null, "media_not_configured", "MediaMTX 설정을 먼저 저장하세요.");
+            _host.Healthy(); _host.CheckConnections(); var session = _host.Owner(_host.Current, token, request.Generation); _host.Admin(_host.Current, token); MediaAvailable();
+            Require(_host.Current.Media is not null, "media_not_configured", "MediaMTX 설정을 먼저 저장하세요.");
             Require(request.Id != Guid.Empty, "camera_id_required", "새 카메라 ID가 필요합니다.", 400);
             Text(request.Name, "카메라 이름", 100);
             Require(request.Location is { Length: <= 200 } && !request.Location.Any(char.IsControl),
                 "invalid_location", "위치는 제어 문자 없이 200자 이내로 입력하세요.", 400);
-            var old = _host.State.Cameras.SingleOrDefault(c => c.Id == request.Id);
+            var old = _host.Current.Cameras.SingleOrDefault(c => c.Id == request.Id);
             Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "카메라 목록을 새로 조회하세요.");
             Require(old is null || !old.DeleteRequested, "camera_deleting", "카메라 삭제 결과를 확인하세요.");
-            Require(old is not null || _host.State.Cameras.Count < 500, "camera_limit", "카메라 등록 한도는 500개입니다.");
+            Require(old is not null || _host.Current.Cameras.Count < 500, "camera_limit", "카메라 등록 한도는 500개입니다.");
             if (old is null || old.ContentSelector != request.ContentSelector || old.ContentValue != request.ContentValue)
                 _contents.ValidateMapping(request.HiperwallConfigurationVersion, request.ContentSelector, request.ContentValue);
             Require(!string.IsNullOrEmpty(request.RtspUrl) || old is not null &&
                 string.IsNullOrEmpty(request.UserName) && string.IsNullOrEmpty(request.Password),
                 "source_required", "새 카메라 또는 RTSP 계정 변경 시 RTSP 주소도 입력하세요.", 400);
             var source = string.IsNullOrEmpty(request.RtspUrl) ? (Guid?)null : _mediaSecrets!.Save(PrepareSource(request));
-            var next = JsonDefaults.Copy(_host.State);
+            var next = _host.Draft();
             var camera = new CameraRegistration(request.Id, (old?.Version ?? 0) + 1, request.Name.Trim(), request.Location.Trim(),
-                old?.StreamPath ?? $"ic-{_host.State.SiteId:N}-{Guid.NewGuid():N}", source ?? old!.SourceCredentialId,
+                old?.StreamPath ?? $"ic-{_host.Current.SiteId:N}-{Guid.NewGuid():N}", source ?? old!.SourceCredentialId,
                 request.Enabled, CameraProvisioning.Pending, "등록 저장 완료 · MediaMTX 경로 준비 대기", _host.Now, _host.Now,
                 ContentSelector: string.IsNullOrEmpty(request.ContentSelector) ? null : request.ContentSelector,
                 ContentValue: string.IsNullOrEmpty(request.ContentValue) ? null : request.ContentValue);
             next.Cameras.RemoveAll(c => c.Id == request.Id); next.Cameras.Add(camera);
             if (source is not null && old is not null) next.MediaSecretsToDelete.Add(old.SourceCredentialId);
             _host.Audit(next, session.Info.UserId, "CameraSaved", $"camera={camera.Id}; version={camera.Version}; enabled={camera.Enabled}");
-            try { _host.Persist(next); } catch { if (source is { } reference) TryDeleteUncommittedSecret(reference); throw; }
+            try { _host.Commit(next); } catch { if (source is { } reference) TryDeleteUncommittedSecret(reference); throw; }
             return CameraInfo(camera);
         }
     }
@@ -141,7 +141,7 @@ internal sealed partial class CameraService
         _host.Audit(s, session.Info.UserId, "CameraSyncRequested", $"camera={camera.Id}");
         return true;
     });
-    private static CameraRegistration FindCamera(HostState s, CameraActionRequest r)
+    private static CameraRegistration FindCamera(CameraStateScope s, CameraActionRequest r)
     {
         var camera = s.Cameras.SingleOrDefault(c => c.Id == r.Id);
         Require(camera is not null, "camera_not_found", "등록 카메라가 없습니다.", 404);
@@ -182,12 +182,12 @@ internal sealed partial class CameraService
         try
         {
             CameraRegistration? camera; CameraCleanup? cleanup; MediaConfiguration? config;
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 if (_host.Stopping || _host.StorageFailed || ct.IsCancellationRequested) return;
-                cleanup = _host.State.CameraCleanup.FirstOrDefault(c => c.NextAttemptAt <= _host.Now);
-                camera = cleanup is null ? _host.State.Cameras.OrderBy(c => c.NextSyncAt).FirstOrDefault(c => c.NextSyncAt <= _host.Now) : null;
-                config = cleanup?.Configuration ?? _host.State.Media;
+                cleanup = _host.Current.CameraCleanup.FirstOrDefault(c => c.NextAttemptAt <= _host.Now);
+                camera = cleanup is null ? _host.Current.Cameras.OrderBy(c => c.NextSyncAt).FirstOrDefault(c => c.NextSyncAt <= _host.Now) : null;
+                config = cleanup?.Configuration ?? _host.Current.Media;
             }
             if (config is null) return;
             string? failure = null;
@@ -208,12 +208,12 @@ internal sealed partial class CameraService
             }
             catch (Exception e) when (e is DomainException or HttpRequestException or IOException or OperationCanceledException or JsonException or InvalidOperationException)
             { failure = e is DomainException d ? d.Message : "MediaMTX 연결·응답을 확인하고 재동기화하세요."; }
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 if (_host.StorageFailed || _host.Stopping) return;
                 if (cleanup is not null || camera is not null)
                 {
-                    var next = JsonDefaults.Copy(_host.State);
+                    var next = _host.Draft();
                     if (cleanup is not null)
                     {
                         var item = next.CameraCleanup.Single(c => c.Id == cleanup.Id);
@@ -247,7 +247,7 @@ internal sealed partial class CameraService
                                 _host.Audit(next, null, "CameraReconciled", $"camera={camera.Id}; state={status}");
                         }
                     }
-                    _host.Persist(next); // A late sync result can never recreate a force-deleted registration.
+                    _host.Commit(next); // A late sync result can never recreate a force-deleted registration.
                 }
                 CollectMediaSecrets();
             }
@@ -256,31 +256,31 @@ internal sealed partial class CameraService
     }
     private void CollectMediaSecrets()
     {
-        var live = _host.State.Cameras.Select(c => c.SourceCredentialId)
-            .Concat(_host.State.CameraCleanup.SelectMany(c => new[] { c.SourceCredentialId, c.Configuration.CredentialId }))
-            .Concat(_host.State.Media is { } m ? new[] { m.CredentialId } : []).ToHashSet();
+        var live = _host.Current.Cameras.Select(c => c.SourceCredentialId)
+            .Concat(_host.Current.CameraCleanup.SelectMany(c => new[] { c.SourceCredentialId, c.Configuration.CredentialId }))
+            .Concat(_host.Current.Media is { } m ? new[] { m.CredentialId } : []).ToHashSet();
         var deleted = new List<Guid>();
-        foreach (var id in _host.State.MediaSecretsToDelete.Distinct().Where(id => !live.Contains(id)).Take(20))
+        foreach (var id in _host.Current.MediaSecretsToDelete.Distinct().Where(id => !live.Contains(id)).Take(20))
         {
             try { _mediaSecrets!.Delete(id); deleted.Add(id); } catch (DomainException) { break; }
         }
         if (deleted.Count == 0) return;
-        var next = JsonDefaults.Copy(_host.State);
-        next.MediaSecretsToDelete.RemoveAll(deleted.Contains); _host.Persist(next);
+        var next = _host.Draft();
+        next.MediaSecretsToDelete.RemoveAll(deleted.Contains); _host.Commit(next);
     }
     private (CameraRegistration Camera, MediaConfiguration Configuration) ReadableCamera(string token, Guid id, int version)
     {
         _host.Healthy(); _host.Authenticate(token); MediaAvailable();
-        var camera = _host.State.Cameras.SingleOrDefault(c => c.Id == id);
+        var camera = _host.Current.Cameras.SingleOrDefault(c => c.Id == id);
         Require(camera is not null && camera.Version == version, "camera_changed", "카메라가 변경·삭제되었습니다. 다시 선택하세요.", 409);
         Require(camera!.Enabled && !camera.DeleteRequested && camera.Provisioning == CameraProvisioning.Ready &&
-            _host.State.Media is not null, "camera_not_ready", "활성 카메라의 경로 준비 결과를 확인하세요.");
-        return (camera, _host.State.Media!);
+            _host.Current.Media is not null, "camera_not_ready", "활성 카메라의 경로 준비 결과를 확인하세요.");
+        return (camera, _host.Current.Media!);
     }
     public async Task<CameraConnection> GetCameraStatusAsync(string token, Guid id, int version, CancellationToken ct)
     {
         CameraRegistration camera; MediaConfiguration config;
-        lock (_host.Gate) (camera, config) = ReadableCamera(token, id, version);
+        using (_host.Open()) (camera, config) = ReadableCamera(token, id, version);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, _mediaStopping.Token); timeout.CancelAfter(8000);
         Require(await _mediaReads.WaitAsync(0, timeout.Token), "media_busy", "영상 조회가 많습니다. 잠시 후 다시 시도하세요.", 429);
         try
@@ -289,10 +289,10 @@ internal sealed partial class CameraService
             try { status = await _media!.GetStatusAsync(config, Credentials(config), camera.StreamPath, timeout.Token); }
             catch (Exception e) when (e is HttpRequestException or IOException or JsonException or OperationCanceledException)
             { throw new DomainException("media_status_failed", "실제 영상 입력을 조회하지 못했습니다.", 502); }
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 ReadableCamera(token, id, version);
-                Require(_host.State.Media?.Version == config.Version, "media_changed", "영상 설정이 변경되었습니다.");
+                Require(_host.Current.Media?.Version == config.Version, "media_changed", "영상 설정이 변경되었습니다.");
             }
             return status;
         }
@@ -302,7 +302,7 @@ internal sealed partial class CameraService
     {
         Require(MediaLimits.ValidAsset(asset), "invalid_asset", "허용된 HLS 파일 이름만 요청할 수 있습니다.", 400);
         CameraRegistration camera; MediaConfiguration config;
-        lock (_host.Gate) (camera, config) = ReadableCamera(token, id, version);
+        using (_host.Open()) (camera, config) = ReadableCamera(token, id, version);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, _mediaStopping.Token); timeout.CancelAfter(15000);
         Require(await _mediaReads.WaitAsync(0, timeout.Token), "media_busy", "동시 영상 조회 한도를 초과했습니다.", 429);
         try
@@ -311,24 +311,23 @@ internal sealed partial class CameraService
             try { payload = await _media!.ReadHlsAsync(config, Credentials(config), camera.StreamPath, asset, timeout.Token); }
             catch (Exception e) when (e is HttpRequestException or IOException or JsonException or OperationCanceledException or DecoderFallbackException)
             { throw new DomainException("hls_failed", "HLS 영상을 받지 못했습니다. 연결과 코덱·영상 상태를 확인하세요.", 502); }
-            lock (_host.Gate)
+            using (_host.Open())
             {
                 ReadableCamera(token, id, version);
-                Require(_host.State.Media?.Version == config.Version, "media_changed", "영상 설정이 변경되었습니다.");
+                Require(_host.Current.Media?.Version == config.Version, "media_changed", "영상 설정이 변경되었습니다.");
                 ct.ThrowIfCancellationRequested();
             }
             return payload;
         }
         finally { _mediaReads.Release(); }
     }
-    internal void RecoverCameras()
+    internal void RecoverCameras(StateContext context)
     {
-        if (_host.State.Cameras.Count == 0 && _host.State.CameraCleanup.Count == 0) return;
-        var next = JsonDefaults.Copy(_host.State);
+        var next = _host.For(context);
+        if (next.Cameras.Count == 0 && next.CameraCleanup.Count == 0) return;
         next.Cameras = next.Cameras.Select(c => c.Provisioning == CameraProvisioning.DeleteFailed ? c : c with { NextSyncAt = _host.Now,
             Provisioning = c.DeleteRequested ? CameraProvisioning.Deleting : CameraProvisioning.Pending,
             Message = "호스트 시작 · 저장 등록과 경로 재동기화 대기" }).ToList();
         next.CameraCleanup = next.CameraCleanup.Select(c => c with { NextAttemptAt = _host.Now }).ToList();
-        _host.Persist(next);
     }
 }

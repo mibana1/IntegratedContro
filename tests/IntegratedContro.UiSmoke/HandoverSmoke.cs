@@ -53,18 +53,18 @@ public static partial class Program
             vm.LoginName = "admin"; vm.ReadLoginPassword = () => host.Password;
             await Execute(vm, vm.LoginCommand);
             // No Hiperwall refresh/history action is needed to discover work.
-            Require(vm.PreviousSummary.StartsWith("이전 사용자 작업 1건"), "Handover omitted Hiperwall at login");
-            Require(vm.HiperwallJobs.Count == 1 && vm.HiperwallJobs[0].PreviousSession, "Same-account previous session missing");
+            Require(vm.JobManagement.PreviousSummary.StartsWith("이전 사용자 작업 1건"), "Handover omitted Hiperwall at login");
+            Require(vm.JobManagement.HiperwallJobs.Count == 1 && vm.JobManagement.HiperwallJobs[0].PreviousSession, "Same-account previous session missing");
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("HandoverTab");
             window.UpdateLayout();
             var grid = (DataGrid)window.FindName("HiperwallJobGrid");
-            grid.SelectedItem = vm.HiperwallJobs.Single();
-            Require(vm.SelectedHiperwallJob?.Id == request.RequestId, "Hiperwall handover selection binding failed");
-            Require(vm.HiperwallJobDetails.Contains(original.Session.Id.ToString()) &&
-                vm.HiperwallJobDetails.Contains(fixture.Server.Endpoint), "Original session/target missing");
-            Require(!vm.CancelHiperwallJobCommand.CanExecute(null), "Read-only session could cancel");
+            grid.SelectedItem = vm.JobManagement.HiperwallJobs.Single();
+            Require(vm.JobManagement.SelectedHiperwallJob?.Id == request.RequestId, "Hiperwall handover selection binding failed");
+            Require(vm.JobManagement.HiperwallJobDetails.Contains(original.Session.Id.ToString()) &&
+                vm.JobManagement.HiperwallJobDetails.Contains(fixture.Server.Endpoint), "Original session/target missing");
+            Require(!vm.JobManagement.CancelHiperwallJobCommand.CanExecute(null), "Read-only session could cancel");
             await Execute(vm, vm.AcquireCommand);
-            Require(vm.CancelHiperwallJobCommand.CanExecute(null), "New owner cannot cancel pending previous work");
+            Require(vm.JobManagement.CancelHiperwallJobCommand.CanExecute(null), "New owner cannot cancel pending previous work");
             var output = Path.Combine(host.Root, "artifacts", "ui-smoke");
             Capture(window, Path.Combine(output, "handover-hiperwall.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
@@ -76,13 +76,13 @@ public static partial class Program
             release.TrySetResult();
             await HostProcess.Until(client, s => s.OutstandingHiperwallEdits.Single().Steps.Any(x => x.State == HiperwallSendState.Unknown));
             // The regular state poll must pick up the uncertainty without a manual refresh.
-            await Wait(() => vm.HiperwallJobs.Single().Receipt!.Steps.Any(s => s.State == HiperwallSendState.Unknown));
-            Require(vm.PreviousSummary.StartsWith("이전 사용자 작업 1건"), "Unknown disappeared from handover count");
-            Require(!vm.CancelHiperwallJobCommand.CanExecute(null), "Unknown-only work advertised cancellable");
+            await Wait(() => vm.JobManagement.HiperwallJobs.Single().Receipt!.Steps.Any(s => s.State == HiperwallSendState.Unknown));
+            Require(vm.JobManagement.PreviousSummary.StartsWith("이전 사용자 작업 1건"), "Unknown disappeared from handover count");
+            Require(!vm.JobManagement.CancelHiperwallJobCommand.CanExecute(null), "Unknown-only work advertised cancellable");
             await Execute(vm, vm.LogoutCommand);
-            Require(vm.HiperwallJobs.Count == 0 && vm.SelectedHiperwallJob is null, "Logout retained handover entries");
+            Require(vm.JobManagement.HiperwallJobs.Count == 0 && vm.JobManagement.SelectedHiperwallJob is null, "Logout retained handover entries");
             await Execute(vm, vm.LoginCommand);
-            Require(vm.HiperwallJobs.Count == 1 && vm.PreviousSummary.StartsWith("이전 사용자 작업 1건"),
+            Require(vm.JobManagement.HiperwallJobs.Count == 1 && vm.JobManagement.PreviousSummary.StartsWith("이전 사용자 작업 1건"),
                 "Relogin did not automatically restore outstanding handover");
             listener.Flush(); Require(string.IsNullOrWhiteSpace(bindingLog.ToString()), "Handover binding errors: " + bindingLog);
             await File.WriteAllTextAsync(Path.Combine(output, "handover-result.txt"),

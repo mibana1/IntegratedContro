@@ -2,7 +2,7 @@ using IntegratedContro.Core;
 
 namespace IntegratedContro.App;
 
-public sealed partial class MainViewModel
+public sealed partial class DeviceControlViewModel
 {
     public bool IsPowerCommand => SelectedCapability?.Operation == DeviceOperation.Power;
     public bool IsNumericCommand => !IsPowerCommand;

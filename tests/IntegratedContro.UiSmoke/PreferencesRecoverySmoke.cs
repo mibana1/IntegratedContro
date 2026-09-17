@@ -43,7 +43,7 @@ public static partial class Program
                 "Damaged profile did not open the recovery/settings screen");
             Require(await File.ReadAllTextAsync(path) == damaged && await File.ReadAllTextAsync(path + ".bak") == json,
                 "Startup changed the damaged original or backup without a recovery action");
-            Require(vm.PcIdText == expected.PcId.ToString() && vm.ConnectionEndpoint == expected.Endpoint &&
+            Require(vm.DeviceSettings.PcIdText == expected.PcId.ToString() && vm.ConnectionEndpoint == expected.Endpoint &&
                 ((Button)dialog.FindName("RestorePreferencesBackup")).IsEnabled,
                 "Valid backup did not populate a reviewable recovery choice");
             var output = Path.Combine(host.Root, "artifacts", "ui-smoke"); Directory.CreateDirectory(output);
@@ -63,7 +63,7 @@ public static partial class Program
             (vm, dialog) = await OpenWindow();
             Require(vm.IsEditingConnectionSettings && !((Button)dialog.FindName("RestorePreferencesBackup")).IsEnabled,
                 "Invalid backup was offered for recovery");
-            var newPcId = vm.PcIdText;
+            var newPcId = vm.DeviceSettings.PcIdText;
             ((TextBox)dialog.FindName("HostEndpoint")).Text = host.Endpoint;
             ((TextBox)dialog.FindName("CertificateFingerprint")).Text = host.Fingerprint;
             await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));
@@ -83,7 +83,7 @@ public static partial class Program
                 Capture(dialog, Path.Combine(output, "preferences-recovery-save-failure.png"));
             }
             await Click(vm, (Button)dialog.FindName("ReloadPreferences"));
-            Require(!vm.IsEditingConnectionSettings && vm.PcIdText == newPcId && ClientPreferences.Load().PcId.ToString() == newPcId,
+            Require(!vm.IsEditingConnectionSettings && vm.DeviceSettings.PcIdText == newPcId && ClientPreferences.Load().PcId.ToString() == newPcId,
                 "Retry after unlocking did not restore the unchanged profile");
             await CloseWindow();
 

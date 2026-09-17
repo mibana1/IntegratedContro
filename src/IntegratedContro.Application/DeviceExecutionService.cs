@@ -8,9 +8,9 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
 {
-    private readonly HostAuthority _host;
+    private readonly IDeviceStateAccess _host;
     private readonly DeviceDriverRegistry _drivers;
-    internal DeviceExecutionService(HostAuthority host, DeviceDriverRegistry drivers)
+    internal DeviceExecutionService(IDeviceStateAccess host, DeviceDriverRegistry drivers)
     { _host = host; _drivers = drivers; }
     internal DeviceModel[] Models => _drivers.Models;
     public DeviceConfig SaveDevice(string token, DeviceRequest request) => _host.Change(s =>
@@ -74,8 +74,9 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
         _host.Audit(s, session.Info.UserId, "RoleUnassigned", $"role={role.Id}; device={role.DeviceId}; v={role.Version}");
         return true;
     });
-    public StepSnapshot Resolve(HostState s, Account user, ScenarioStep step, RoleBinding? overrideRole = null)
+    public StepSnapshot Resolve(StateContext context, AccountView user, ScenarioStep step, RoleBinding? overrideRole = null)
     {
+        var s = _host.For(context);
         ValidateStep(step);
         Require(step.Kind != ScenarioStepKind.DisplayLayout, "invalid_step", "장비 단계만 실행할 수 있습니다.", 400);
         Require(step.LayoutId is null, "invalid_step", "장비 단계에 배치를 지정할 수 없습니다.", 400);
@@ -100,20 +101,20 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
             Require(c is { CanRead: true } && step.ConditionValue >= c.Minimum && step.ConditionValue <= c.Maximum,
                 "invalid_condition", "조회 가능한 기능과 상태 확인 조건을 지정하세요.", 400);
         }
-        return new(role!, device, step.Operation, step.Value, capability.Unit, step.DelayBeforeMs, step.TimeoutMs,
+        return new(role!, JsonDefaults.Copy(device), step.Operation, step.Value, capability.Unit, step.DelayBeforeMs, step.TimeoutMs,
             step.OnFailure, step.ConditionOperation, step.ConditionValue) { Kind = step.Kind, ModelDefinition = model };
     }
     public async Task<DeviceState> ReconcileAsync(string token, ReconcileRequest request, CancellationToken ct = default)
     {
         DeviceConfig target;
-        lock (_host.Gate)
+        using (_host.Open())
         {
-            _host.Healthy(); _host.CheckConnectionUnsafe();
-            var session = _host.Owner(_host.State, token, request.Generation);
-            target = _host.State.Devices.SingleOrDefault(x => x.Id == request.DeviceId)
+            _host.Healthy(); _host.CheckConnections();
+            var session = _host.Owner(_host.Current, token, request.Generation);
+            target = _host.Current.Devices.SingleOrDefault(x => x.Id == request.DeviceId)
                 ?? throw new DomainException("target_missing", "대상 장비가 없습니다.", 404);
-            Require(CanControl(_host.User(_host.State, session), target.Id), "target_forbidden", "대상 제어 권한이 없습니다.", 403);
-            Require(!_host.State.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == target.Id)),
+            Require(CanControl(_host.User(_host.Current, session), target.Id), "target_forbidden", "대상 제어 권한이 없습니다.", 403);
+            Require(!_host.Current.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == target.Id)),
                 "device_busy", "대상 작업의 전송·중단 처리가 끝난 후 조회·대조하세요.");
         }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -137,9 +138,10 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
             return state;
         });
     }
-    public string? RevalidateTarget(HostState s, Job job, StepSnapshot step)
+    public string? RevalidateTarget(StateContext context, Job job, StepSnapshot step)
     {
-        var user = s.Accounts.SingleOrDefault(a => a.Id == job.Snapshot.RequestedBy);
+        var s = _host.For(context);
+        var user = _host.FindAccount(s, job.Snapshot.RequestedBy);
         if (step.Target is not { } target || step.Role is not { } binding) return "장비 대상 누락";
         if (user is null || !CanControl(user, target.Id)) return "원 요청자 계정/대상 권한 회수";
         var device = s.Devices.SingleOrDefault(d => d.Id == target.Id);
@@ -177,8 +179,9 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
             result = new(StepStatus.Unknown, "드라이버 결과와 상태 증거 불일치 / 대조 필요");
         return result;
     }
-    public void RecordResult(HostState next, StepSnapshot snapshot, DriverResult result)
+    public void RecordResult(StateContext context, StepSnapshot snapshot, DriverResult result)
     {
+        var next = _host.For(context);
         if (snapshot.Kind == ScenarioStepKind.DeviceCommand && snapshot.Target is { } target &&
             next.Devices.Any(d => d.MatchesExecutionTarget(target)) && next.DeviceStates.TryGetValue(target.Id, out var device))
         {
@@ -190,10 +193,29 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
             if (result.Status == StepStatus.Unknown && !next.UncertainDevices.Contains(target.Id)) next.UncertainDevices.Add(target.Id);
         }
     }
-    public void RecordConditionReading(HostState state, StepSnapshot step, DriverReading reading)
+    public void RecordConditionReading(StateContext context, StepSnapshot step, DriverReading reading)
     {
+        var state = _host.For(context);
         var device = state.DeviceStates[step.Target!.Id];
         RecordValues(device, step.Target, reading.Values, reading.Evidence);
         device.Connection = ConnectedLabel(step.Target); device.LastResult = "조건 대기 중 최신 상태 조회";
+    }
+    public void RecordDispatchIntent(StateContext context, StepSnapshot step) =>
+        _host.For(context).DeviceStates[step.Target!.Id].Desired[step.Operation] = step.Value;
+    public void MarkUncertain(StateContext context, IEnumerable<Guid> ids)
+    {
+        var state = _host.For(context);
+        foreach (var id in ids)
+            if (!state.UncertainDevices.Contains(id)) state.UncertainDevices.Add(id);
+    }
+    public void RecoverInterrupted(StateContext context, StepSnapshot step, string message)
+    {
+        var state = _host.For(context);
+        if (step.Target is { } target && state.Devices.Any(d => d.MatchesExecutionTarget(target)) &&
+            state.DeviceStates.TryGetValue(target.Id, out var device))
+        {
+            device.Connection = "호스트 중단 / 상태 대조 필요"; device.LastResult = message;
+            MarkUncertain(context, [target.Id]);
+        }
     }
 }

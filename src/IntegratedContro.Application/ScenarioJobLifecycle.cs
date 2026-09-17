@@ -8,23 +8,26 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class ScenarioJobLifecycle : IScenarioJobLifecycle
 {
-    private readonly HostAuthority _host;
-    internal ScenarioJobLifecycle(HostAuthority host) => _host = host;
-    public void StopJob(HostState s, Job job, Session session, string reason)
+    private readonly IScenarioStateAccess _host;
+    private readonly IHiperwallJobLifecycle _displays;
+    internal ScenarioJobLifecycle(IScenarioStateAccess host, IHiperwallJobLifecycle displays)
+    { _host = host; _displays = displays; }
+    public void StopJob(StateContext context, Guid jobId, Session session, string reason)
     {
+        var s = _host.For(context); var job = FindJob(s.Jobs, jobId);
         if (!job.Active && job.Status != JobStatus.NeedsReview) return;
         job.CancelledBy ??= session.Info.UserId;
         job.CancellerName ??= session.Info.UserName;
         job.CancelRequestedAt ??= _host.Now;
-        StopScenarioPendingDisplays(s, job, "시나리오 중단: 미전송 표시 차단");
+        StopScenarioPendingDisplays(s, job.Id, "시나리오 중단: 미전송 표시 차단");
         foreach (var (step, index) in job.Steps.Select((value, index) => (value, index)))
         {
-            var display = s.HiperwallDisplays.SingleOrDefault(d => d.ScenarioJobId == job.Id && d.ScenarioStepIndex == index);
-            if (step.Status == StepStatus.Waiting && display?.Targets.Any(t => t.OpenState == HiperwallSendState.Sending) == true)
+            var display = DisplayProgress(s, job.Id, index);
+            if (step.Status == StepStatus.Waiting && display.Sending)
                 continue; // Keep reservations until an in-flight open has a recorded outcome.
             if (step.Status is StepStatus.Pending or StepStatus.Waiting)
             {
-                step.Status = display?.Targets.Any(t => t.OpenState == HiperwallSendState.Unknown) == true ? StepStatus.Unknown : StepStatus.Skipped;
+                step.Status = display.Unknown ? StepStatus.Unknown : StepStatus.Skipped;
                 step.Result = "미전송·대기 부분 취소 / 이미 열린 표시는 정리 일정 유지"; step.FinishedAt = _host.Now;
             }
         }
@@ -35,14 +38,15 @@ internal sealed partial class ScenarioJobLifecycle : IScenarioJobLifecycle
             : "미전송·대기 부분 취소 완료. 이미 열린 표시와 전송 결과는 유지합니다.";
         _host.Audit(s, session.Info.UserId, "JobCancellation", $"job={job.Id}; {reason}; status={job.Status}");
     }
-    public void FinishStep(HostState next, Job job, int index, DriverResult result)
+    public void FinishStep(StateContext context, Guid jobId, int index, DriverResult result)
     {
+        var next = _host.For(context); var job = FindJob(next.Jobs, jobId);
         var run = job.Steps[index]; var snapshot = job.Snapshot.Steps[index];
         run.Status = result.Status; run.Result = result.Detail; run.FinishedAt = _host.Now;
         var cancelled = job.CancelRequestedAt is not null;
         var success = result.Status is StepStatus.Simulated or StepStatus.ConditionMet or StepStatus.Acknowledged or StepStatus.Sent or StepStatus.Observed;
         var stop = cancelled || result.Status is StepStatus.Unknown or StepStatus.Skipped || (!success && snapshot.OnFailure == FailurePolicy.Stop);
-        if (!success) StopScenarioPendingDisplays(next, job, result.Detail);
+        if (!success) StopScenarioPendingDisplays(next, job.Id, result.Detail);
         if (stop)
         {
             foreach (var pending in job.Steps.Where(x => x.Status is StepStatus.Pending or StepStatus.Waiting))
@@ -61,10 +65,13 @@ internal sealed partial class ScenarioJobLifecycle : IScenarioJobLifecycle
         }
         _host.Audit(next, null, "DispatchResult", $"job={job.Id}; step={index}; result={run.Status}");
     }
-    public void StopScenarioPendingDisplays(HostState state, Job job, string reason)
+    public void StopScenarioPendingDisplays(StateContext context, Guid jobId, string reason) => _displays.StopPending(context, jobId, reason);
+    public ScenarioDisplayProgress DisplayProgress(StateContext context, Guid jobId, int? index = null) => _displays.Progress(context, jobId, index);
+    public void ReportDisplayWaiting(StateContext context, Guid jobId, int index, string message, bool admitted = false)
     {
-        foreach (var display in state.HiperwallDisplays.Where(d => d.ScenarioJobId == job.Id))
-            foreach (var t in display.Targets.Where(t => t.OpenState == HiperwallSendState.Pending))
-            { t.OpenState = HiperwallSendState.Rejected; t.CleanupState = DisplayCleanupState.Closed; t.Message = reason; }
+        var job = FindJob(_host.For(context).Jobs, jobId);
+        job.ReadyAt = _host.Now.AddMilliseconds(100);
+        job.Steps[index].Result = message;
+        if (!admitted) job.Result = $"단계 {index + 1}/{job.Steps.Count} · 표시 응답 대기";
     }
 }

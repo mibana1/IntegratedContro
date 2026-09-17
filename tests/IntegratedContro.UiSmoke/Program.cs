@@ -41,6 +41,7 @@ public static partial class Program
                 else if (args.Contains("--environment-adapters-only")) await RunEnvironmentAdapters();
                 else if (args.Contains("--preferences-only")) await RunPreferencesRecovery();
                 else if (args.Contains("--draft-recovery-only")) await RunDraftRecovery();
+                else if (args.Contains("--camera-content-lookup-only")) await RunCameraContentLookup();
                 else if (args.Contains("--camera-status-only")) await RunCameraStatus();
                 else if (args.Contains("--camera-input-only")) await RunCameraInput();
                 else if (args.Contains("--media-only")) { await RunRelay(); await RunMedia(); await RunPreview(); }
@@ -54,6 +55,7 @@ public static partial class Program
                 else if (args.Contains("--scenario-editor-only")) await RunScenarioEditor();
                 else if (args.Contains("--numeric-input-only")) await RunNumericInputs();
                 else if (args.Contains("--power-input-only")) await RunPowerInputs();
+                else if (args.Contains("--management-only")) await RunManagement();
                 else if (args.Contains("--device-drivers-only")) await RunDeviceDriverSettings();
                 else if (args.Contains("--slots-only")) await RunHiperwallSlots();
                 else if (args.Contains("--layouts-only")) await RunHiperwallLayouts();
@@ -61,7 +63,7 @@ public static partial class Program
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await RunPreferencesRecovery(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); await RunDraftRecovery(); }
-                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunRelay(); await RunPreview();
+                    await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }
@@ -129,8 +131,8 @@ public static partial class Program
             Require(vm.IsLoggedIn && ((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Visible, "Admin login did not expose admin tab");
             Require(!(await File.ReadAllTextAsync(ClientPreferences.ProfilePath)).Contains(host.Password), "Password was persisted");
             await Execute(vm, vm.AcquireCommand);
-            vm.NewAccountName = "operator"; vm.NewAccountRole = AccountRole.Operator; vm.ReadNewPassword = () => host.Password;
-            await Execute(vm, vm.CreateAccountCommand);
+            vm.AccountManagement.NewAccountName = "operator"; vm.AccountManagement.NewAccountRole = AccountRole.Operator; vm.AccountManagement.ReadNewPassword = () => host.Password;
+            await Execute(vm, vm.AccountManagement.CreateAccountCommand);
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("AdminTab");
             await Click(vm, (Button)window.FindName("OpenMyInfoButton")); window.UpdateLayout();
             Require(((TabControl)window.FindName("MainTabs")).SelectedItem == window.FindName("MyInfoTab") &&
@@ -154,7 +156,7 @@ public static partial class Program
             await Click(vm, (Button)dialog.FindName("ConnectButton")); await Wait(() => window.LoginDialog is null);
             Require(vm.IsLoggedIn && !vm.IsAdmin && ((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed,
                 "Operator could see admin settings");
-            Require(!vm.SaveDeviceCommand.CanExecute(null), "Hidden admin form retained write access");
+            Require(!vm.DeviceSettings.SaveDeviceCommand.CanExecute(null), "Hidden admin form retained write access");
             Require(vm.MyAccountName == "operator" && vm.MyAccountRole == "운영자" &&
                 ((Button)window.FindName("AccountSettingsButton")).Visibility == Visibility.Collapsed,
                 "My information retained administrator identity/access after account switch");
@@ -222,14 +224,14 @@ public static partial class Program
             a.DeviceViewIndex = 1; first.UpdateLayout();
             await Execute(a, a.LoginCommand); Require(a.IsLoggedIn, a.Message);
             await Execute(a, a.AcquireCommand); Require(a.CanControl, a.Message);
-            a.DeviceName = "검증용 가상 조명"; a.ConnectionId = "virtual.local";
-            a.SelectedModel = a.Models.Single(m => m.Id == "virtual-light");
-            await Execute(a, a.SaveDeviceCommand); Require(a.Devices.Count == 1, a.Message);
+            a.DeviceSettings.DeviceName = "검증용 가상 조명"; a.DeviceSettings.ConnectionId = "virtual.local";
+            a.DeviceSettings.SelectedModel = a.DeviceSettings.Models.Single(m => m.Id == "virtual-light");
+            await Execute(a, a.DeviceSettings.SaveDeviceCommand); Require(a.DeviceSettings.Devices.Count == 1, a.Message);
             var deviceGrid = (DataGrid)first.FindName("DeviceGrid");
             var roleText = (TextBox)first.FindName("QuickRoleName");
             var assignButton = (Button)first.FindName("QuickAssignRole");
             var controlRole = (ComboBox)first.FindName("ControlRolePicker");
-            var firstDevice = a.Devices[0];
+            var firstDevice = a.DeviceSettings.Devices[0];
             Require(!assignButton.IsEnabled, "Role assignment enabled without a selected device/name");
             deviceGrid.SetCurrentValue(DataGrid.SelectedItemProperty, firstDevice);
             roleText.SetCurrentValue(TextBox.TextProperty, "   ");
@@ -237,84 +239,84 @@ public static partial class Program
             Require(!assignButton.IsEnabled, "Blank role ID was accepted by the UI");
             roleText.SetCurrentValue(TextBox.TextProperty, "room.light");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(a.SelectedDevice?.Id == firstDevice.Id && assignButton.IsEnabled, "Grid/text bindings did not enable assignment");
+            Require(a.DeviceSettings.SelectedDevice?.Id == firstDevice.Id && assignButton.IsEnabled, "Grid/text bindings did not enable assignment");
             var resets = 0;
-            a.Devices.CollectionChanged += (_, e) => { if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) resets++; };
+            a.DeviceSettings.Devices.CollectionChanged += (_, e) => { if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) resets++; };
             await Execute(a, a.RefreshCommand);
             await Task.Delay(1300);
-            Require(ReferenceEquals(firstDevice, a.SelectedDevice) && ReferenceEquals(deviceGrid.SelectedItem, firstDevice)
-                && resets == 0 && a.RoleName == "room.light", "Polling reset the device selection or role draft");
+            Require(ReferenceEquals(firstDevice, a.DeviceSettings.SelectedDevice) && ReferenceEquals(deviceGrid.SelectedItem, firstDevice)
+                && resets == 0 && a.DeviceSettings.RoleName == "room.light", "Polling reset the device selection or role draft");
             await Click(a, assignButton);
-            Require(a.Roles.Count == 1 && a.Roles[0].DeviceId == firstDevice.Id, a.Message);
-            Require(a.SelectedRole?.Id == "room.light" && ReferenceEquals(controlRole.SelectedItem, a.SelectedRole), "Saved role was not selected for control");
+            Require(a.DeviceControl.Roles.Count == 1 && a.DeviceControl.Roles[0].DeviceId == firstDevice.Id, a.Message);
+            Require(a.DeviceControl.SelectedRole?.Id == "room.light" && ReferenceEquals(controlRole.SelectedItem, a.DeviceControl.SelectedRole), "Saved role was not selected for control");
             first.UpdateLayout();
             Capture(first, Path.Combine(output, "role-assignment.png"));
 
             // Same display name on another explicit virtual PC must not redirect the selected target.
-            await Execute(a, a.NewDeviceCommand);
-            a.DeviceName = firstDevice.Name; a.PcIdText = Guid.NewGuid().ToString(); a.PcName = "가상 대상 PC B";
-            await Execute(a, a.SaveDeviceCommand); Require(a.Devices.Count == 2, a.Message);
-            var secondDevice = a.Devices.Single(d => d.Id != firstDevice.Id);
+            await Execute(a, a.DeviceSettings.NewDeviceCommand);
+            a.DeviceSettings.DeviceName = firstDevice.Name; a.DeviceSettings.PcIdText = Guid.NewGuid().ToString(); a.DeviceSettings.PcName = "가상 대상 PC B";
+            await Execute(a, a.DeviceSettings.SaveDeviceCommand); Require(a.DeviceSettings.Devices.Count == 2, a.Message);
+            var secondDevice = a.DeviceSettings.Devices.Single(d => d.Id != firstDevice.Id);
             var adminTabs = Find<TabControl>(first)!; adminTabs.SelectedItem = first.FindName("AdminTab"); first.UpdateLayout();
             var targetPicker = (ComboBox)first.FindName("RoleDevicePicker");
             targetPicker.SetCurrentValue(ComboBox.SelectedItemProperty, secondDevice);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(a.SelectedDevice?.Id == secondDevice.Id && a.RoleTargetSummary.Contains(secondDevice.Id.ToString()), "Admin picker did not show the exact target");
+            Require(a.DeviceSettings.SelectedDevice?.Id == secondDevice.Id && a.DeviceSettings.RoleTargetSummary.Contains(secondDevice.Id.ToString()), "Admin picker did not show the exact target");
             targetPicker.IsDropDownOpen = true;
             await Task.Delay(1300);
             Require(targetPicker.IsDropDownOpen && ReferenceEquals(targetPicker.SelectedItem, secondDevice)
                 && resets == 0, "Polling interrupted the target picker");
             targetPicker.IsDropDownOpen = false;
-            Require(a.RoleName == "", "Unassigned target inherited a previous role");
+            Require(a.DeviceSettings.RoleName == "", "Unassigned target inherited a previous role");
             var roleInput = (TextBox)first.FindName("RoleIdInput");
             roleInput.SetCurrentValue(TextBox.TextProperty, "room.light");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            await Execute(a, a.SaveRoleCommand);
-            Require(a.Roles.Single().DeviceId == secondDevice.Id, "Explicit role reassignment selected the wrong PC/device");
+            await Execute(a, a.DeviceSettings.SaveRoleCommand);
+            Require(a.DeviceControl.Roles.Single().DeviceId == secondDevice.Id, "Explicit role reassignment selected the wrong PC/device");
             targetPicker.SetCurrentValue(ComboBox.SelectedItemProperty, firstDevice);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             roleInput.SetCurrentValue(TextBox.TextProperty, "room.light");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            await Execute(a, a.SaveRoleCommand);
-            Require(a.Roles.Single().DeviceId == firstDevice.Id, "Role reassignment back to the first device failed");
+            await Execute(a, a.DeviceSettings.SaveRoleCommand);
+            Require(a.DeviceControl.Roles.Single().DeviceId == firstDevice.Id, "Role reassignment back to the first device failed");
             adminTabs.SelectedIndex = 0; first.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Require(ReferenceEquals(deviceGrid.SelectedItem, firstDevice), "Tab change lost the selected device");
             await Execute(a, a.ReleaseCommand);
-            Require(!assignButton.IsEnabled && a.RoleAssignmentHint.Contains("사용권"), "Assignment remained enabled after use ended");
+            Require(!assignButton.IsEnabled && a.DeviceSettings.RoleAssignmentHint.Contains("사용권"), "Assignment remained enabled after use ended");
             await Execute(a, a.AcquireCommand);
-            a.NewAccountName = "operator"; a.ReadNewPassword = () => host.Password;
-            await Execute(a, a.CreateAccountCommand); Require(a.Accounts.Count == 2, a.Message);
+            a.AccountManagement.NewAccountName = "operator"; a.AccountManagement.ReadNewPassword = () => host.Password;
+            await Execute(a, a.AccountManagement.CreateAccountCommand); Require(a.AccountManagement.Accounts.Count == 2, a.Message);
             second = new MainWindow(false) { Title = "IntegratedContro · 로컬 WPF 검증 B" };
             var b = (MainViewModel)second.DataContext;
             b.DeviceViewIndex = 1;
             b.Endpoint = host.Endpoint; b.Fingerprint = host.Fingerprint; b.LoginName = "operator"; b.ReadLoginPassword = () => host.Password;
             second.DataContext = null; second.DataContext = b; second.Show();
             await Execute(b, b.LoginCommand); Require(b.IsLoggedIn && !b.CanControl, b.Message);
-            a.SelectedRole = a.Roles[0]; a.SelectedCapability = a.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
-            a.CommandValue = 26; a.DelayMs = 1200;
-            await Execute(a, a.SubmitCommand);
-            Require(a.Jobs.Count == 1, a.Message);
-            Require(a.Jobs.Single().Job.Snapshot.Steps[0].Target!.Id == firstDevice.Id
-                && a.Jobs.Single().Job.Snapshot.Steps[0].Target!.PcId == firstDevice.Config.PcId, "First command targeted a different device/PC");
-            a.CommandValue = 90; a.DelayMs = 60000;
-            await Execute(a, a.SubmitCommand); Require(a.Jobs.Count == 2, a.Message);
-            var longJobId = a.Jobs.Single(j => j.Job.Snapshot.Steps[0].Value == 90).Id;
+            a.DeviceControl.SelectedRole = a.DeviceControl.Roles[0]; a.DeviceControl.SelectedCapability = a.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
+            a.DeviceControl.CommandValue = 26; a.DeviceControl.DelayMs = 1200;
+            await Execute(a, a.DeviceControl.SubmitCommand);
+            Require(a.JobManagement.Jobs.Count == 1, a.Message);
+            Require(a.JobManagement.Jobs.Single().Job.Snapshot.Steps[0].Target!.Id == firstDevice.Id
+                && a.JobManagement.Jobs.Single().Job.Snapshot.Steps[0].Target!.PcId == firstDevice.Config.PcId, "First command targeted a different device/PC");
+            a.DeviceControl.CommandValue = 90; a.DeviceControl.DelayMs = 60000;
+            await Execute(a, a.DeviceControl.SubmitCommand); Require(a.JobManagement.Jobs.Count == 2, a.Message);
+            var longJobId = a.JobManagement.Jobs.Single(j => j.Job.Snapshot.Steps[0].Value == 90).Id;
             await Execute(a, a.ReleaseCommand);
             await Execute(b, b.RefreshCommand);
             await Execute(b, b.AcquireCommand); Require(b.CanControl, b.Message);
-            b.SelectedDevice = b.Devices[0]; b.RoleName = "forbidden";
-            Require(!b.SaveRoleCommand.CanExecute(null), "Operator could change role settings");
-            b.SelectedJob = b.Jobs.Single(j => j.Id == longJobId);
-            await Execute(b, b.CancelCommand);
-            Require(b.Jobs.Single(j => j.Id == longJobId).Job.Status == JobStatus.Cancelled, b.Message);
-            await Wait(() => b.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
-            Require(b.Jobs.All(j => j.PreviousSession), "Previous-session work label missing");
+            b.DeviceSettings.SelectedDevice = b.DeviceSettings.Devices[0]; b.DeviceSettings.RoleName = "forbidden";
+            Require(!b.DeviceSettings.SaveRoleCommand.CanExecute(null), "Operator could change role settings");
+            b.JobManagement.SelectedJob = b.JobManagement.Jobs.Single(j => j.Id == longJobId);
+            await Execute(b, b.JobManagement.CancelCommand);
+            Require(b.JobManagement.Jobs.Single(j => j.Id == longJobId).Job.Status == JobStatus.Cancelled, b.Message);
+            await Wait(() => b.JobManagement.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
+            Require(b.JobManagement.Jobs.All(j => j.PreviousSession), "Previous-session work label missing");
             // Polling must retain the selected role, capability and editable value.
-            b.SelectedRole = b.Roles[0]; b.SelectedCapability = b.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
-            b.CommandValue = 44; await Task.Delay(1300);
-            Require(b.SelectedCapability?.Operation == DeviceOperation.Brightness && b.CommandValue == 44, "Refresh changed the user's chosen operation/value");
-            b.SelectedDevice = b.Devices[0];
+            b.DeviceControl.SelectedRole = b.DeviceControl.Roles[0]; b.DeviceControl.SelectedCapability = b.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
+            b.DeviceControl.CommandValue = 44; await Task.Delay(1300);
+            Require(b.DeviceControl.SelectedCapability?.Operation == DeviceOperation.Brightness && b.DeviceControl.CommandValue == 44, "Refresh changed the user's chosen operation/value");
+            b.DeviceSettings.SelectedDevice = b.DeviceSettings.Devices[0];
             var tabs = Find<TabControl>(second) ?? throw new InvalidOperationException("TabControl missing");
             for (var index = 0; index < tabs.Items.Count; index++)
             {
@@ -324,20 +326,20 @@ public static partial class Program
             }
             // Construct and save a sequential definition through the actual admin ViewModel.
             await Execute(b, b.ReleaseCommand); await Execute(a, a.RefreshCommand); await Execute(a, a.AcquireCommand);
-            SetScenarioValue(a, a.Roles[0].Id, DeviceOperation.Power, 1);
+            SetScenarioValue(a, a.DeviceControl.Roles[0].Id, DeviceOperation.Power, 1);
             a.ScenarioEditor.DelayMs = 10000; a.ScenarioEditor.ScenarioName = "검증용 순차 시나리오";
             await Execute(a, a.ScenarioEditor.AddStepCommand);
             await Execute(a, a.ScenarioEditor.SaveScenarioCommand); Require(a.ScenarioEditor.Scenarios.Count == 1, a.Message);
             a.ScenarioEditor.SelectedScenario = a.ScenarioEditor.Scenarios[0]; await Execute(a, a.ScenarioEditor.RunScenarioCommand);
-            a.SelectedJob = a.Jobs.Single(j => j.Job.Kind == JobKind.Scenario);
-            a.ConfirmManualSwitch = _ => false; await Execute(a, a.ManualSwitchCommand);
-            Require(a.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Active, "Declining switch stopped scenario");
-            a.ConfirmManualSwitch = _ => true; await Execute(a, a.ManualSwitchCommand);
-            Require(a.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Status == JobStatus.Cancelled, a.Message);
-            a.SelectedDevice = a.Devices[0]; await Execute(a, a.ReconcileCommand);
-            a.SelectedRole = a.Roles[0]; a.SelectedCapability = a.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
-            a.CommandValue = 58; a.DelayMs = 1500; await Execute(a, a.SubmitCommand);
-            var unattended = a.Jobs.Single(j => j.Job.Snapshot.Steps[0].Value == 58).Id;
+            a.JobManagement.SelectedJob = a.JobManagement.Jobs.Single(j => j.Job.Kind == JobKind.Scenario);
+            a.JobManagement.ConfirmManualSwitch = _ => false; await Execute(a, a.JobManagement.ManualSwitchCommand);
+            Require(a.JobManagement.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Active, "Declining switch stopped scenario");
+            a.JobManagement.ConfirmManualSwitch = _ => true; await Execute(a, a.JobManagement.ManualSwitchCommand);
+            Require(a.JobManagement.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Status == JobStatus.Cancelled, a.Message);
+            a.DeviceSettings.SelectedDevice = a.DeviceSettings.Devices[0]; await Execute(a, a.DeviceSettings.ReconcileCommand);
+            a.DeviceControl.SelectedRole = a.DeviceControl.Roles[0]; a.DeviceControl.SelectedCapability = a.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Brightness);
+            a.DeviceControl.CommandValue = 58; a.DeviceControl.DelayMs = 1500; await Execute(a, a.DeviceControl.SubmitCommand);
+            var unattended = a.JobManagement.Jobs.Single(j => j.Job.Snapshot.Steps[0].Value == 58).Id;
             // Both real WPF windows close through production OnClosing -> Logout. Host remains separate.
             first.Close(); second.Close();
             await Wait(() => !first.IsVisible && !second.IsVisible);
@@ -376,22 +378,22 @@ public static partial class Program
             var names = new[] { "입구 조명", "테이블 조명", "복도 조명", "벽면 조명" };
             for (var i = 0; i < names.Length; i++)
             {
-                await Execute(vm, vm.NewDeviceCommand);
-                vm.DeviceName = names[i]; vm.ConnectionId = $"virtual.light.{i}";
-                vm.SelectedModel = vm.Models.Single(m => m.Id == (i % 2 == 0 ? "virtual-light-basic" : "virtual-light"));
-                vm.DeviceLatencyMs = 600;
-                await Execute(vm, vm.SaveDeviceCommand);
-                var d = vm.Devices.Single(x => x.Id.ToString() == vm.DeviceIdText);
-                vm.SelectedDevice = d; vm.RoleName = $"lighting.{i}";
-                await Execute(vm, vm.SaveRoleCommand);
+                await Execute(vm, vm.DeviceSettings.NewDeviceCommand);
+                vm.DeviceSettings.DeviceName = names[i]; vm.DeviceSettings.ConnectionId = $"virtual.light.{i}";
+                vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == (i % 2 == 0 ? "virtual-light-basic" : "virtual-light"));
+                vm.DeviceSettings.DeviceLatencyMs = 600;
+                await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
+                var d = vm.DeviceSettings.Devices.Single(x => x.Id.ToString() == vm.DeviceSettings.DeviceIdText);
+                vm.DeviceSettings.SelectedDevice = d; vm.DeviceSettings.RoleName = $"lighting.{i}";
+                await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
                 var card = vm.Lighting.Lights.Single(c => c.Id == d.Id);
                 Require(!card.PowerCommand.CanExecute(null), "Unobserved light was presented as ready to toggle");
                 await Execute(vm, card.ReadCommand);
                 Require(card.Power == 0 && card.StateText.Contains("OFF"), "Initial virtual OFF state missing");
             }
-            await Execute(vm, vm.NewDeviceCommand); vm.DeviceName = "구분 검증 프로젝터";
-            vm.SelectedModel = vm.Models.Single(m => m.Id == "virtual-projector"); await Execute(vm, vm.SaveDeviceCommand);
-            Require(vm.Lighting.Lights.Count == 4 && vm.Devices.Count == 5, "Non-light device appeared in the lighting group");
+            await Execute(vm, vm.DeviceSettings.NewDeviceCommand); vm.DeviceSettings.DeviceName = "구분 검증 프로젝터";
+            vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == "virtual-projector"); await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
+            Require(vm.Lighting.Lights.Count == 4 && vm.DeviceSettings.Devices.Count == 5, "Non-light device appeared in the lighting group");
             vm.DeviceViewIndex = 0; window.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             var light = vm.Lighting.Lights[0];
@@ -400,10 +402,10 @@ public static partial class Program
             await Click(vm, button);
             Require(!light.PowerCommand.CanExecute(null), "Repeated toggle enabled while its job is pending");
             await Wait(() => light.Power == 1 && light.PowerCommand.CanExecute(null));
-            Require(vm.Jobs.Count == 1 && vm.Jobs.Single().Job.Snapshot.Steps[0].Target!.Id == light.Id, "Card click targeted another light");
+            Require(vm.JobManagement.Jobs.Count == 1 && vm.JobManagement.Jobs.Single().Job.Snapshot.Steps[0].Target!.Id == light.Id, "Card click targeted another light");
             await Click(vm, button);
             await Wait(() => light.Power == 0 && light.PowerCommand.CanExecute(null));
-            Require(vm.Jobs.Count == 2 && vm.Jobs.All(j => j.Job.Status == JobStatus.Completed), "ON then OFF did not complete");
+            Require(vm.JobManagement.Jobs.Count == 2 && vm.JobManagement.Jobs.All(j => j.Job.Status == JobStatus.Completed), "ON then OFF did not complete");
             await Click(vm, button); await Wait(() => light.IsOn && light.PowerCommand.CanExecute(null));
             // Editing is a draft until save; cancellation restores the shared order.
             var original = vm.Lighting.Lights.Select(c => c.Id).ToArray();
@@ -426,25 +428,25 @@ public static partial class Program
             Require(vm.Lighting.Lights.All(c => !c.PowerCommand.CanExecute(null)), "Read-only cards could control");
             await Execute(vm, vm.AcquireCommand);
             // Reserved scenario: no implicit cancellation or queued manual power command.
-            SetScenarioValue(vm, vm.Roles.Single(r => r.DeviceId == light.Id).Id, DeviceOperation.Power, 0);
+            SetScenarioValue(vm, vm.DeviceControl.Roles.Single(r => r.DeviceId == light.Id).Id, DeviceOperation.Power, 0);
             vm.ScenarioEditor.DelayMs = 60000; vm.ScenarioEditor.ScenarioName = "조명 예약 검증";
             await Execute(vm, vm.ScenarioEditor.AddStepCommand); await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand);
             vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single(); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(!light.PowerCommand.CanExecute(null) && light.Hint.Contains("시나리오 예약"), "Reserved light was clickable");
-            vm.SelectedJob = vm.Jobs.Single(j => j.Job.Kind == JobKind.Scenario);
-            vm.ConfirmManualSwitch = _ => true; await Execute(vm, vm.ManualSwitchCommand);
+            vm.JobManagement.SelectedJob = vm.JobManagement.Jobs.Single(j => j.Job.Kind == JobKind.Scenario);
+            vm.JobManagement.ConfirmManualSwitch = _ => true; await Execute(vm, vm.JobManagement.ManualSwitchCommand);
             Require(light.NeedsCheck && !light.PowerCommand.CanExecute(null), "Uncertain light looked ready after manual switch");
             await Execute(vm, light.ReadCommand);
             Require(light.PowerCommand.CanExecute(null), "State reconciliation did not release the light");
             // Keep one unknown card to render a distinct state without inventing OFF.
             var unknown = vm.Lighting.Lights.Last();
-            vm.SelectedDevice = vm.Devices.Single(d => d.Id == unknown.Id);
-            await Execute(vm, vm.LoadDeviceCommand); vm.DeviceFault = VirtualFault.Disconnected;
-            await Execute(vm, vm.SaveDeviceCommand);
+            vm.DeviceSettings.SelectedDevice = vm.DeviceSettings.Devices.Single(d => d.Id == unknown.Id);
+            await Execute(vm, vm.DeviceSettings.LoadDeviceCommand); vm.DeviceSettings.DeviceFault = VirtualFault.Disconnected;
+            await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
             window.UpdateLayout(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            var countBeforeBlocked = vm.Jobs.Count;
+            var countBeforeBlocked = vm.JobManagement.Jobs.Count;
             await Execute(vm, vm.Lighting.AllLightsOnCommand);
-            Require(vm.Jobs.Count == countBeforeBlocked && vm.Message.Contains("일괄 접수하지 않았습니다"), "Unobserved target allowed partial bulk acceptance");
+            Require(vm.JobManagement.Jobs.Count == countBeforeBlocked && vm.Message.Contains("일괄 접수하지 않았습니다"), "Unobserved target allowed partial bulk acceptance");
             Capture(window, Path.Combine(output, "lighting-cards.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
@@ -472,17 +474,17 @@ public static partial class Program
         {
             var targets = cards.ToArray();
             await Wait(() => targets.All(c => c.Power == value && c.PowerCommand.CanExecute(null)) &&
-                vm.Jobs.All(j => !j.Job.Active));
+                vm.JobManagement.Jobs.All(j => !j.Job.Active));
         }
         await Click(vm, (Button)board.FindName("AllLightsOn"));
         await WaitBatch(1, vm.Lighting.Lights);
-        Require(vm.Jobs.First().Job.IsLightBatch && vm.Jobs.First().Job.Snapshot.Steps.Length == 4, "All ON omitted a light");
+        Require(vm.JobManagement.Jobs.First().Job.IsLightBatch && vm.JobManagement.Jobs.First().Job.Snapshot.Steps.Length == 4, "All ON omitted a light");
         await Click(vm, (Button)board.FindName("AllLightsOff")); await WaitBatch(0, vm.Lighting.Lights);
         var group = vm.Lighting.LightGroups.Single(g => !g.IsDefault);
         Button GroupButton(string name) => FindAll<Button>(board).Single(b => b.Name == name && ReferenceEquals(b.DataContext, group));
         await Click(vm, GroupButton("GroupOn")); await WaitBatch(1, group.Cards);
         Require(vm.Lighting.Lights.Except(group.Cards).All(c => c.Power == 0), "Group command changed an outside light");
-        Require(vm.Jobs.First().Job.Snapshot.Steps.Select(s => s.Target!.Id).SequenceEqual(group.Cards.Select(c => c.Id)), "Group snapshot mismatch");
+        Require(vm.JobManagement.Jobs.First().Job.Snapshot.Steps.Select(s => s.Target!.Id).SequenceEqual(group.Cards.Select(c => c.Id)), "Group snapshot mismatch");
         await Click(vm, GroupButton("GroupOff")); await WaitBatch(0, group.Cards);
         await Execute(vm, vm.Lighting.EditLightOrderCommand);
         Require(!vm.Lighting.AllLightsOnCommand.CanExecute(null) && !group.OnCommand.CanExecute(null), "Layout edit allowed bulk power");
@@ -492,9 +494,9 @@ public static partial class Program
         await Execute(vm, vm.AcquireCommand);
         var tabs = (TabControl)window.FindName("MainTabs"); tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(t => t.Header?.ToString() == "복구 · 진단");
         window.UpdateLayout();
-        Require(vm.Audit.Any(a => a.Event == "조명 일괄 명령 접수" && a.Summary.Contains("단계")), "Readable audit message missing");
-        vm.SelectedAudit = vm.Audit.First(a => a.Entry.Action == "DispatchResult");
-        Require(vm.AuditDetails.Contains("job=") && vm.SelectedAudit.Summary.Contains("가상 실행 완료"), "Audit lost raw detail or result label");
+        Require(vm.Recovery.Audit.Any(a => a.Event == "조명 일괄 명령 접수" && a.Summary.Contains("단계")), "Readable audit message missing");
+        vm.Recovery.SelectedAudit = vm.Recovery.Audit.First(a => a.Entry.Action == "DispatchResult");
+        Require(vm.Recovery.AuditDetails.Contains("job=") && vm.Recovery.SelectedAudit.Summary.Contains("가상 실행 완료"), "Audit lost raw detail or result label");
         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle); window.UpdateLayout();
         var auditGrid = (DataGrid)window.FindName("AuditGrid");
         Require(auditGrid.Columns.Take(3).All(c => c.ActualWidth >= 100) && auditGrid.Columns.Last().ActualWidth >= 360,
@@ -510,7 +512,7 @@ public static partial class Program
         var board = Find<LightingView>(window)!;
         var originalHeight = window.Height; window.Height = 1200; window.UpdateLayout();
         var original = vm.Lighting.Lights.Select(c => c.Id).ToArray();
-        var jobCount = vm.Jobs.Count;
+        var jobCount = vm.JobManagement.Jobs.Count;
         await Execute(vm, vm.Lighting.EditLightOrderCommand);
         Require(vm.Lighting.Lights.All(c => c.StateText is "ON" or "OFF") && vm.Lighting.Lights.All(c => c.Hint == ""), "Compact card retained Korean state/editor text");
         var groupName = (TextBox)board.FindName("NewGroupName");
@@ -551,7 +553,7 @@ public static partial class Program
             board.RaiseEvent(touchUp);
             Require(touchUp.Handled && touch.Captured is null, "Routed touch release did not suppress the click/release capture");
         }
-        Require(vm.Jobs.Count == jobCount, "Edit-mode pointer click sent power");
+        Require(vm.JobManagement.Jobs.Count == jobCount, "Edit-mode pointer click sent power");
         Require(board.BeginCardDrag(first.Id, point, -1), "Mouse down rejected");
         Require(!board.EndCardDrag(point + new Vector(2, 2), -1), "Click-sized move reordered");
         Require(vm.Lighting.Lights.Select(c => c.Id).SequenceEqual(original), "Short gesture changed order");
@@ -591,12 +593,12 @@ public static partial class Program
         group = vm.Lighting.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
         zone = Zone(group.Id); Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
         await Execute(vm, group.RemoveCommand);
-        Require(vm.Lighting.LightGroups.Single().Cards.Count == 4 && vm.Devices.Count == 5, "Group deletion deleted devices");
+        Require(vm.Lighting.LightGroups.Single().Cards.Count == 4 && vm.DeviceSettings.Devices.Count == 5, "Group deletion deleted devices");
         vm.Lighting.NewLightGroupName = "무대 조명"; await Execute(vm, vm.Lighting.AddLightGroupCommand);
         group = vm.Lighting.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
         zone = Zone(group.Id); Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
         Drag(second.Id, Tile(first.Id), 4, 50, 99);
-        Require(vm.Jobs.Count == jobCount, "A drag or group edit sent a power job");
+        Require(vm.JobManagement.Jobs.Count == jobCount, "A drag or group edit sent a power job");
         await Execute(vm, vm.Lighting.SaveLightOrderCommand);
         var (observer, _) = await host.Login();
         var state = await HostProcess.Until(observer, s => s.LightLayout.Groups.Length == 1);

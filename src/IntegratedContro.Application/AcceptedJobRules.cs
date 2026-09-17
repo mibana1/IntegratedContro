@@ -12,9 +12,9 @@ internal static class AcceptedJobRules
 {
     internal static string Digest(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     internal static bool HoldsReservations(Job j) => j.Active;
-    internal static Job FindJob(HostState s, Guid id)
+    internal static Job FindJob(IEnumerable<Job> jobs, Guid id)
     {
-        var job = s.Jobs.SingleOrDefault(x => x.Id == id);
+        var job = jobs.SingleOrDefault(x => x.Id == id);
         Require(job is not null, "job_missing", "작업을 찾을 수 없습니다.", 404);
         return job!;
     }
@@ -24,12 +24,12 @@ internal static class AcceptedJobRules
             .Distinct().ToArray();
         return modes.Length > 1 || steps.Any(s => s.Kind == ScenarioStepKind.DisplayLayout) ? "Mixed" : modes[0] ? "Physical" : "Virtual";
     }
-    internal static string? RevalidateJob(HostState s, Job job, DateTimeOffset now)
+    internal static string? RevalidateJob(Guid siteId, IEnumerable<ScenarioDefinition> scenarios, Job job, DateTimeOffset now)
     {
-        if (job.Snapshot.SiteId != s.SiteId || job.Snapshot.Mode is not ("Virtual" or "Mixed" or "Physical")) return "현장/실행 모드 불일치";
+        if (job.Snapshot.SiteId != siteId || job.Snapshot.Mode is not ("Virtual" or "Mixed" or "Physical")) return "현장/실행 모드 불일치";
         if (now >= job.Snapshot.ExpiresAt) return "작업 만료";
         if (job.Snapshot.ScenarioId is { } scenarioId &&
-            !s.Scenarios.Any(x => x.Id == scenarioId && x.Version == job.Snapshot.ScenarioVersion)) return "시나리오 정의 변경";
+            !scenarios.Any(x => x.Id == scenarioId && x.Version == job.Snapshot.ScenarioVersion)) return "시나리오 정의 변경";
         return null;
     }
     internal static void ValidateStep(ScenarioStep step)

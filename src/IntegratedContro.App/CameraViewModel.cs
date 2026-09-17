@@ -18,7 +18,7 @@ public sealed class CameraViewModel : Bindable
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly SemaphoreSlim _videoGate = new(1, 1);
-    private readonly HiperwallViewModel _hiperwall;
+    private readonly IHiperwallContentLookup _contentLookup;
     private IVideoPresentation? _presentation;
     private IVideoPlayer? _player => _presentation?.Player;
     private LoopbackVideoRelay? _relay;
@@ -69,7 +69,7 @@ public sealed class CameraViewModel : Bindable
         $"적용 v{_settings.Version} · API {_settings.ApiEndpoint} · HLS {_settings.HlsEndpoint}";
     public ObservableCollection<CameraSnapshot> Cameras { get; } = [];
     public ObservableCollection<CameraSnapshot> FilteredCameras { get; } = [];
-    public ObservableCollection<HiperwallItemRow> MappingContents => _hiperwall.Contents;
+    public ReadOnlyObservableCollection<HiperwallItemRow> MappingContents => _contentLookup.Contents;
     private HiperwallItemRow? _selectedMapping;
     private bool _clearMapping;
     public HiperwallItemRow? SelectedMapping { get => _selectedMapping; set => Set(ref _selectedMapping, value); }
@@ -124,9 +124,9 @@ public sealed class CameraViewModel : Bindable
     public AsyncCommand PlayCommand { get; }
     public AsyncCommand StopCommand { get; }
     public AsyncCommand StatusCommand { get; }
-    public CameraViewModel(HiperwallViewModel hiperwall, Func<CancellationToken, Task<IVideoPresentation>> playerFactory)
+    public CameraViewModel(IHiperwallContentLookup contentLookup, Func<CancellationToken, Task<IVideoPresentation>> playerFactory)
     {
-        _hiperwall = hiperwall; PlayerFactory = playerFactory;
+        _contentLookup = contentLookup; PlayerFactory = playerFactory;
         RefreshCommand = Command(Refresh, () => _connected && _client is not null && _supported);
         NewCommand = Command(_ => { NewDraft(); return Task.CompletedTask; }, () => CanConfigure);
         LoadCommand = Command(_ =>
@@ -144,7 +144,7 @@ public sealed class CameraViewModel : Bindable
                 var isNew = _draftVersion == 0;
                 var result = await _client!.Post<CameraSnapshot>("/api/cameras/save",
                     new SaveCameraRequest(Generation, _draftId, _draftVersion, CameraName, Location, Enabled,
-                        ReadRtsp(), ReadRtspUser(), ReadRtspPassword(), selector, value, _hiperwall.ConfigurationVersion), ct);
+                        ReadRtsp(), ReadRtspUser(), ReadRtspPassword(), selector, value, _contentLookup.ConfigurationVersion), ct);
                 ct.ThrowIfCancellationRequested();
                 _draftVersion = result.Version; _editing = result; Changed(nameof(DraftSummary));
                 _pendingRegistrations[result.Id] = (result.Version, isNew);

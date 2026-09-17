@@ -51,7 +51,7 @@ public static partial class Program
             await Execute(vm, vm.LoginCommand); await Wait(() => !h.IsBusy);
             await Hiper(h.RefreshLayoutsCommand);
             Require(h.SavedLayouts.Count == 1 && h.DisplayJobs.Count == 1, "Login failed to restore layouts and display history");
-            Require(vm.PreviousSummary.StartsWith("이전 사용자 작업 1건"), "Previous display missing from handover");
+            Require(vm.JobManagement.PreviousSummary.StartsWith("이전 사용자 작업 1건"), "Previous display missing from handover");
             await Execute(vm, vm.AcquireCommand); await Hiper(h.RefreshCommand);
             h.SelectedLayout = h.SavedLayouts[0]; await Hiper(h.LoadLayoutCommand);
             Require(h.DraftPlacements[0].Layout.X == -25.5 && h.DurationMode == DisplayDurationMode.Continuous, "Stored draft did not round-trip");
