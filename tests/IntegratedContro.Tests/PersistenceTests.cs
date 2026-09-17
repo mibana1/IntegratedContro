@@ -134,7 +134,7 @@ public sealed class PersistenceTests
     public async Task Virtual_driver_response_loss_changes_only_simulation_and_readback_survives_restart()
     {
         using var r = new Rig();
-        var driver = new VirtualDeviceDriver(r.Store.ConnectionString);
+        var driver = new VirtualDeviceDriver(new SqliteVirtualDeviceTransport(r.Store.ConnectionString));
         var target = new DeviceConfig(Guid.NewGuid(), Guid.NewGuid(), Environment.MachineName, "simulator", "test",
             "virtual-light", 1, true, VirtualFault.ResponseLost, 0);
         var step = new StepSnapshot(new("role", target.Id, 1), target, DeviceOperation.Brightness, 42, "%", 0, 100,
@@ -146,14 +146,14 @@ public sealed class PersistenceTests
         var otherPc = await driver.ReadAsync(target with { PcId = Guid.NewGuid() }, CancellationToken.None);
         Assert.Equal(0, otherPc.Values[DeviceOperation.Brightness]); // Same device ID/name is not another PC's target.
         r.Restart();
-        var restored = await new VirtualDeviceDriver(r.Store.ConnectionString).ReadAsync(target, CancellationToken.None);
+        var restored = await new VirtualDeviceDriver(new SqliteVirtualDeviceTransport(r.Store.ConnectionString)).ReadAsync(target, CancellationToken.None);
         Assert.Equal(42, restored.Values[DeviceOperation.Brightness]);
     }
     [Fact]
     public void Virtual_model_replacement_enforces_required_capability()
     {
         using var r = new Rig();
-        var service = new ControlService(r.Store, r.Hasher, new VirtualDeviceDriver(r.Store.ConnectionString), r.Clock);
+        var service = new ControlService(r.Store, r.Hasher, new VirtualDeviceDriver(new SqliteVirtualDeviceTransport(r.Store.ConnectionString)), r.Clock);
         var admin = service.Login(new("admin", Rig.Password, Guid.NewGuid(), Environment.MachineName));
         var review = service.ReviewRecovery(admin.Token); service.ApproveRecovery(admin.Token, review.ReviewId);
         var lease = service.Acquire(admin.Token);

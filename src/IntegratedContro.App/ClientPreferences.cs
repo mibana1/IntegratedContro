@@ -1,7 +1,6 @@
 using System.IO;
 using System.Text.Json;
-using System.Security.Cryptography;
-using System.Text;
+
 using IntegratedContro.Core;
 
 namespace IntegratedContro.App;
@@ -13,24 +12,14 @@ public sealed record ClientPreferences(Guid PcId, string Endpoint, string Finger
 {
     private const int MaximumBytes = 64 * 1024;
     public string LastLoginName { get; init; } = "";
-    public static string ProfilePath
-    {
-        get
-        {
-            var args = Environment.GetCommandLineArgs();
-            var index = Array.IndexOf(args, "--profile-dir");
-            var directory = index >= 0 && index + 1 < args.Length ? Path.GetFullPath(args[index + 1]) :
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IntegratedContro");
-            return Path.Combine(directory, "client.json");
-        }
-    }
+    public static string ProfilePath => ClientProfileEnvironment.ProfilePath;
     public static ClientPreferences Load() => ReadForStartup().Preferences;
     public static ClientPreferencesLoadResult ReadForStartup(string? path = null)
     {
         try
         {
             path ??= ProfilePath;
-            using var access = AcquireProfile(path);
+            using var access = ClientProfileEnvironment.AcquireProfile(path);
             if (Read(path) is { } current) return new(current);
             if (ReadBackup(path) is { } backup) return Recovery(backup);
             if (File.Exists(path + ".bak")) return Recovery(null);
@@ -56,7 +45,7 @@ public sealed record ClientPreferences(Guid PcId, string Endpoint, string Finger
         try { return Read(path + ".bak"); }
         catch (Exception error) when (Recoverable(error)) { return null; }
     }
-    private static ClientPreferences? Read(string path) => RetrySharing(() => ReadOnce(path));
+    private static ClientPreferences? Read(string path) => ClientProfileEnvironment.RetrySharing(() => ReadOnce(path));
     private static ClientPreferences? ReadOnce(string path)
     {
         try
@@ -70,33 +59,6 @@ public sealed record ClientPreferences(Guid PcId, string Endpoint, string Finger
         }
         catch (FileNotFoundException) { return null; }
         catch (DirectoryNotFoundException) { return null; }
-    }
-    // Multiple app instances share this profile. Serialize reads, replacement and backup selection.
-    private static IDisposable AcquireProfile(string path)
-    {
-        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(path).ToUpperInvariant())));
-        var mutex = new Mutex(false, "Local\\IntegratedContro.ClientProfile." + key);
-        try
-        {
-            try { if (!mutex.WaitOne(TimeSpan.FromSeconds(2))) throw new IOException("다른 앱이 접속 설정을 사용 중입니다."); }
-            catch (AbandonedMutexException) { /* The file is still validated after an interrupted writer. */ }
-            return new ProfileAccess(mutex);
-        }
-        catch { mutex.Dispose(); throw; }
-    }
-    private sealed class ProfileAccess(Mutex mutex) : IDisposable
-    {
-        public void Dispose() { mutex.ReleaseMutex(); mutex.Dispose(); }
-    }
-    private static T RetrySharing<T>(Func<T> action)
-    {
-        // Windows can briefly deny opens while ReplaceFile exchanges the file names.
-        for (var attempt = 0; ; attempt++)
-        {
-            try { return action(); }
-            catch (IOException error) when (attempt < 4 && (error.HResult & 0xffff) is 32 or 33)
-            { Thread.Sleep(20 * (attempt + 1)); }
-        }
     }
     private void Validate()
     {
@@ -120,7 +82,7 @@ public sealed record ClientPreferences(Guid PcId, string Endpoint, string Finger
     public static ClientPreferences RestoreBackup(string? path = null)
     {
         path ??= ProfilePath;
-        using var access = AcquireProfile(path);
+        using var access = ClientProfileEnvironment.AcquireProfile(path);
         // Read again at the action boundary; an old UI indication must not authorize an invalid backup.
         var backup = Read(path + ".bak") ?? throw new InvalidDataException("복구할 백업이 없습니다. 설정을 다시 입력하세요.");
         backup.Save(path, preserveBackup: true);
@@ -133,7 +95,7 @@ public sealed record ClientPreferences(Guid PcId, string Endpoint, string Finger
         var bytes = JsonSerializer.SerializeToUtf8Bytes(this, JsonDefaults.Options);
         if (bytes.Length > MaximumBytes) throw new InvalidDataException("접속 설정이 허용 크기를 초과합니다.");
         path = Path.GetFullPath(path);
-        using var access = AcquireProfile(path);
+        using var access = ClientProfileEnvironment.AcquireProfile(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -153,7 +115,7 @@ public sealed record ClientPreferences(Guid PcId, string Endpoint, string Finger
                 // Never remove the original first. Replacement and old-file preservation are one operation.
                 var backup = valid && !preserveBackup ? path + ".bak" :
                     path + ".damaged-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N") + ".json";
-                RetrySharing(() => { File.Replace(temporary, path, backup); return true; });
+                ClientProfileEnvironment.RetrySharing(() => { File.Replace(temporary, path, backup); return true; });
             }
             else File.Move(temporary, path); // Do not overwrite a profile another process just created.
         }

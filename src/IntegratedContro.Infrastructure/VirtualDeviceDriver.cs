@@ -7,7 +7,6 @@ namespace IntegratedContro.Infrastructure;
 /// <summary>Model behavior and simulated faults; persistence is supplied by a separate transport.</summary>
 public sealed class VirtualDeviceDriver(IVirtualDeviceTransport transport) : IDeviceDriver
 {
-    public VirtualDeviceDriver(string connectionString) : this(new SqliteVirtualDeviceTransport(connectionString)) { }
     public string Id => "virtual";
     public string Version => "1";
     public DeviceModel[] Models =>

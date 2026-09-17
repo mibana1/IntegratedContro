@@ -197,7 +197,7 @@ public sealed partial class MainViewModel : Bindable
         Lighting.DeviceDetailsRequested += id => { SelectedDevice = Devices.SingleOrDefault(d => d.Id == id); DeviceViewIndex = 1; };
         var initialPreferences = ClientPreferences.ReadForStartup();
         _preferences = initialPreferences.Preferences;
-        Cameras = new CameraViewModel(Hiperwall);
+        Cameras = new CameraViewModel(Hiperwall, AppAdapters.CreateVideoAsync);
         Cameras.StatusReported += message => Message = message;
         Endpoint = _preferences.Endpoint; Fingerprint = _preferences.Fingerprint; PcIdText = _preferences.PcId.ToString();
         LoginName = _preferences.LastLoginName ?? "";

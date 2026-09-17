@@ -3,13 +3,6 @@ using Microsoft.Data.Sqlite;
 
 namespace IntegratedContro.Infrastructure;
 
-/// <summary>Simulation persistence boundary. Physical stream/HTTP drivers use their own transport contracts.</summary>
-public interface IVirtualDeviceTransport
-{
-    Task WriteAsync(DeviceConfig target, DeviceOperation operation, int value, CancellationToken ct);
-    Task<IReadOnlyDictionary<DeviceOperation, int>> ReadAsync(DeviceConfig target, CancellationToken ct);
-}
-
 public sealed class SqliteVirtualDeviceTransport(string connectionString) : IVirtualDeviceTransport
 {
     public async Task WriteAsync(DeviceConfig target, DeviceOperation operation, int value, CancellationToken ct)

@@ -2,7 +2,7 @@
 <ProjectReference Include="../../src/IntegratedContro.Infrastructure/IntegratedContro.Infrastructure.csproj" />
 <PackageReference Include="Microsoft.NET.Test.Sdk" /><PackageReference Include="xunit" />
 <PackageReference Include="xunit.runner.visualstudio"><PrivateAssets>all</PrivateAssets></PackageReference>
-<ProjectReference Include="../../src/IntegratedContro.ControlHost/IntegratedContro.ControlHost.csproj" ReferenceOutputAssembly="false" /><Using Include="Xunit" /><Compile Include="../../src/IntegratedContro.App/ClientPreferences.cs" Link="ClientPreferences.cs" /></ItemGroup>
+<ProjectReference Include="../../src/IntegratedContro.ControlHost/IntegratedContro.ControlHost.csproj" ReferenceOutputAssembly="false" /><Using Include="Xunit" /><Compile Include="../../src/IntegratedContro.App/ClientPreferences.cs" Link="ClientPreferences.cs" /><Compile Include="../../src/IntegratedContro.App/ClientProfileEnvironment.cs" Link="ClientProfileEnvironment.cs" /></ItemGroup>
 <!-- Compile the UI-independent feature boundary without WPF, the shell, or host processes. -->
 <ItemGroup>
 <Compile Include="../../src/IntegratedContro.App/Binding.cs" Link="ViewModels/Binding.cs" />

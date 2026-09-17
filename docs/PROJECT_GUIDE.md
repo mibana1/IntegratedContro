@@ -217,6 +217,8 @@ Serial/TCP 스트림과 HTTP 요청·응답을 하나의 저수준 API에 억지
 - 공통 로직은 가상 장비와 가짜 어댑터로 검증하고, OS 어댑터는 지원 OS/실장치 통합 검증으로 구분한다. 처음부터 여러 OS용 별도 업무 로직을 복제하지 않는다.
 - OS 확장 시 우선 호환성 정책과 어댑터를 변경한다. 공통 계약 변경이 필요하면 이유와 기존 시나리오·저장 데이터·호스트 통신에 미치는 영향을 명시한다. 추가 지원이 항상 무수정이라는 보장은 하지 않는다.
 
+현재 구현의 OS·영상 엔진·저장소별 수정 위치와 검증 절차는 [환경 어댑터 책임 안내](ENVIRONMENT_ADAPTERS.md)를 따른다.
+
 ## 6. 공통 장비 모델과 실행 규칙
 
 ### 식별·지원 기능·상태
@@ -535,6 +537,31 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 참고: [Windows 서비스 구성](https://learn.microsoft.com/en-us/dotnet/core/extensions/windows-service), [서비스와 사용자 세션 분리](https://learn.microsoft.com/en-us/windows/win32/services/interactive-services), [Windows 보호 저장](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection).
 
 ## 10. 구현 단계와 완료 기준
+
+### OS·영상 엔진·저장소 환경 어댑터 책임 분리 (2026-09-17)
+
+- OS 지원 규칙을 Application의 PlatformPolicy, 실제 레지스트리·아키텍처 조회를 Infrastructure/Platform의 WindowsEnvironment로 분리했다.
+  25H2 Pro·Enterprise와 OS/프로세스 x64를 함께 검사하며 Server·ARM64 에뮬레이션·조회 실패를 공식 지원으로 처리하지 않는다.
+  지원 판정과 실제 기능 초기화/현장 검증은 구분한다.
+- DPAPI를 ISecretProtector/WindowsCurrentUserSecretProtector로 분리해 Hiperwall·영상 자격 증명 저장과 인증서 저장에 주입한다.
+  로컬 데이터 경로 검사, Windows 인증서 키 로드, 클라이언트 프로필 경로·mutex·공유 위반 재시도도 전용 파일로 옮겼다.
+- HostAdapters가 setup/run의 저장소·OS·보호 저장 선택을 담당하고 HostStorage가 상태·가상 장비 저장을 같은 DB에 구성한다.
+  진입점과 가상 드라이버에서 SQLite 연결 문자열·구체 저장소 생성을 제거했다.
+- 카메라 ViewModel/XAML의 LibVLC 직접 참조와 생성을 제거했다. AppAdapters에서 IVideoPresentation을 주입하고
+  VlcVideoPresentation이 WPF 표면·네이티브 플레이어 연결을 맡는다. Core의 IVideoPlayer 계약은 유지했다.
+  교체 엔진의 초기화/동기·비동기 실패, 취소 후 늦은 초기화, 콜백·중계·표면·엔진 해제를 검증한다.
+- 환경/경계 테스트 11개를 추가했다. 전체 서비스·통합 테스트 321개, 전체 WPF 회귀,
+  생성 RTSP → MediaMTX → 인증 HLS → 실제 LibVLC의 재연결·음소거·최소화·탭 이탈·로그아웃 검증을 통과했다.
+  전체 검증 빌드 경고/오류 0. 근거: artifacts/environment-adapters-verify.log,
+  environment-adapters-focused.log, environment-adapters-ui.log, artifacts/ui-smoke/camera-result.txt.
+- DB 스키마·호스트 API·PC/계정/작업 ID·client.json·기존 DPAPI 파일 형식은 유지하며 마이그레이션은 없다.
+  다른 OS·저장 엔진·실제 현장 카메라·물리 두 PC·Enterprise 환경 검수는 별도다.
+- 변경 유형별 수정 위치, 계약·수명·호환성, 검증 명령은 [환경 어댑터 책임 안내](ENVIRONMENT_ADAPTERS.md)를 따른다.
+- 최종 파일 분리 후 빌드·서비스 321개·프로필 복구 회귀도 재확인했다. 근거: artifacts/environment-adapters-final-verify.log.
+- 배포: scripts/publish.ps1로 artifacts/publish/Build-20260917-111306-291의 App·ControlHost를 생성했다.
+  작업 공간 IntegratedContro.lnk의 최신 대상과 App·ControlHost·Application·Infrastructure의 Release DLL 일치를 확인했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 근거: artifacts/environment-adapters-publish.log.
+  실행 중인 운영 프로세스는 종료하지 않았다. App과 ControlHost를 정상 종료 후 최신 배포본으로 수동 전환하면 적용된다.
 
 ### 조명·시나리오 기능별 ViewModel 책임 분리 (2026-09-17)
 

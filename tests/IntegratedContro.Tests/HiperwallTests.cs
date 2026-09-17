@@ -254,7 +254,7 @@ public sealed class HiperwallTests
         if (!OperatingSystem.IsWindows()) return;
         using var rig = new Rig();
         var missing = Path.Combine(rig.DirectoryPath, "missing");
-        ICredentialStore credentials = new HiperwallCredentialStore(missing);
+        ICredentialStore credentials = new HiperwallCredentialStore(missing, new WindowsCurrentUserSecretProtector());
         Rig.Reject("credential_store_unavailable", () => credentials.Save("fixture"));
         Assert.False(Directory.Exists(missing));
     }

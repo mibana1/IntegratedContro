@@ -102,7 +102,7 @@ public static partial class Program
             await CameraExecute(camera, camera.PlayCommand);
             await Wait(() => camera.PlaybackMessage.Contains("실시간 영상 재생 중"), 40000);
             Require(camera.DecodedFrames > 0 && camera.IsPlaying, camera.PlaybackMessage + "\n" + media.Diagnostics);
-            var player = camera.NativePlayer!;
+            var surface = (LibVLCSharp.WPF.VideoView)camera.VideoSurface!; var player = surface.MediaPlayer!;
             Require(player.Mute, "Video was not initially muted");
             player.Volume = 0; camera.Muted = false; await Wait(() => !player.Mute, 3000); camera.Muted = true; await Wait(() => player.Mute, 3000);
             var view = (IntegratedContro.App.CameraView)window.FindName("CameraWorkspace");
@@ -134,7 +134,7 @@ public static partial class Program
                 camera.FilteredCameras.CollectionChanged -= onCollection; camera.PropertyChanged -= onPoll;
             }
             await CameraExecute(camera, camera.RefreshCommand);
-            Require(ReferenceEquals(selected, camera.Selected) && ReferenceEquals(player, camera.NativePlayer),
+            Require(ReferenceEquals(selected, camera.Selected) && ReferenceEquals(surface, camera.VideoSurface),
                 "Catalog refresh replaced the selection or stopped active playback");
             var screenshot = Path.Combine(output, "camera-native-frame.png");
             Require(player.TakeSnapshot(0, screenshot, 640, 360), "Native snapshot not accepted");
@@ -147,7 +147,7 @@ public static partial class Program
             await Wait(() => camera.PlaybackMessage.Contains("실시간 영상 재생 중") && camera.DecodedFrames > frames, 45000);
             window.WindowState = WindowState.Minimized;
             await Wait(() => !camera.IsPlaying, 15000);
-            Require(camera.NativePlayer is null, "Minimize retained native player");
+            Require(camera.VideoSurface is null, "Minimize retained native player");
             window.WindowState = WindowState.Normal;
             await Wait(() => camera.CanPlay, 10000); await CameraExecute(camera, camera.PlayCommand);
             await Wait(() => camera.PlaybackMessage.Contains("실시간 영상 재생 중") && camera.DecodedFrames > 0, 30000);
@@ -159,7 +159,7 @@ public static partial class Program
             await Wait(() => camera.IsPlaying);
             await Execute(vm, vm.LogoutCommand);
             await Wait(() => !camera.IsPlaying && camera.Cameras.Count == 0);
-            Require(camera.NativePlayer is null, "Logout retained video");
+            Require(camera.VideoSurface is null, "Logout retained video");
             Require(!bindingLog.ToString().Contains("Error:", StringComparison.Ordinal), bindingLog.ToString());
             await File.WriteAllTextAsync(Path.Combine(output, "camera-result.txt"),
                 $"PASS: real loopback RTSP -> MediaMTX 1.21.0 -> authenticated host HLS -> LibVLC 3.0.23\nH.264/AAC, decoded frames {frames}, mute, reconnect, catalog refresh, minimize, tab exit, logout.\nNo physical camera or field server used.\n");

@@ -26,7 +26,18 @@ public sealed class VlcVideoPlayer : IVideoPlayer
         LibVLCSharp.Shared.Core.Initialize();
         _engine = new LibVLC("--no-video-title-show", "--quiet", "--no-snapshot-preview", "--network-caching=500");
 
-        NativePlayer = new MediaPlayer(_engine) { Mute = true, EnableHardwareDecoding = true };
+        MediaPlayer? player = null;
+        try
+        {
+            player = new MediaPlayer(_engine);
+            player.Mute = true; player.EnableHardwareDecoding = true;
+            NativePlayer = player;
+        }
+        catch
+        {
+            player?.Dispose(); _engine.Dispose(); _stop.Dispose();
+            throw;
+        }
     }
     public Task PlayAsync(VideoSource source, CancellationToken cancellationToken)
     {

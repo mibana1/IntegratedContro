@@ -25,22 +25,22 @@ try
         HostSetup.Initialize(args, dataPath); return 0;
     }
     if (args.FirstOrDefault() != "run") throw new ArgumentException("setup 또는 run을 명시하세요.");
-    using var store = new SqliteStateStore(dataPath);
+    using var store = HostAdapters.OpenStorage(dataPath);
     var config = JsonSerializer.Deserialize<HostConfiguration>(
         File.ReadAllText(Path.Combine(store.DataPath, "host.json")), JsonDefaults.Options)
         ?? throw new InvalidDataException("호스트 설정이 없습니다.");
     if (!IPAddress.TryParse(config.BindAddress, out var bind) || config.Port is < 1024 or > 65535)
         throw new InvalidDataException("호스트 IP/포트 설정 오류");
-    using var certificate = HostCertificate.Load(store.DataPath);
+    using var certificate = HostAdapters.Certificates.Load(store.DataPath);
     if (certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256) != config.CertificateSha256 ||
         DateTime.UtcNow > certificate.NotAfter.ToUniversalTime())
         throw new InvalidDataException("인증서 지문 또는 유효기간을 확인하세요.");
     using var hiperwallReader = new HiperwallHttpReader();
     using var media = new MediaMtxHttpClient();
-    var service = new ControlService(store, new Pbkdf2PasswordHasher(), new DeviceDriverRegistry(new VirtualDeviceDriver(new SqliteVirtualDeviceTransport(store.ConnectionString))),
+    var service = new ControlService(store.State, new Pbkdf2PasswordHasher(), new DeviceDriverRegistry(new VirtualDeviceDriver(store.VirtualDevices)),
         heartbeatTimeoutSeconds: config.HeartbeatTimeoutSeconds, hiperwall: hiperwallReader,
-        credentials: new HiperwallCredentialStore(store.DataPath), media: media,
-        mediaSecrets: new MediaCredentialStore(store.DataPath));
+        credentials: HostAdapters.HiperwallCredentials(store.DataPath), media: media,
+        mediaSecrets: HostAdapters.MediaCredentials(store.DataPath));
     var builder = WebApplication.CreateBuilder(Array.Empty<string>());
     builder.Logging.ClearProviders(); builder.Logging.AddConsole(); builder.Logging.SetMinimumLevel(LogLevel.Warning);
     builder.WebHost.ConfigureKestrel(server =>
@@ -140,7 +140,7 @@ try
     app.MapPost("/api/recovery/review", (HttpContext c) => service.ReviewRecovery(Token(c)));
     app.MapPost("/api/recovery/approve", (HttpContext c, RecoveryApprovalRequest r) => service.ApproveRecovery(Token(c), r.ReviewId));
     app.Lifetime.ApplicationStopping.Register(service.StopAccepting);
-    Console.WriteLine(PlatformPolicy.Describe());
+    Console.WriteLine(PlatformPolicy.Evaluate(HostAdapters.Platform.Read()).Description);
     Console.WriteLine($"가상 장비 호스트: https://{config.BindAddress}:{config.Port}");
     Console.WriteLine($"데이터 폴더: {store.DataPath}");
     Console.WriteLine($"인증서 SHA-256: {config.CertificateSha256}");

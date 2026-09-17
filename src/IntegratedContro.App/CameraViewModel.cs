@@ -3,7 +3,6 @@ using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Windows.Threading;
 using IntegratedContro.Core;
-using LibVLCSharp.Shared;
 
 namespace IntegratedContro.App;
 
@@ -20,9 +19,11 @@ public sealed class CameraViewModel : Bindable
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly SemaphoreSlim _videoGate = new(1, 1);
     private readonly HiperwallViewModel _hiperwall;
-    private VlcVideoPlayer? _player;
+    private IVideoPresentation? _presentation;
+    private IVideoPlayer? _player => _presentation?.Player;
     private LoopbackVideoRelay? _relay;
     private CancellationTokenSource? _playback;
+    private Action<VideoPlaybackStatus>? _playbackStatus;
     private long _playEpoch;
     private int _mediaVersion = -1;
     private Guid _draftId = Guid.NewGuid();
@@ -38,9 +39,9 @@ public sealed class CameraViewModel : Bindable
     public bool CanConfigure => _connected && _configure && !_busy && _client is not null;
     public bool CanPlay => _connected && _visible && _client is not null && Selected is { Enabled: true, Provisioning: CameraProvisioning.Ready };
     public bool IsPlaying => _player is not null;
-    public Func<VlcVideoPlayer> PlayerFactory { get; set; } = () => new VlcVideoPlayer();
-    public long DecodedFrames => _player?.DecodedFrames ?? 0;
-    public MediaPlayer? NativePlayer => _player?.NativePlayer;
+    public Func<CancellationToken, Task<IVideoPresentation>> PlayerFactory { get; set; }
+    public long DecodedFrames => _presentation?.DecodedFrames ?? 0;
+    public object? VideoSurface => _presentation?.Surface;
     private string _message = "로그인 후 카메라 목록을 조회하세요.";
     public string Message { get => _message; private set => Set(ref _message, value); }
     private void PublishStatus(string message)
@@ -123,9 +124,9 @@ public sealed class CameraViewModel : Bindable
     public AsyncCommand PlayCommand { get; }
     public AsyncCommand StopCommand { get; }
     public AsyncCommand StatusCommand { get; }
-    public CameraViewModel(HiperwallViewModel hiperwall)
+    public CameraViewModel(HiperwallViewModel hiperwall, Func<CancellationToken, Task<IVideoPresentation>> playerFactory)
     {
-        _hiperwall = hiperwall;
+        _hiperwall = hiperwall; PlayerFactory = playerFactory;
         RefreshCommand = Command(Refresh, () => _connected && _client is not null && _supported);
         NewCommand = Command(_ => { NewDraft(); return Task.CompletedTask; }, () => CanConfigure);
         LoadCommand = Command(_ =>
@@ -367,27 +368,34 @@ public sealed class CameraViewModel : Bindable
             if (!_visible || epoch != _playEpoch || ct.IsCancellationRequested) return;
             _playback = CancellationTokenSource.CreateLinkedTokenSource(ct);
             _relay = new LoopbackVideoRelay((asset, token) => client.GetMedia(camera.Id, camera.Version, asset, token));
-            try { _player = await Task.Run(PlayerFactory, ct); }
-            catch { await ClearPlayer(); PlaybackMessage = "LibVLC 네이티브 엔진을 초기화하지 못했습니다. x64 배포 파일을 확인하세요."; return; }
-            if (!_visible || epoch != _playEpoch || ct.IsCancellationRequested) { await ClearPlayer(); return; }
-            var player = _player;
-            player.Muted = Muted; Changed(nameof(NativePlayer)); Changed(nameof(IsPlaying));
-            player.StatusChanged += status => _dispatcher.BeginInvoke(() =>
+            try { _presentation = await PlayerFactory(_playback.Token); }
+            catch (OperationCanceledException) when (_playback.IsCancellationRequested) { await ClearPlayer(); return; }
+            catch { await ClearPlayer(); PlaybackMessage = "영상 엔진을 초기화하지 못했습니다. 설치 파일과 실행 환경을 확인하세요."; return; }
+            if (!_visible || epoch != _playEpoch || _playback.IsCancellationRequested) { await ClearPlayer(); return; }
+            var presentation = _presentation; var player = presentation.Player;
+            player.Muted = Muted; Changed(nameof(VideoSurface)); Changed(nameof(IsPlaying));
+            _playbackStatus = status => _dispatcher.BeginInvoke(() =>
             { if (ReferenceEquals(_player, player) && epoch == _playEpoch) PlaybackMessage = status.Message; });
-            var task = player.PlayAsync(_relay.Source, _playback.Token);
-            _ = PlaybackEnded(task, player, epoch);
+            player.StatusChanged += _playbackStatus;
+            Task task;
+            try { task = player.PlayAsync(_relay.Source, _playback.Token); }
+            catch { await ClearPlayer(); PlaybackMessage = "영상 재생을 시작하지 못했습니다. 실행 환경을 확인하세요."; return; }
+            _ = PlaybackEnded(task, presentation, epoch);
         }
         finally { _videoGate.Release(); Raise(); }
     }
-    private async Task PlaybackEnded(Task task, VlcVideoPlayer player, long epoch)
+    private async Task PlaybackEnded(Task task, IVideoPresentation presentation, long epoch)
     {
-        await task;
-        if (ReferenceEquals(_player, player) && _playEpoch == epoch)
+        var failed = false;
+        try { await task; }
+        catch (OperationCanceledException) { }
+        catch { failed = true; }
+        if (ReferenceEquals(_presentation, presentation) && _playEpoch == epoch)
         {
             await _videoGate.WaitAsync();
             try
             {
-                if (ReferenceEquals(_player, player)) { PlaybackMessage = player.LastStatus.Message; await ClearPlayer(); }
+                if (ReferenceEquals(_presentation, presentation)) { PlaybackMessage = failed ? "영상 재생에 실패했습니다. 연결과 실행 환경을 확인하세요." : presentation.LastStatus.Message; await ClearPlayer(); }
             }
             finally { _videoGate.Release(); Raise(); }
         }
@@ -402,11 +410,19 @@ public sealed class CameraViewModel : Bindable
     private async Task ClearPlayer()
     {
         _playback?.Cancel();
-        var player = _player; _player = null; Changed(nameof(NativePlayer)); Changed(nameof(IsPlaying));
-        // Closing the relay first aborts network reads; the engine then joins its worker before disposal.
-        if (_relay is not null) { await _relay.DisposeAsync(); _relay = null; }
-        if (player is not null) await player.DisposeAsync();
-        _playback?.Dispose(); _playback = null;
+        var presentation = _presentation; _presentation = null; Changed(nameof(VideoSurface)); Changed(nameof(IsPlaying));
+        if (presentation is not null && _playbackStatus is not null)
+            presentation.Player.StatusChanged -= _playbackStatus;
+        _playbackStatus = null;
+        var relay = _relay; _relay = null;
+        var playback = _playback; _playback = null;
+        // Abort network reads before joining the engine, releasing all resources even if one adapter fails.
+        try { if (relay is not null) await relay.DisposeAsync(); }
+        finally
+        {
+            try { if (presentation is not null) await presentation.DisposeAsync(); }
+            finally { playback?.Dispose(); }
+        }
     }
     private void Raise()
     {

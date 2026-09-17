@@ -185,7 +185,7 @@ public sealed class CameraTests
         Directory.CreateDirectory(dir);
         try
         {
-            var store = new MediaCredentialStore(dir); var id = store.Save("rtsp://protected:test@camera/feed");
+            var store = new MediaCredentialStore(dir, new WindowsCurrentUserSecretProtector()); var id = store.Save("rtsp://protected:test@camera/feed");
             Assert.Equal("rtsp://protected:test@camera/feed", store.Read(id));
             Assert.DoesNotContain("rtsp://", Encoding.UTF8.GetString(File.ReadAllBytes(Directory.GetFiles(dir).Single())));
             store.Delete(id); Assert.Empty(Directory.GetFiles(dir));

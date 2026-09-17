@@ -1,4 +1,3 @@
-using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using IntegratedContro.Application;
@@ -6,8 +5,7 @@ using IntegratedContro.Core;
 
 namespace IntegratedContro.Infrastructure;
 
-[SupportedOSPlatform("windows")]
-public sealed class MediaCredentialStore(string dataPath) : IMediaSecretStore
+public sealed class MediaCredentialStore(string dataPath, ISecretProtector protector) : IMediaSecretStore
 {
     private string PathFor(Guid id) => Path.Combine(dataPath, $"media-{id:N}.dpapi");
     public Guid Save(string secret)
@@ -16,7 +14,7 @@ public sealed class MediaCredentialStore(string dataPath) : IMediaSecretStore
         var id = Guid.NewGuid();
         try
         {
-            var encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+            var encrypted = protector.Protect(bytes);
             using var file = new FileStream(PathFor(id), FileMode.CreateNew, FileAccess.Write, FileShare.None);
             file.Write(encrypted); file.Flush(true); return id;
         }
@@ -29,7 +27,7 @@ public sealed class MediaCredentialStore(string dataPath) : IMediaSecretStore
         byte[]? bytes = null;
         try
         {
-            bytes = ProtectedData.Unprotect(File.ReadAllBytes(PathFor(reference)), null, DataProtectionScope.CurrentUser);
+            bytes = protector.Unprotect(File.ReadAllBytes(PathFor(reference)));
             return Encoding.UTF8.GetString(bytes);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or CryptographicException)

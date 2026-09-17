@@ -32,13 +32,13 @@ public static class HostSetup
         if (password != confirmation) throw new ArgumentException("비밀번호 확인이 일치하지 않습니다.");
         IInitialAdministratorPolicy policy = new InitialAdministratorPolicy(new Pbkdf2PasswordHasher());
         var account = policy.Create(admin, password);
-        using var store = new SqliteStateStore(directory, initialize: true);
-        var certHash = HostCertificate.Create(store.DataPath, bind);
+        using var store = HostAdapters.OpenStorage(directory, initialize: true);
+        var certHash = HostAdapters.Certificates.Create(store.DataPath, bind);
         var config = new HostConfiguration(bind, port, seconds, certHash);
         File.WriteAllText(Path.Combine(store.DataPath, "host.json"), JsonSerializer.Serialize(config, JsonDefaults.Options));
         var state = new HostState { SiteName = site, Initialized = true, Accounts = [account] };
         state.Audit.Add(new(DateTimeOffset.UtcNow, account.Id, "InitialAdministratorCreated", "로컬 최초 설정 완료"));
-        store.Save(state);
+        store.State.Save(state);
         Console.WriteLine("최초 설정 완료. 같은 --data 경로로 run 명령을 실행하세요.");
         Console.WriteLine($"HTTPS 인증서 SHA-256: {certHash}");
         Console.WriteLine("다른 PC의 앱에는 호스트 주소와 위 지문을 전달하세요. 개인 키는 현재 Windows 계정 DPAPI로 보호됩니다.");

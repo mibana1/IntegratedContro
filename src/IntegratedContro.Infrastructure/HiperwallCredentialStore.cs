@@ -1,4 +1,3 @@
-using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using IntegratedContro.Application;
@@ -6,8 +5,7 @@ using IntegratedContro.Core;
 
 namespace IntegratedContro.Infrastructure;
 
-[SupportedOSPlatform("windows")]
-public sealed class HiperwallCredentialStore(string dataPath) : ICredentialStore
+public sealed class HiperwallCredentialStore(string dataPath, ISecretProtector protector) : ICredentialStore
 {
     private string PathFor(Guid reference) => Path.Combine(dataPath, $"hiperwall-{reference:N}.dpapi");
     public Guid Save(string secret)
@@ -16,7 +14,7 @@ public sealed class HiperwallCredentialStore(string dataPath) : ICredentialStore
         try
         {
             var reference = Guid.NewGuid();
-            var encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+            var encrypted = protector.Protect(bytes);
             using var file = new FileStream(PathFor(reference), FileMode.CreateNew, FileAccess.Write, FileShare.None);
             file.Write(encrypted); file.Flush(flushToDisk: true);
             return reference;
@@ -30,7 +28,7 @@ public sealed class HiperwallCredentialStore(string dataPath) : ICredentialStore
         byte[]? bytes = null;
         try
         {
-            bytes = ProtectedData.Unprotect(File.ReadAllBytes(PathFor(reference)), null, DataProtectionScope.CurrentUser);
+            bytes = protector.Unprotect(File.ReadAllBytes(PathFor(reference)));
             return Encoding.UTF8.GetString(bytes);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or CryptographicException)
