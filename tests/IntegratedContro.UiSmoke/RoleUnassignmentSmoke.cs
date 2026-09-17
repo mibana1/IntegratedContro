@@ -49,9 +49,9 @@ public static partial class Program
             Require(!ButtonFor(mainRow).IsEnabled && !ButtonFor(aliasRow).IsEnabled, "Unassignment enabled without ownership");
             await Execute(vm, vm.AcquireCommand);
             SetScenarioValue(vm, "room.main", DeviceOperation.Power, 1);
-            vm.DelayMs = 60000; vm.ScenarioName = "입구 조명 순차 실행";
-            await Execute(vm, vm.AddStepCommand); await Execute(vm, vm.SaveScenarioCommand);
-            vm.SelectedScenario = vm.Scenarios.Single();
+            vm.ScenarioEditor.DelayMs = 60000; vm.ScenarioEditor.ScenarioName = "입구 조명 순차 실행";
+            await Execute(vm, vm.ScenarioEditor.AddStepCommand); await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand);
+            vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
             Require(mainRow.Hint.Contains("입구 조명 순차 실행") && mainRow.Hint.Contains("재배정"), "Referenced definition warning missing");
             view.BringIntoView(); window.UpdateLayout();
             Capture(window, Path.Combine(output, "role-unassignment.png"));
@@ -68,7 +68,7 @@ public static partial class Program
             Capture(window, Path.Combine(output, "quick-role-aliases.png"));
             tabs.SelectedItem = window.FindName("AdminTab"); window.UpdateLayout();
 
-            await Execute(vm, vm.RunScenarioCommand);
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(!ButtonFor(mainRow).IsEnabled && mainRow.Hint.Contains("진행 중"), "Active scenario did not disable used binding");
             Require(ButtonFor(aliasRow).IsEnabled, "Unrelated alias was blocked by another role's work");
             ((TextBox)window.FindName("RoleIdInput")).SetCurrentValue(TextBox.TextProperty, "draft.unrelated");
@@ -81,17 +81,17 @@ public static partial class Program
             vm.SelectedRole = vm.Roles.Single(r => r.Id == "room.main");
             await Click(vm, ButtonFor(mainRow));
             Require(vm.AssignedRoles.Count == 0 && vm.Devices.Count == 2 && vm.Roles.Single().Id == "room.other" &&
-                vm.Scenarios.Count == 1 && vm.SelectedScenarioTarget is null && vm.ScenarioSettings.Count == 0 &&
+                vm.ScenarioEditor.Scenarios.Count == 1 && vm.ScenarioEditor.SelectedScenarioTarget is null && vm.ScenarioEditor.ScenarioSettings.Count == 0 &&
                 vm.SelectedRole is null, "Deleted binding remained usable or device/definition was lost");
             Require(!mainRow.UnassignCommand.CanExecute(null) && !aliasRow.UnassignCommand.CanExecute(null),
                 "Detached command still enabled");
             var count = vm.Jobs.Count;
-            vm.SelectedScenario = vm.Scenarios.Single(); await Execute(vm, vm.RunScenarioCommand);
+            vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single(); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(vm.Jobs.Count == count && vm.Message.Contains("역할을 찾을 수 없습니다"), "Definition with missing role accepted");
             vm.RoleName = "room.main"; await Execute(vm, vm.SaveRoleCommand);
             Require(vm.Roles.Single(r => r.Id == "room.main").Version > mainRow.Binding.Version &&
                 !mainRow.UnassignCommand.CanExecute(null), "Recreation revived stale binding command");
-            await Execute(vm, vm.RunScenarioCommand);
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(vm.Jobs.Count == count + 1, "Reassigned role did not restore definition execution");
             vm.SelectedJob = vm.Jobs.Single(j => j.Job.Active); await Execute(vm, vm.CancelCommand);
 

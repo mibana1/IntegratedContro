@@ -2,4 +2,15 @@
 <ProjectReference Include="../../src/IntegratedContro.Infrastructure/IntegratedContro.Infrastructure.csproj" />
 <PackageReference Include="Microsoft.NET.Test.Sdk" /><PackageReference Include="xunit" />
 <PackageReference Include="xunit.runner.visualstudio"><PrivateAssets>all</PrivateAssets></PackageReference>
-<ProjectReference Include="../../src/IntegratedContro.ControlHost/IntegratedContro.ControlHost.csproj" ReferenceOutputAssembly="false" /><Using Include="Xunit" /><Compile Include="../../src/IntegratedContro.App/ClientPreferences.cs" Link="ClientPreferences.cs" /></ItemGroup></Project>
+<ProjectReference Include="../../src/IntegratedContro.ControlHost/IntegratedContro.ControlHost.csproj" ReferenceOutputAssembly="false" /><Using Include="Xunit" /><Compile Include="../../src/IntegratedContro.App/ClientPreferences.cs" Link="ClientPreferences.cs" /></ItemGroup>
+<!-- Compile the UI-independent feature boundary without WPF, the shell, or host processes. -->
+<ItemGroup>
+<Compile Include="../../src/IntegratedContro.App/Binding.cs" Link="ViewModels/Binding.cs" />
+<Compile Include="../../src/IntegratedContro.App/FeatureViewModel.cs" Link="ViewModels/FeatureViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/LightingViewModel.cs" Link="ViewModels/LightingViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/ScenarioEditorViewModel.cs" Link="ViewModels/ScenarioEditorViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/ScenarioViewModel.cs" Link="ViewModels/ScenarioViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/ScenarioDeviceViewModel.cs" Link="ViewModels/ScenarioDeviceViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/ScenarioInputViewModel.cs" Link="ViewModels/ScenarioInputViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/ScenarioSetting.cs" Link="ViewModels/ScenarioSetting.cs" />
+</ItemGroup></Project>

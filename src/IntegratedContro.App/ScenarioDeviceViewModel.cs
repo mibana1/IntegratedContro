@@ -3,7 +3,7 @@ using IntegratedContro.Core;
 
 namespace IntegratedContro.App;
 
-public sealed partial class MainViewModel
+public sealed partial class ScenarioEditorViewModel
 {
     public ObservableCollection<ScenarioTarget> ScenarioTargets { get; } = [];
     public ObservableCollection<ScenarioSetting> ScenarioSettings { get; } = [];

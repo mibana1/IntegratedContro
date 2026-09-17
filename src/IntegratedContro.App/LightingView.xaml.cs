@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,7 +10,7 @@ namespace IntegratedContro.App;
 public partial class LightingView : UserControl
 {
     private readonly DispatcherTimer _scrollTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
-    private MainViewModel? _viewModel;
+    private LightingViewModel? _viewModel;
     private Window? _window;
     private Guid? _source;
     private int _pointerId;
@@ -52,7 +52,7 @@ public partial class LightingView : UserControl
     {
         CancelCardDrag();
         if (_viewModel is not null) _viewModel.PropertyChanged -= ModelChanged;
-        _viewModel = DataContext as MainViewModel;
+        _viewModel = DataContext as LightingViewModel;
         if (_viewModel is not null) _viewModel.PropertyChanged += ModelChanged;
     }
     private void ModelChanged(object? sender, PropertyChangedEventArgs e)

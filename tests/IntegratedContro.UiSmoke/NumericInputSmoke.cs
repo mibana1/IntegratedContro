@@ -101,26 +101,30 @@ public static partial class Program
                 (scenarioTimeout, "abc"), (scenarioTimeout, "99"), (scenarioTimeout, "30001"), (scenarioTimeout, "2147483648") })
             {
                 await Input(scenarioDelay, "0"); await Input(scenarioTimeout, "3000");
-                var count = vm.DraftSteps.Count;
+                var count = vm.ScenarioEditor.DraftSteps.Count;
                 await Input(input, invalid);
-                Require(!add.IsEnabled && vm.ScenarioTimingError.Length > 0 && timingError.Text.Length > 0, "Invalid scenario timing was not blocked");
-                vm.AddStepCommand.Execute(null); await Execute(vm, vm.RefreshCommand);
-                Require(vm.DraftSteps.Count == count && input.Text == invalid, "Invalid scenario timing added a step or polling replaced the text");
+                Require(!add.IsEnabled && vm.ScenarioEditor.ScenarioTimingError.Length > 0 && timingError.Text.Length > 0, "Invalid scenario timing was not blocked");
+                vm.ScenarioEditor.AddStepCommand.Execute(null); await Execute(vm, vm.RefreshCommand);
+                Require(vm.ScenarioEditor.DraftSteps.Count == count && input.Text == invalid, "Invalid scenario timing added a step or polling replaced the text");
             }
             await Input(scenarioDelay, "0"); await Input(scenarioTimeout, "60000");
-            vm.DraftStepKind = ScenarioStepKind.WaitUntil;
+            Require(vm.DelayMsText == "0" && vm.TimeoutMsText == "3000", "Scenario timing changed manual input");
+            vm.DelayMsText = "invalid manual delay";
+            Require(vm.ScenarioEditor.DelayMsText == "0" && vm.ScenarioEditor.TimeoutMsText == "60000", "Manual timing changed scenario input");
+            vm.DelayMsText = "0";
+            vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.WaitUntil;
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(add.IsEnabled && vm.ScenarioTimingError == "", "Condition-wait timeout incorrectly used the manual 30-second maximum");
-            vm.DraftStepKind = ScenarioStepKind.DisplayLayout;
-            Require(vm.ScenarioTimingError == "", "Layout timeout incorrectly used the manual 30-second maximum");
-            vm.DraftStepKind = ScenarioStepKind.DeviceCommand;
-            Require(!vm.AddStepCommand.CanExecute(null), "Command step accepted the long wait-only timeout");
+            Require(add.IsEnabled && vm.ScenarioEditor.ScenarioTimingError == "", "Condition-wait timeout incorrectly used the manual 30-second maximum");
+            vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.DisplayLayout;
+            Require(vm.ScenarioEditor.ScenarioTimingError == "", "Layout timeout incorrectly used the manual 30-second maximum");
+            vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.DeviceCommand;
+            Require(!vm.ScenarioEditor.AddStepCommand.CanExecute(null), "Command step accepted the long wait-only timeout");
             await Input(scenarioTimeout, "3000"); await Click(vm, add);
-            Require(vm.DraftSteps.Count == 1 && vm.DraftSteps[0].TimeoutMs == 3000 && vm.DraftSteps[0].Value == 42,
+            Require(vm.ScenarioEditor.DraftSteps.Count == 1 && vm.ScenarioEditor.DraftSteps[0].TimeoutMs == 3000 && vm.ScenarioEditor.DraftSteps[0].Value == 42,
                 "Corrected scenario timing did not produce the intended step");
-            vm.ScenarioName = "숫자 입력 검증"; await Execute(vm, vm.SaveScenarioCommand); vm.SelectedScenario = vm.Scenarios.Single();
+            vm.ScenarioEditor.ScenarioName = "숫자 입력 검증"; await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
             await Input(scenarioDelay, "abc"); await Input(scenarioTimeout, ""); vm.CommandValueText = "invalid manual draft";
-            await Execute(vm, vm.RunScenarioCommand); await Wait(() => vm.Jobs.Any(j => j.Job.Kind == JobKind.Scenario && !j.Job.Active));
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand); await Wait(() => vm.Jobs.Any(j => j.Job.Kind == JobKind.Scenario && !j.Job.Active));
             var job = vm.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job;
             Require(job.Snapshot.Steps[0].Value == 42 && job.Snapshot.Steps[0].TimeoutMs == 3000 && job.Steps[0].Status == StepStatus.Simulated,
                 "Saved scenario execution read unrelated invalid editor inputs");

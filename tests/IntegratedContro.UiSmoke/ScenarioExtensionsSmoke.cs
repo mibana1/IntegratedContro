@@ -41,30 +41,30 @@ public static partial class Program
 
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("ScenarioTab"); window.UpdateLayout();
             var kind = (ComboBox)window.FindName("ScenarioKindPicker"); var add = (Button)window.FindName("AddScenarioStep");
-            vm.ScenarioName = "조명 → 조건 확인 → 배치 표시 → 밝기";
-            SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Power, 1); vm.DelayMs = 0; vm.TimeoutMs = 10000;
+            vm.ScenarioEditor.ScenarioName = "조명 → 조건 확인 → 배치 표시 → 밝기";
+            SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Power, 1); vm.ScenarioEditor.DelayMs = 0; vm.ScenarioEditor.TimeoutMs = 10000;
             await Click(vm, add);
             kind.SetCurrentValue(ComboBox.SelectedValueProperty, ScenarioStepKind.WaitUntil); window.UpdateLayout();
-            Require(vm.DraftStepKind == ScenarioStepKind.WaitUntil && vm.IsDeviceScenarioStep, "Wait kind binding failed");
+            Require(vm.ScenarioEditor.DraftStepKind == ScenarioStepKind.WaitUntil && vm.ScenarioEditor.IsDeviceScenarioStep, "Wait kind binding failed");
             await Click(vm, add);
             kind.SetCurrentValue(ComboBox.SelectedValueProperty, ScenarioStepKind.DisplayLayout); window.UpdateLayout();
             var layouts = (ComboBox)window.FindName("ScenarioLayoutPicker");
-            layouts.SetCurrentValue(ComboBox.SelectedItemProperty, vm.ScenarioLayouts.Single()); window.UpdateLayout();
-            Require(vm.SelectedScenarioLayout is not null && layouts.IsVisible, "Saved layout binding missing");
+            layouts.SetCurrentValue(ComboBox.SelectedItemProperty, vm.ScenarioEditor.ScenarioLayouts.Single()); window.UpdateLayout();
+            Require(vm.ScenarioEditor.SelectedScenarioLayout is not null && layouts.IsVisible, "Saved layout binding missing");
             await Click(vm, add);
             kind.SetCurrentValue(ComboBox.SelectedValueProperty, ScenarioStepKind.DeviceCommand);
             SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Brightness, 60);
             await Click(vm, add);
-            Require(vm.DraftSteps.Select(s => s.Kind).SequenceEqual(new[] { ScenarioStepKind.DeviceCommand,
+            Require(vm.ScenarioEditor.DraftSteps.Select(s => s.Kind).SequenceEqual(new[] { ScenarioStepKind.DeviceCommand,
                 ScenarioStepKind.WaitUntil, ScenarioStepKind.DisplayLayout, ScenarioStepKind.DeviceCommand }), "Mixed draft order lost");
-            await Execute(vm, vm.SaveScenarioCommand); vm.SelectedScenario = vm.Scenarios.Single();
-            await Execute(vm, vm.LoadScenarioCommand);
-            Require(vm.DraftSteps.Count == 4 && vm.DraftSteps[2].LayoutId == vm.ScenarioLayouts.Single().Id, "Mixed definition round-trip failed");
+            await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
+            await Execute(vm, vm.ScenarioEditor.LoadScenarioCommand);
+            Require(vm.ScenarioEditor.DraftSteps.Count == 4 && vm.ScenarioEditor.DraftSteps[2].LayoutId == vm.ScenarioEditor.ScenarioLayouts.Single().Id, "Mixed definition round-trip failed");
             var output = Path.Combine(host.Root, "artifacts", "ui-smoke");
             Capture(window, Path.Combine(output, "scenario-extensions.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             Capture(window, Path.Combine(output, "scenario-extensions-small.png"));
-            await Execute(vm, vm.RunScenarioCommand); await Wait(() => vm.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand); await Wait(() => vm.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
             var completed = vm.Jobs.Single().Job;
             Require(completed.Steps.Select(s => s.Status).SequenceEqual(new[] { StepStatus.Simulated, StepStatus.ConditionMet,
                 StepStatus.Acknowledged, StepStatus.Simulated }), "Mixed execution order/result incorrect");
@@ -72,15 +72,15 @@ public static partial class Program
             vm.SelectedJob = vm.Jobs.Single(); Require(vm.JobDetails.Contains("시나리오 배치") && vm.JobDetails.Contains("조건 충족"), "Mixed details missing");
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("HandoverTab"); window.UpdateLayout();
             Capture(window, Path.Combine(output, "scenario-results.png"));
-            await Execute(vm, vm.DeleteScenarioCommand);
-            Require(vm.Scenarios.Count == 0 && vm.Jobs.Single().Job.Id == completed.Id &&
+            await Execute(vm, vm.ScenarioEditor.DeleteScenarioCommand);
+            Require(vm.ScenarioEditor.Scenarios.Count == 0 && vm.Jobs.Single().Job.Id == completed.Id &&
                 vm.HiperwallJobs.Any(j => j.Display?.Outstanding == true), "Definition deletion removed completed history or scheduled display cleanup");
 
-            await Execute(vm, vm.NewScenarioCommand); vm.ScenarioName = "교대 중 조건 대기"; vm.DraftStepKind = ScenarioStepKind.WaitUntil;
-            SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Power, 0); vm.TimeoutMs = 60000;
-            await Execute(vm, vm.AddStepCommand); vm.DraftStepKind = ScenarioStepKind.DisplayLayout;
-            await Execute(vm, vm.AddStepCommand); await Execute(vm, vm.SaveScenarioCommand);
-            vm.SelectedScenario = vm.Scenarios.Single(s => s.Name == "교대 중 조건 대기"); await Execute(vm, vm.RunScenarioCommand);
+            await Execute(vm, vm.ScenarioEditor.NewScenarioCommand); vm.ScenarioEditor.ScenarioName = "교대 중 조건 대기"; vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.WaitUntil;
+            SetScenarioValue(vm, vm.Roles.Single().Id, DeviceOperation.Power, 0); vm.ScenarioEditor.TimeoutMs = 60000;
+            await Execute(vm, vm.ScenarioEditor.AddStepCommand); vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.DisplayLayout;
+            await Execute(vm, vm.ScenarioEditor.AddStepCommand); await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand);
+            vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single(s => s.Name == "교대 중 조건 대기"); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             await Wait(() => vm.Jobs.Any(j => j.Job.Steps[0].Status == StepStatus.Waiting));
             var waitingId = vm.Jobs.Single(j => j.Job.Active).Id;
             await Execute(vm, vm.ReleaseCommand); await Execute(vm, vm.LogoutCommand);

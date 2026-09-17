@@ -50,6 +50,10 @@ public sealed partial class MainViewModel : Bindable
 {
     public HiperwallViewModel Hiperwall { get; } = new();
     public CameraViewModel Cameras { get; }
+    public LightingViewModel Lighting { get; }
+    public ScenarioEditorViewModel ScenarioEditor { get; }
+    private int _deviceViewIndex;
+    public int DeviceViewIndex { get => _deviceViewIndex; set => Set(ref _deviceViewIndex, value); }
     private ClientPreferences _preferences;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly List<AsyncCommand> _commands = [];
@@ -99,17 +103,14 @@ public sealed partial class MainViewModel : Bindable
     public ObservableCollection<DeviceRow> Devices { get; } = [];
     public ObservableCollection<RoleBinding> Roles { get; } = [];
     public ObservableCollection<JobRow> Jobs { get; } = [];
-    public ObservableCollection<ScenarioDefinition> Scenarios { get; } = [];
     public ObservableCollection<DeviceModel> Models { get; } = [];
     public ObservableCollection<AccountView> Accounts { get; } = [];
-    public ObservableCollection<ScenarioStep> DraftSteps { get; } = [];
     public ObservableCollection<AuditRow> Audit { get; } = [];
     private AuditRow? _selectedAudit;
     public AuditRow? SelectedAudit { get => _selectedAudit; set { Set(ref _selectedAudit, value); Changed(nameof(AuditDetails)); } }
     public string AuditDetails => SelectedAudit?.Raw ?? "기록을 선택하면 원본 이벤트 코드와 ID를 확인할 수 있습니다.";
     public IEnumerable<AccountRole> AccountRoles => Enum.GetValues<AccountRole>();
     public IEnumerable<VirtualFault> Faults => Enum.GetValues<VirtualFault>();
-    public IEnumerable<FailurePolicy> FailurePolicies => Enum.GetValues<FailurePolicy>();
     private DeviceRow? _selectedDevice;
     public DeviceRow? SelectedDevice { get => _selectedDevice; set { var previous = _selectedDevice?.Id; Set(ref _selectedDevice, value); if (previous != value?.Id) LoadAssignedRoleName(); Notify(); } }
     private RoleBinding? _selectedRole;
@@ -128,7 +129,6 @@ public sealed partial class MainViewModel : Bindable
     }
     public string CommandRange => SelectedCapability is null ? "역할을 선택하세요." : IsPowerCommand ? "전원 상태를 선택한 뒤 명령을 접수하세요." : $"{SelectedCapability.Minimum}~{SelectedCapability.Maximum} {SelectedCapability.Unit}";
 
-    public FailurePolicy DraftFailurePolicy { get; set; }
     private JobRow? _selectedJob;
     public JobRow? SelectedJob { get => _selectedJob; set { Set(ref _selectedJob, value); Changed(nameof(JobDetails)); Notify(); } }
     public string JobDetails
@@ -161,9 +161,6 @@ public sealed partial class MainViewModel : Bindable
         !IsAdmin ? "역할 배정은 관리자만 할 수 있습니다." : !CanControl ? "역할 배정에는 사용권이 필요합니다. 사용 시작을 누르세요." :
         SelectedDevice is null ? "목록에서 배정할 장비를 먼저 선택하세요." : string.IsNullOrWhiteSpace(RoleName) ?
         "역할 ID를 입력하세요. 예: room.light" : "배정 후 장비 제어의 역할로 조작에서 기능과 값을 선택하세요. 동일 역할 ID는 선택 장비로 재배정됩니다.";
-    public string ScenarioName { get; set; } = "";
-    private Guid _scenarioId = Guid.NewGuid();
-    private int _scenarioVersion;
     public string NewAccountName { get; set; } = "";
     public AccountRole NewAccountRole { get; set; } = AccountRole.Operator;
     public bool AccountAllDevices { get; set; } = true;
@@ -184,12 +181,6 @@ public sealed partial class MainViewModel : Bindable
     public AsyncCommand LoadDeviceCommand { get; }
     public AsyncCommand NewDeviceCommand { get; }
     public AsyncCommand SaveRoleCommand { get; }
-    public AsyncCommand AddStepCommand { get; }
-    public AsyncCommand RemoveStepCommand { get; }
-    public AsyncCommand SaveScenarioCommand { get; }
-    public AsyncCommand LoadScenarioCommand { get; }
-    public AsyncCommand NewScenarioCommand { get; }
-    public AsyncCommand RunScenarioCommand { get; }
     public AsyncCommand CreateAccountCommand { get; }
     public AsyncCommand UpdateAccountCommand { get; }
     public AsyncCommand LoadAccountCommand { get; }
@@ -200,6 +191,10 @@ public sealed partial class MainViewModel : Bindable
 
     public MainViewModel()
     {
+        var featureHost = new FeatureHost(this);
+        Lighting = new LightingViewModel(featureHost);
+        ScenarioEditor = new ScenarioEditorViewModel(featureHost);
+        Lighting.DeviceDetailsRequested += id => { SelectedDevice = Devices.SingleOrDefault(d => d.Id == id); DeviceViewIndex = 1; };
         var initialPreferences = ClientPreferences.ReadForStartup();
         _preferences = initialPreferences.Preferences;
         Cameras = new CameraViewModel(Hiperwall);
@@ -212,7 +207,7 @@ public sealed partial class MainViewModel : Bindable
         AcquireCommand = Command(async () => { await Client.Post<Lease>("/api/lease/acquire"); }, () => _connected && IsLoggedIn && _state?.Lease.Mode == LeaseMode.Free);
         ReleaseCommand = Command(async () => { await Client.Post<Lease>("/api/lease/release", new LeaseRequest(Generation)); Message = "사용 종료 완료. 접수 작업과 예약은 호스트에서 유지됩니다."; }, () => CanControl);
         RefreshCommand = Command(Refresh, () => IsLoggedIn);
-        SubmitCommand = Command(() => Submit(false), () => CanControl && SelectedRole is not null && SelectedCapability is not null && !HasPending && ManualInputError.Length == 0);
+        SubmitCommand = Command(() => Submit(), () => CanControl && SelectedRole is not null && SelectedCapability is not null && !HasPending && ManualInputError.Length == 0);
         RetryCommand = Command(SendPending, () => _connected && HasPending);
         CancelCommand = Command(async () => { await Client.Post<Job>("/api/jobs/cancel", new JobActionRequest(Generation, SelectedJob!.Id)); Message = "선택 취소 요청을 처리했습니다. 전송된 동작의 물리 정지·롤백은 아닙니다."; },
             () => CanControl && SelectedJob is not null && (SelectedJob.Job.Active || SelectedJob.Job.Status == JobStatus.NeedsReview));
@@ -237,25 +232,6 @@ public sealed partial class MainViewModel : Bindable
             _roleNameEdited = false; Set(ref _roleName, saved.Id, nameof(RoleName));
             Message = $"역할 배정 완료: {saved.Id} → {target.Name} / {target.PcName}. 장비 제어에서 기능·값을 선택해 명령을 접수하세요.";
         }, () => CanConfigure && SelectedDevice is not null && !string.IsNullOrWhiteSpace(RoleName));
-        AddStepCommand = Command(AddScenarioStep, () => ScenarioTimingError.Length == 0);
-        InitializeScenarioEditor();
-        RemoveStepCommand = ScenarioEditCommand(RemoveSelectedDraftStep, () => HasSelectedDraftStep);
-        SaveScenarioCommand = Command(async () =>
-        {
-            RequireScenarioExtensions(DraftSteps);
-            var saved = await Client.Post<ScenarioDefinition>("/api/scenarios", new ScenarioRequest(Generation, _scenarioId, ScenarioName, DraftSteps.ToArray(), _scenarioVersion));
-            _scenarioVersion = saved.Version; Message = "시나리오 정의를 저장했습니다.";
-        }, () => CanConfigure);
-        LoadScenarioCommand = Command(() =>
-        {
-            if (SelectedScenario is null) return Task.CompletedTask;
-            _scenarioId = SelectedScenario.Id; _scenarioVersion = SelectedScenario.Version; ScenarioName = SelectedScenario.Name;
-            SelectedDraftStepIndex = -1;
-            DraftSteps.Clear(); foreach (var step in SelectedScenario.Steps) DraftSteps.Add(step);
-            Changed(nameof(ScenarioName)); return Task.CompletedTask;
-        });
-        NewScenarioCommand = Command(() => { ClearScenarioDraft(); return Task.CompletedTask; });
-        RunScenarioCommand = Command(() => Submit(true), () => CanControl && !HasPending);
         CreateAccountCommand = Command(async () =>
         {
             var password = ReadNewPassword();
@@ -291,7 +267,6 @@ public sealed partial class MainViewModel : Bindable
             await Client.Post<Lease>("/api/recovery/approve", new RecoveryApprovalRequest(_review!.ReviewId));
             _review = null; Message = "관리자 복구 인계 완료. 다음 운영자는 사용 시작 후 남은 작업을 검토하세요.";
         }, () => IsAdmin && _review is not null && _state?.Lease.Mode == LeaseMode.RecoveryRequired);
-        InitializeLighting();
         InitializeHandover();
         _timer.Tick += async (_, _) => await Poll();
         _timer.Start();
@@ -299,14 +274,15 @@ public sealed partial class MainViewModel : Bindable
     private Guid[] ParseScope() => AccountDeviceIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(Guid.Parse).ToArray();
     private AsyncCommand Command(Func<Task> action, Func<bool>? available = null)
     {
-        var command = new AsyncCommand(async () =>
-        {
-            _busy = true; Notify();
-            try { await action(); if (IsLoggedIn && !_closing) await Refresh(); }
-            catch (Exception error) { if (!_closing) Report(error); }
-            finally { _busy = false; Notify(); }
-        }, () => !_busy && !_closing && (available?.Invoke() ?? true));
+        var command = new AsyncCommand(() => RunCommand(action), () => !_busy && !_closing && (available?.Invoke() ?? true));
         _commands.Add(command); return command;
+    }
+    private async Task RunCommand(Func<Task> action)
+    {
+        _busy = true; Notify();
+        try { await action(); if (IsLoggedIn && !_closing) await Refresh(); }
+        catch (Exception error) { if (!_closing) Report(error); }
+        finally { _busy = false; Notify(); }
     }
     private void Report(Exception error)
     {
@@ -347,7 +323,7 @@ public sealed partial class MainViewModel : Bindable
         finally
         {
             _login = null; _connected = false; _state = null; _review = null;
-            _pending = null; _pendingLightBatch = null; _editingLightOrder = false; Lights.Clear(); Devices.Clear(); Roles.Clear(); Jobs.Clear(); Scenarios.Clear(); ScenarioLayouts.Clear(); SelectedScenarioLayout = null; ScenarioTargets.Clear(); SelectedScenarioTarget = null; LoadAssignedRoleName(); Accounts.Clear(); Audit.Clear();
+            _pending = null; _pendingLightBatch = null; Devices.Clear(); Roles.Clear(); Jobs.Clear(); LoadAssignedRoleName(); Accounts.Clear(); Audit.Clear();
         }
     }
     private async Task Poll()
@@ -373,7 +349,7 @@ public sealed partial class MainViewModel : Bindable
         if (_closing || _login?.Session.Id != sessionId || _login is null || (_state is not null && state.Revision < _state.Revision)) return;
         _state = state; _connected = true;
         var selectedDeviceId = _selectedDevice?.Id; var selectedRoleId = _selectedRole?.Id;
-        var selectedJobId = _selectedJob?.Id; var scenarioId = SelectedScenario?.Id;
+        var selectedJobId = _selectedJob?.Id;
         var selectedAccountId = SelectedAccount?.Id; var modelId = SelectedModel?.Id; var operation = SelectedCapability?.Operation;
         // Keep row identity so polling does not reset selection or an open target picker.
         foreach (var removed in Devices.Where(row => state.Devices.All(d => d.Id != row.Id)).ToArray()) Devices.Remove(removed);
@@ -390,9 +366,7 @@ public sealed partial class MainViewModel : Bindable
         _selectedDevice = Devices.FirstOrDefault(x => x.Id == selectedDeviceId);
         Replace(Roles, state.Roles); _selectedRole = Roles.FirstOrDefault(x => x.Id == selectedRoleId);
         Replace(Models, state.Models); SelectedModel = Models.FirstOrDefault(x => x.Id == modelId) ?? Models.FirstOrDefault();
-        RefreshRoleAssignments(); RefreshScenarioTargets(state);
-        RefreshScenarioLayouts(state);
-        Replace(Scenarios, state.Scenarios); SelectedScenario = Scenarios.FirstOrDefault(x => x.Id == scenarioId);
+        RefreshRoleAssignments();
         Replace(Accounts, state.Accounts); SelectedAccount = Accounts.FirstOrDefault(x => x.Id == selectedAccountId);
         Replace(Jobs, state.Jobs.OrderByDescending(j => j.Snapshot.AcceptedAt).Select(j => new JobRow(j, j.Snapshot.SessionId != _login?.Session.Id)));
         _selectedJob = Jobs.FirstOrDefault(x => x.Id == selectedJobId);
@@ -402,7 +376,7 @@ public sealed partial class MainViewModel : Bindable
         if (HasPending && state.Jobs.Any(j => j.Snapshot.RequestId == (_pending?.RequestId ?? _pendingLightBatch?.RequestId)))
         { _pending = null; _pendingLightBatch = null; Message = "요청 ID로 호스트 접수 기록을 확인했습니다."; }
         Changed(nameof(SelectedDevice)); Changed(nameof(SelectedRole)); Changed(nameof(SelectedJob));
-        Changed(nameof(SelectedScenario)); Changed(nameof(SelectedModel)); Changed(nameof(SelectedAccount));
+        Changed(nameof(SelectedModel)); Changed(nameof(SelectedAccount));
         _selectedCapability = Capabilities.FirstOrDefault(c => c.Operation == operation); Changed(nameof(SelectedCapability)); Changed(nameof(Capabilities)); Changed(nameof(JobDetails)); NotifyCommandInput(); Notify();
     }
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> values)
@@ -411,22 +385,12 @@ public sealed partial class MainViewModel : Bindable
         if (JsonSerializer.Serialize(target, JsonDefaults.Options) == JsonSerializer.Serialize(list, JsonDefaults.Options)) return;
         target.Clear(); foreach (var value in list) target.Add(value);
     }
-    private async Task Submit(bool scenario)
+    private async Task Submit()
     {
-        if (scenario && SelectedScenario is null) throw new ArgumentException("실행할 시나리오를 선택하세요.");
-        if (!scenario && SelectedCapability is null) throw new ArgumentException("지원 기능을 선택하세요.");
-        if (scenario)
-        {
-            RequireScenarioExtensions(SelectedScenario!.Steps);
-            // A saved scenario uses its stored steps, not the unrelated manual/step-editor inputs.
-            _pending = new(Guid.NewGuid(), Generation, null, ScenarioId: SelectedScenario.Id);
-        }
-        else
-        {
-            if (ManualInputError.Length > 0) throw new ArgumentException(ManualInputError);
-            _pending = new(Guid.NewGuid(), Generation, SelectedRole!.Id, SelectedCapability!.Operation, CommandValue,
-                DelayBeforeMs: DelayMs, TimeoutMs: TimeoutMs);
-        }
+        if (SelectedCapability is null) throw new ArgumentException("지원 기능을 선택하세요.");
+        if (ManualInputError.Length > 0) throw new ArgumentException(ManualInputError);
+        _pending = new(Guid.NewGuid(), Generation, SelectedRole!.Id, SelectedCapability.Operation, CommandValue,
+            DelayBeforeMs: DelayMs, TimeoutMs: TimeoutMs);
         Notify(); await SendPending();
     }
     private async Task SendPending()
@@ -460,6 +424,15 @@ public sealed partial class MainViewModel : Bindable
         ConnectionId = d.ConnectionId; SelectedModel = Models.Single(x => x.Id == d.ModelId); DeviceEnabled = d.Enabled;
         DeviceFault = d.Fault; DeviceLatencyMs = d.LatencyMs; DeviceExpectedVersion = d.Version; LoadDeviceSettings(d); NotifyEditors();
     }
+    private static string FormatScenarioStep(StepSnapshot step, StepRun run, int index)
+    {
+        var target = step.Display is { } d
+            ? $"배치: {d.Layout.Name} v{d.Layout.Version} / 연결 v{d.Layout.ConfigurationVersion}\n   Controller: {d.Endpoint}\n   표시 요청 ID: {d.RequestId} / 대상 {d.Layout.Placements.Length}개 / 기간: {d.Layout.Duration}"
+            : $"역할: {step.Role?.Id} → {step.TargetLabel}\n   고정 PC ID: {step.Target?.PcId} / 장비 ID: {step.Target?.Id}\n   장비 설정 v{step.Target?.Version} / 역할 v{step.Role?.Version}\n   {step.Operation} = {step.Value} {step.Unit} / 전송 전 조건: {step.ConditionOperation} = {step.ConditionValue}";
+        return $"{index + 1}. {step.KindLabel}\n   {target}\n   시작 전 대기 {step.DelayBeforeMs}ms / 제한 {step.TimeoutMs}ms / 실패 정책 {step.OnFailure}\n" +
+            $"   시작: {run.StartedAt?.ToLocalTime():HH:mm:ss} / 제한: {run.DeadlineAt?.ToLocalTime():HH:mm:ss}\n   {run.Status} / {run.Result}";
+    }
+
     private void NotifyEditors()
     {
         foreach (var name in new[] { nameof(DeviceIdText), nameof(PcIdText), nameof(PcName), nameof(DeviceName), nameof(ConnectionId),
@@ -472,8 +445,9 @@ public sealed partial class MainViewModel : Bindable
             nameof(DeviceModeSummary), nameof(UserSummary), nameof(LeaseSummary), nameof(PreviousSummary), nameof(ConnectionSummary), nameof(PendingSummary),
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
         NotifyMyInfo();
-        NotifyScenarioEditor();
-        RefreshLighting();
+        var featureContext = new FeatureContext(_state, _connected, CanControl, CanConfigure, _busy, _closing, HasPending);
+        Lighting.UpdateContext(featureContext);
+        ScenarioEditor.UpdateContext(featureContext);
         RefreshAssignedRoleRows();
         RefreshHandover();
         Hiperwall.UpdateDisplayJobs(_state?.HiperwallDisplayJobs ?? [], _state?.HiperwallLayoutsSupported == true);

@@ -14,9 +14,9 @@ public static partial class Program
 {
     private static void SetScenarioValue(MainViewModel vm, string role, DeviceOperation operation, int value)
     {
-        vm.SelectedScenarioTarget = vm.ScenarioTargets.Single(t => t.Role.Id == role);
-        foreach (var row in vm.ScenarioSettings) row.Included = false;
-        var setting = vm.ScenarioSettings.Single(s => s.Operation == operation);
+        vm.ScenarioEditor.SelectedScenarioTarget = vm.ScenarioEditor.ScenarioTargets.Single(t => t.Role.Id == role);
+        foreach (var row in vm.ScenarioEditor.ScenarioSettings) row.Included = false;
+        var setting = vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == operation);
         setting.Value = value; setting.Included = true;
     }
 
@@ -40,7 +40,7 @@ public static partial class Program
                 await Execute(vm, vm.SaveDeviceCommand);
                 vm.SelectedDevice = vm.Devices.Single(d => d.Name == name); vm.RoleName = role;
                 await Execute(vm, vm.SaveRoleCommand);
-                Require(vm.ScenarioTargets.Any(t => t.Role.Id == role), "Newly registered device missing from scenarios");
+                Require(vm.ScenarioEditor.ScenarioTargets.Any(t => t.Role.Id == role), "Newly registered device missing from scenarios");
             }
             await AddDevice("virtual-light", "room.light", "회의실 조명");
             await AddDevice("virtual-light-basic", "room.basic", "복도 전원 조명");
@@ -82,39 +82,39 @@ public static partial class Program
             var add = (Button)window.FindName("AddScenarioStep");
             void Select(string role)
             {
-                picker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.ScenarioTargets.Single(t => t.Role.Id == role));
+                picker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.ScenarioEditor.ScenarioTargets.Single(t => t.Role.Id == role));
                 window.UpdateLayout();
             }
             await Click(vm, add);
-            Require(vm.DraftSteps.Count == 0 && vm.Message.Contains("장비를 선택"), "Missing target accepted");
+            Require(vm.ScenarioEditor.DraftSteps.Count == 0 && vm.Message.Contains("장비를 선택"), "Missing target accepted");
             Select("room.basic");
-            Require(vm.ScenarioSettings.Count == 1 && vm.ScenarioSettings[0].Operation == DeviceOperation.Power &&
-                !vm.ScenarioSettings[0].Included, "Power-only model exposed unsupported settings or auto-selected one");
-            var off = vm.ScenarioSettings[0].Options.Single(o => o.Value == 0);
+            Require(vm.ScenarioEditor.ScenarioSettings.Count == 1 && vm.ScenarioEditor.ScenarioSettings[0].Operation == DeviceOperation.Power &&
+                !vm.ScenarioEditor.ScenarioSettings[0].Included, "Power-only model exposed unsupported settings or auto-selected one");
+            var off = vm.ScenarioEditor.ScenarioSettings[0].Options.Single(o => o.Value == 0);
             await Click(vm, FindAll<Button>(settingsView).Single(b => ReferenceEquals(b.DataContext, off)));
             await Click(vm, add);
-            Require(vm.DraftSteps.Single().Value == 0 && vm.DraftSteps.Single().ActionLabel.Contains("OFF"), "OFF button lost its numeric value or readable label");
-            await Execute(vm, vm.NewScenarioCommand);
+            Require(vm.ScenarioEditor.DraftSteps.Single().Value == 0 && vm.ScenarioEditor.DraftSteps.Single().ActionLabel.Contains("OFF"), "OFF button lost its numeric value or readable label");
+            await Execute(vm, vm.ScenarioEditor.NewScenarioCommand);
             Select("room.light");
-            Require(vm.ScenarioSettings.Select(s => s.Operation).SequenceEqual(new[] { DeviceOperation.Power, DeviceOperation.Brightness }),
+            Require(vm.ScenarioEditor.ScenarioSettings.Select(s => s.Operation).SequenceEqual(new[] { DeviceOperation.Power, DeviceOperation.Brightness }),
                 "Dimmable light capability settings incorrect");
             Select("room.projector");
-            Require(vm.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Input).Options.Select(o => o.Value).SequenceEqual(new[] { 1, 2, 3, 4 }),
+            Require(vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Input).Options.Select(o => o.Value).SequenceEqual(new[] { 1, 2, 3, 4 }),
                 "Input options did not follow the driver's range");
             Select("room.lift");
-            Require(vm.ScenarioSettings.Count == 2 && vm.ScenarioSettings[0].Options.Select(o => o.Value).SequenceEqual(new[] { 1, 0, -1 }),
+            Require(vm.ScenarioEditor.ScenarioSettings.Count == 2 && vm.ScenarioEditor.ScenarioSettings[0].Options.Select(o => o.Value).SequenceEqual(new[] { 1, 0, -1 }),
                 "Lift directions/STOP missing");
-            vm.DraftStepKind = ScenarioStepKind.WaitUntil; window.UpdateLayout();
-            Require(vm.ScenarioSettings.All(s => s.Operation != DeviceOperation.Stop), "STOP command exposed as an observable wait condition");
-            vm.DraftStepKind = ScenarioStepKind.DeviceCommand;
+            vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.WaitUntil; window.UpdateLayout();
+            Require(vm.ScenarioEditor.ScenarioSettings.All(s => s.Operation != DeviceOperation.Stop), "STOP command exposed as an observable wait condition");
+            vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.DeviceCommand;
             Select("room.audio");
-            Require(vm.ScenarioSettings.Select(s => s.Operation).SequenceEqual(new[] { DeviceOperation.Power, DeviceOperation.Volume, DeviceOperation.Mute }) &&
-                vm.ScenarioSettings.All(s => !s.Included), "Audio settings missing or selected without user input");
+            Require(vm.ScenarioEditor.ScenarioSettings.Select(s => s.Operation).SequenceEqual(new[] { DeviceOperation.Power, DeviceOperation.Volume, DeviceOperation.Mute }) &&
+                vm.ScenarioEditor.ScenarioSettings.All(s => !s.Included), "Audio settings missing or selected without user input");
             await Click(vm, add);
-            Require(vm.DraftSteps.Count == 0 && vm.Message.Contains("체크"), "Unchecked settings were appended");
-            var power = vm.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Power);
-            var volume = vm.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Volume);
-            var mute = vm.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Mute);
+            Require(vm.ScenarioEditor.DraftSteps.Count == 0 && vm.Message.Contains("체크"), "Unchecked settings were appended");
+            var power = vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Power);
+            var volume = vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Volume);
+            var mute = vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Mute);
             var on = power.Options.Single(o => o.Value == 1);
             await Click(vm, FindAll<Button>(settingsView).Single(b => ReferenceEquals(b.DataContext, on)));
             var slider = FindAll<Slider>(settingsView).Single(s => ReferenceEquals(s.DataContext, volume));
@@ -128,24 +128,24 @@ public static partial class Program
             await Click(vm, FindAll<Button>(settingsView).Single(b => ReferenceEquals(b.DataContext, mute.Options.Single(o => o.Value == 0))));
             vm.SelectedRole = vm.Roles.Single(r => r.Id == "room.basic"); vm.CommandValue = 0;
             await Execute(vm, vm.RefreshCommand); await Task.Delay(1300);
-            Require(ReferenceEquals(volume, vm.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Volume)) &&
+            Require(ReferenceEquals(volume, vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Volume)) &&
                 volume.Value == 37 && power.Value == 1 && mute.Included, "Manual-control target or polling reset scenario settings");
             var input = FindAll<TextBox>(settingsView).Single(t => t.Name == "ValueInput" && ReferenceEquals(t.DataContext, volume));
             input.SetCurrentValue(TextBox.TextProperty, "101");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Click(vm, add);
-            Require(vm.DraftSteps.Count == 0 && vm.Message.Contains("허용 범위"), "Invalid volume allowed partial steps");
+            Require(vm.ScenarioEditor.DraftSteps.Count == 0 && vm.Message.Contains("허용 범위"), "Invalid volume allowed partial steps");
             input.SetCurrentValue(TextBox.TextProperty, "37");
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            vm.ScenarioName = "회의실 음향 켜기"; vm.DelayMs = 100; vm.TimeoutMs = 3000;
+            vm.ScenarioEditor.ScenarioName = "회의실 음향 켜기"; vm.ScenarioEditor.DelayMs = 100; vm.ScenarioEditor.TimeoutMs = 3000;
             await Click(vm, add);
-            Require(vm.DraftSteps.Select(s => s.Value).SequenceEqual(new[] { 1, 37, 0 }) &&
-                vm.DraftSteps.Select(s => s.DelayBeforeMs).SequenceEqual(new[] { 100, 0, 0 }) && vm.Jobs.Count == 0,
+            Require(vm.ScenarioEditor.DraftSteps.Select(s => s.Value).SequenceEqual(new[] { 1, 37, 0 }) &&
+                vm.ScenarioEditor.DraftSteps.Select(s => s.DelayBeforeMs).SequenceEqual(new[] { 100, 0, 0 }) && vm.Jobs.Count == 0,
                 "Grouped steps lost order/values, repeated initial delay, or sent while editing");
-            await Execute(vm, vm.SaveScenarioCommand); vm.SelectedScenario = vm.Scenarios.Single();
-            await Execute(vm, vm.LoadScenarioCommand);
-            Require(vm.DraftSteps.Count == 3 && vm.DraftSteps[0].ActionLabel.Contains("ON") &&
-                vm.DraftSteps[2].ActionLabel.Contains("음소거 해제"), "Saved definition lost readable action labels or steps");
+            await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
+            await Execute(vm, vm.ScenarioEditor.LoadScenarioCommand);
+            Require(vm.ScenarioEditor.DraftSteps.Count == 3 && vm.ScenarioEditor.DraftSteps[0].ActionLabel.Contains("ON") &&
+                vm.ScenarioEditor.DraftSteps[2].ActionLabel.Contains("음소거 해제"), "Saved definition lost readable action labels or steps");
             settingsView.BringIntoView(); window.UpdateLayout();
             Capture(window, Path.Combine(output, "scenario-device-settings.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
@@ -153,7 +153,7 @@ public static partial class Program
             var location = add.TransformToAncestor(window).Transform(new Point());
             Require(location.Y + add.ActualHeight < window.ActualHeight && add.IsVisible, "Add button scrolled outside compact window");
             Capture(window, Path.Combine(output, "scenario-device-settings-small.png"));
-            await Execute(vm, vm.RunScenarioCommand);
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             await Wait(() => vm.Jobs.Any(j => j.Job.Status == JobStatus.Completed));
             var job = vm.Jobs.Single().Job;
             Require(job.Steps.All(s => s.Status == StepStatus.Simulated) && job.Snapshot.Steps.All(s => s.Target?.Id == audio.Id) &&

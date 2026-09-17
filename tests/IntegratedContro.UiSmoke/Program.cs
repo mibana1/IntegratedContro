@@ -49,6 +49,7 @@ public static partial class Program
                 else if (args.Contains("--scenarios-only")) await RunScenarioExtensions();
                 else if (args.Contains("--scenario-settings-only")) await RunScenarioSettings();
                 else if (args.Contains("--role-unassignment-only")) await RunRoleUnassignment();
+                else if (args.Contains("--lighting-only")) await RunLighting();
                 else if (args.Contains("--scenario-editor-only")) await RunScenarioEditor();
                 else if (args.Contains("--numeric-input-only")) await RunNumericInputs();
                 else if (args.Contains("--power-input-only")) await RunPowerInputs();
@@ -323,10 +324,10 @@ public static partial class Program
             // Construct and save a sequential definition through the actual admin ViewModel.
             await Execute(b, b.ReleaseCommand); await Execute(a, a.RefreshCommand); await Execute(a, a.AcquireCommand);
             SetScenarioValue(a, a.Roles[0].Id, DeviceOperation.Power, 1);
-            a.DelayMs = 10000; a.ScenarioName = "검증용 순차 시나리오";
-            await Execute(a, a.AddStepCommand);
-            await Execute(a, a.SaveScenarioCommand); Require(a.Scenarios.Count == 1, a.Message);
-            a.SelectedScenario = a.Scenarios[0]; await Execute(a, a.RunScenarioCommand);
+            a.ScenarioEditor.DelayMs = 10000; a.ScenarioEditor.ScenarioName = "검증용 순차 시나리오";
+            await Execute(a, a.ScenarioEditor.AddStepCommand);
+            await Execute(a, a.ScenarioEditor.SaveScenarioCommand); Require(a.ScenarioEditor.Scenarios.Count == 1, a.Message);
+            a.ScenarioEditor.SelectedScenario = a.ScenarioEditor.Scenarios[0]; await Execute(a, a.ScenarioEditor.RunScenarioCommand);
             a.SelectedJob = a.Jobs.Single(j => j.Job.Kind == JobKind.Scenario);
             a.ConfirmManualSwitch = _ => false; await Execute(a, a.ManualSwitchCommand);
             Require(a.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Active, "Declining switch stopped scenario");
@@ -382,17 +383,17 @@ public static partial class Program
                 var d = vm.Devices.Single(x => x.Id.ToString() == vm.DeviceIdText);
                 vm.SelectedDevice = d; vm.RoleName = $"lighting.{i}";
                 await Execute(vm, vm.SaveRoleCommand);
-                var card = vm.Lights.Single(c => c.Id == d.Id);
+                var card = vm.Lighting.Lights.Single(c => c.Id == d.Id);
                 Require(!card.PowerCommand.CanExecute(null), "Unobserved light was presented as ready to toggle");
                 await Execute(vm, card.ReadCommand);
                 Require(card.Power == 0 && card.StateText.Contains("OFF"), "Initial virtual OFF state missing");
             }
             await Execute(vm, vm.NewDeviceCommand); vm.DeviceName = "구분 검증 프로젝터";
             vm.SelectedModel = vm.Models.Single(m => m.Id == "virtual-projector"); await Execute(vm, vm.SaveDeviceCommand);
-            Require(vm.Lights.Count == 4 && vm.Devices.Count == 5, "Non-light device appeared in the lighting group");
+            Require(vm.Lighting.Lights.Count == 4 && vm.Devices.Count == 5, "Non-light device appeared in the lighting group");
             vm.DeviceViewIndex = 0; window.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            var light = vm.Lights[0];
+            var light = vm.Lighting.Lights[0];
             Button PowerButton(LightCard c) => FindAll<Button>(window).Single(b => b.Name == "LightPowerButton" && ReferenceEquals(b.DataContext, c));
             var button = PowerButton(light);
             await Click(vm, button);
@@ -404,30 +405,30 @@ public static partial class Program
             Require(vm.Jobs.Count == 2 && vm.Jobs.All(j => j.Job.Status == JobStatus.Completed), "ON then OFF did not complete");
             await Click(vm, button); await Wait(() => light.IsOn && light.PowerCommand.CanExecute(null));
             // Editing is a draft until save; cancellation restores the shared order.
-            var original = vm.Lights.Select(c => c.Id).ToArray();
-            await Execute(vm, vm.EditLightOrderCommand);
+            var original = vm.Lighting.Lights.Select(c => c.Id).ToArray();
+            await Execute(vm, vm.Lighting.EditLightOrderCommand);
             Require(!light.PowerCommand.CanExecute(null), "Order editing allowed a power click");
             await Execute(vm, light.LaterCommand);
-            await Execute(vm, vm.CancelLightOrderCommand);
-            Require(vm.Lights.Select(c => c.Id).SequenceEqual(original), "Cancel did not restore order");
-            await Execute(vm, vm.EditLightOrderCommand); await Execute(vm, light.LaterCommand);
-            var reordered = vm.Lights.Select(c => c.Id).ToArray();
+            await Execute(vm, vm.Lighting.CancelLightOrderCommand);
+            Require(vm.Lighting.Lights.Select(c => c.Id).SequenceEqual(original), "Cancel did not restore order");
+            await Execute(vm, vm.Lighting.EditLightOrderCommand); await Execute(vm, light.LaterCommand);
+            var reordered = vm.Lighting.Lights.Select(c => c.Id).ToArray();
             window.UpdateLayout(); Capture(window, Path.Combine(output, "lighting-order.png"));
-            await Execute(vm, vm.SaveLightOrderCommand);
+            await Execute(vm, vm.Lighting.SaveLightOrderCommand);
             var (observer, _) = await host.Login();
             var observed = await HostProcess.Until(observer, s => s.LightLayout.DeviceIds.SequenceEqual(reordered));
             Require(observed.LightLayout.Version == 1, "Saved order not visible to the other HTTPS session");
             await ExerciseGrouping(window, vm, host, output);
             await ExerciseBatch(window, vm, output);
-            reordered = vm.Lights.Select(c => c.Id).ToArray();
+            reordered = vm.Lighting.Lights.Select(c => c.Id).ToArray();
             await Execute(vm, vm.ReleaseCommand);
-            Require(vm.Lights.All(c => !c.PowerCommand.CanExecute(null)), "Read-only cards could control");
+            Require(vm.Lighting.Lights.All(c => !c.PowerCommand.CanExecute(null)), "Read-only cards could control");
             await Execute(vm, vm.AcquireCommand);
             // Reserved scenario: no implicit cancellation or queued manual power command.
             SetScenarioValue(vm, vm.Roles.Single(r => r.DeviceId == light.Id).Id, DeviceOperation.Power, 0);
-            vm.DelayMs = 60000; vm.ScenarioName = "조명 예약 검증";
-            await Execute(vm, vm.AddStepCommand); await Execute(vm, vm.SaveScenarioCommand);
-            vm.SelectedScenario = vm.Scenarios.Single(); await Execute(vm, vm.RunScenarioCommand);
+            vm.ScenarioEditor.DelayMs = 60000; vm.ScenarioEditor.ScenarioName = "조명 예약 검증";
+            await Execute(vm, vm.ScenarioEditor.AddStepCommand); await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand);
+            vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single(); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(!light.PowerCommand.CanExecute(null) && light.Hint.Contains("시나리오 예약"), "Reserved light was clickable");
             vm.SelectedJob = vm.Jobs.Single(j => j.Job.Kind == JobKind.Scenario);
             vm.ConfirmManualSwitch = _ => true; await Execute(vm, vm.ManualSwitchCommand);
@@ -435,20 +436,20 @@ public static partial class Program
             await Execute(vm, light.ReadCommand);
             Require(light.PowerCommand.CanExecute(null), "State reconciliation did not release the light");
             // Keep one unknown card to render a distinct state without inventing OFF.
-            var unknown = vm.Lights.Last();
+            var unknown = vm.Lighting.Lights.Last();
             vm.SelectedDevice = vm.Devices.Single(d => d.Id == unknown.Id);
             await Execute(vm, vm.LoadDeviceCommand); vm.DeviceFault = VirtualFault.Disconnected;
             await Execute(vm, vm.SaveDeviceCommand);
             window.UpdateLayout(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             var countBeforeBlocked = vm.Jobs.Count;
-            await Execute(vm, vm.AllLightsOnCommand);
+            await Execute(vm, vm.Lighting.AllLightsOnCommand);
             Require(vm.Jobs.Count == countBeforeBlocked && vm.Message.Contains("일괄 접수하지 않았습니다"), "Unobserved target allowed partial bulk acceptance");
             Capture(window, Path.Combine(output, "lighting-cards.png"));
             window.Width = 1180; window.Height = 860; window.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Capture(window, Path.Combine(output, "lighting-compact.png"));
             await Execute(vm, vm.LogoutCommand); await Execute(vm, vm.LoginCommand);
-            Require(vm.Lights.Select(c => c.Id).SequenceEqual(reordered), "Reconnecting lost shared order");
+            Require(vm.Lighting.Lights.Select(c => c.Id).SequenceEqual(reordered), "Reconnecting lost shared order");
             await Execute(vm, vm.LogoutCommand); // Closing without a session must also be safe.
             listener.Flush();
             await File.WriteAllTextAsync(Path.Combine(output, "lighting-binding.log"), bindingLog.ToString());
@@ -473,20 +474,20 @@ public static partial class Program
                 vm.Jobs.All(j => !j.Job.Active));
         }
         await Click(vm, (Button)board.FindName("AllLightsOn"));
-        await WaitBatch(1, vm.Lights);
+        await WaitBatch(1, vm.Lighting.Lights);
         Require(vm.Jobs.First().Job.IsLightBatch && vm.Jobs.First().Job.Snapshot.Steps.Length == 4, "All ON omitted a light");
-        await Click(vm, (Button)board.FindName("AllLightsOff")); await WaitBatch(0, vm.Lights);
-        var group = vm.LightGroups.Single(g => !g.IsDefault);
+        await Click(vm, (Button)board.FindName("AllLightsOff")); await WaitBatch(0, vm.Lighting.Lights);
+        var group = vm.Lighting.LightGroups.Single(g => !g.IsDefault);
         Button GroupButton(string name) => FindAll<Button>(board).Single(b => b.Name == name && ReferenceEquals(b.DataContext, group));
         await Click(vm, GroupButton("GroupOn")); await WaitBatch(1, group.Cards);
-        Require(vm.Lights.Except(group.Cards).All(c => c.Power == 0), "Group command changed an outside light");
+        Require(vm.Lighting.Lights.Except(group.Cards).All(c => c.Power == 0), "Group command changed an outside light");
         Require(vm.Jobs.First().Job.Snapshot.Steps.Select(s => s.Target!.Id).SequenceEqual(group.Cards.Select(c => c.Id)), "Group snapshot mismatch");
         await Click(vm, GroupButton("GroupOff")); await WaitBatch(0, group.Cards);
-        await Execute(vm, vm.EditLightOrderCommand);
-        Require(!vm.AllLightsOnCommand.CanExecute(null) && !group.OnCommand.CanExecute(null), "Layout edit allowed bulk power");
-        await Execute(vm, vm.CancelLightOrderCommand);
+        await Execute(vm, vm.Lighting.EditLightOrderCommand);
+        Require(!vm.Lighting.AllLightsOnCommand.CanExecute(null) && !group.OnCommand.CanExecute(null), "Layout edit allowed bulk power");
+        await Execute(vm, vm.Lighting.CancelLightOrderCommand);
         await Execute(vm, vm.ReleaseCommand);
-        Require(!vm.AllLightsOffCommand.CanExecute(null) && !group.OffCommand.CanExecute(null), "Read-only mode allowed bulk power");
+        Require(!vm.Lighting.AllLightsOffCommand.CanExecute(null) && !group.OffCommand.CanExecute(null), "Read-only mode allowed bulk power");
         await Execute(vm, vm.AcquireCommand);
         var tabs = (TabControl)window.FindName("MainTabs"); tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(t => t.Header?.ToString() == "복구 · 진단");
         window.UpdateLayout();
@@ -507,15 +508,15 @@ public static partial class Program
     {
         var board = Find<LightingView>(window)!;
         var originalHeight = window.Height; window.Height = 1200; window.UpdateLayout();
-        var original = vm.Lights.Select(c => c.Id).ToArray();
+        var original = vm.Lighting.Lights.Select(c => c.Id).ToArray();
         var jobCount = vm.Jobs.Count;
-        await Execute(vm, vm.EditLightOrderCommand);
-        Require(vm.Lights.All(c => c.StateText is "ON" or "OFF") && vm.Lights.All(c => c.Hint == ""), "Compact card retained Korean state/editor text");
+        await Execute(vm, vm.Lighting.EditLightOrderCommand);
+        Require(vm.Lighting.Lights.All(c => c.StateText is "ON" or "OFF") && vm.Lighting.Lights.All(c => c.Hint == ""), "Compact card retained Korean state/editor text");
         var groupName = (TextBox)board.FindName("NewGroupName");
         groupName.SetCurrentValue(TextBox.TextProperty, "전시 구역");
         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
         await Click(vm, (Button)board.FindName("AddGroup"));
-        var group = vm.LightGroups.Single(g => !g.IsDefault);
+        var group = vm.Lighting.LightGroups.Single(g => !g.IsDefault);
         Require(group.Cards.Count == 0, "New group should be empty");
         FrameworkElement Tile(Guid id) => FindAll<FrameworkElement>(board).Single(e => e.Name == "CardContainer" && e.DataContext is LightCard c && c.Id == id);
         FrameworkElement Zone(Guid id) => FindAll<FrameworkElement>(board).Single(e => e.Name == "GroupDropZone" && e.DataContext is LightGroupRow g && g.Id == id);
@@ -530,7 +531,7 @@ public static partial class Program
             window.UpdateLayout();
         }
         window.UpdateLayout();
-        var first = vm.Lights.Single(c => c.Id == original[0]);
+        var first = vm.Lighting.Lights.Single(c => c.Id == original[0]);
         // Click-sized movement in edit mode does not reorder or send power.
         var point = Position(Tile(first.Id), 25, 30);
         var mouseDown = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
@@ -552,7 +553,7 @@ public static partial class Program
         Require(vm.Jobs.Count == jobCount, "Edit-mode pointer click sent power");
         Require(board.BeginCardDrag(first.Id, point, -1), "Mouse down rejected");
         Require(!board.EndCardDrag(point + new Vector(2, 2), -1), "Click-sized move reordered");
-        Require(vm.Lights.Select(c => c.Id).SequenceEqual(original), "Short gesture changed order");
+        Require(vm.Lighting.Lights.Select(c => c.Id).SequenceEqual(original), "Short gesture changed order");
         // Mouse path into an empty group.
         var zone = Zone(group.Id);
         Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
@@ -560,7 +561,7 @@ public static partial class Program
         await Task.Delay(1200);
         Require(group.Cards.Single().Id == first.Id, "Polling overwrote unsaved membership");
         // Touch pointer path inserts before an existing card and ignores another finger.
-        var second = vm.Lights.Single(c => c.Id == original[1]);
+        var second = vm.Lighting.Lights.Single(c => c.Id == original[1]);
         window.UpdateLayout(); var start = Position(Tile(second.Id), 25, 30);
         var end = Position(Tile(first.Id), 4, 50);
         Require(board.BeginCardDrag(second.Id, start, 77), "Touch pointer down rejected");
@@ -569,43 +570,43 @@ public static partial class Program
         Require(group.Cards.Select(c => c.Id).SequenceEqual(new[] { second.Id, first.Id }), "Touch insertion position incorrect");
         window.UpdateLayout();
         // Outside drop, explicit cancellation, and a stale pointer after lost ownership do nothing.
-        var snapshot = vm.Lights.Select(c => c.Id).ToArray();
+        var snapshot = vm.Lighting.Lights.Select(c => c.Id).ToArray();
         start = Position(Tile(first.Id), 25, 30);
         Require(board.BeginCardDrag(first.Id, start, -1), "Outside-drop start failed");
         Require(!board.EndCardDrag(new Point(-50, -50), -1), "Outside drop was accepted");
         Require(board.BeginCardDrag(first.Id, start, 88), "Cancel start failed");
         board.MoveCardDrag(end + new Vector(30, 0), 88); board.CancelCardDrag();
         Require(!board.EndCardDrag(end, 88), "Cancelled pointer committed");
-        Require(vm.Lights.Select(c => c.Id).SequenceEqual(snapshot), "Cancelled gesture changed layout");
+        Require(vm.Lighting.Lights.Select(c => c.Id).SequenceEqual(snapshot), "Cancelled gesture changed layout");
         group.Name = "무대 조명";
         window.UpdateLayout();
         Require(Math.Abs(Position(Tile(first.Id), 0, 0).Y - Position(Tile(second.Id), 0, 0).Y) < 1, "Two compact cards did not fit in one group row");
         Capture(window, Path.Combine(output, "lighting-groups-edit.png"));
-        await Execute(vm, vm.CancelLightOrderCommand);
-        Require(vm.LightGroups.All(g => g.IsDefault) && vm.Lights.Select(c => c.Id).SequenceEqual(original), "Cancel did not discard groups and order");
+        await Execute(vm, vm.Lighting.CancelLightOrderCommand);
+        Require(vm.Lighting.LightGroups.All(g => g.IsDefault) && vm.Lighting.Lights.Select(c => c.Id).SequenceEqual(original), "Cancel did not discard groups and order");
         // Repeat and save; deleting the draft group returns members without deleting a device.
-        await Execute(vm, vm.EditLightOrderCommand);
-        vm.NewLightGroupName = "무대 조명"; await Execute(vm, vm.AddLightGroupCommand);
-        group = vm.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
+        await Execute(vm, vm.Lighting.EditLightOrderCommand);
+        vm.Lighting.NewLightGroupName = "무대 조명"; await Execute(vm, vm.Lighting.AddLightGroupCommand);
+        group = vm.Lighting.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
         zone = Zone(group.Id); Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
         await Execute(vm, group.RemoveCommand);
-        Require(vm.LightGroups.Single().Cards.Count == 4 && vm.Devices.Count == 5, "Group deletion deleted devices");
-        vm.NewLightGroupName = "무대 조명"; await Execute(vm, vm.AddLightGroupCommand);
-        group = vm.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
+        Require(vm.Lighting.LightGroups.Single().Cards.Count == 4 && vm.Devices.Count == 5, "Group deletion deleted devices");
+        vm.Lighting.NewLightGroupName = "무대 조명"; await Execute(vm, vm.Lighting.AddLightGroupCommand);
+        group = vm.Lighting.LightGroups.Single(g => !g.IsDefault); window.UpdateLayout();
         zone = Zone(group.Id); Drag(first.Id, zone, 30, zone.ActualHeight - 20, -1);
         Drag(second.Id, Tile(first.Id), 4, 50, 99);
         Require(vm.Jobs.Count == jobCount, "A drag or group edit sent a power job");
-        await Execute(vm, vm.SaveLightOrderCommand);
+        await Execute(vm, vm.Lighting.SaveLightOrderCommand);
         var (observer, _) = await host.Login();
         var state = await HostProcess.Until(observer, s => s.LightLayout.Groups.Length == 1);
         Require(state.LightLayout.Groups[0].Name == "무대 조명" &&
             state.LightLayout.Groups[0].DeviceIds.SequenceEqual(group.Cards.Select(c => c.Id)), "Group did not persist to HTTPS state");
-        await Execute(vm, vm.EditLightOrderCommand);
+        await Execute(vm, vm.Lighting.EditLightOrderCommand);
         window.UpdateLayout(); start = Position(Tile(first.Id), 25, 30);
         Require(board.BeginCardDrag(first.Id, start, -1), "Lease-loss start failed");
         await Execute(vm, vm.ReleaseCommand);
         Require(!board.EndCardDrag(end, -1), "Pointer committed after use ended");
-        await Execute(vm, vm.CancelLightOrderCommand); await Execute(vm, vm.AcquireCommand);
+        await Execute(vm, vm.Lighting.CancelLightOrderCommand); await Execute(vm, vm.AcquireCommand);
         Require(!board.BeginCardDrag(first.Id, start, -1), "Normal power mode started a drag");
         window.Height = originalHeight; window.UpdateLayout();
         Capture(window, Path.Combine(output, "lighting-groups.png"));

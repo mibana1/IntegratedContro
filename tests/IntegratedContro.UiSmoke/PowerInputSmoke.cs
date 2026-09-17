@@ -73,7 +73,7 @@ public static partial class Program
 
             tabs.SelectedItem = window.FindName("ScenarioTab");
             SetScenarioValue(vm, "light", DeviceOperation.Brightness, 65);
-            vm.DelayMs = 0; vm.TimeoutMs = 3000; vm.ScenarioName = "전원 조건 버튼 검증";
+            vm.ScenarioEditor.DelayMs = 0; vm.ScenarioEditor.TimeoutMs = 3000; vm.ScenarioEditor.ScenarioName = "전원 조건 버튼 검증";
             ((Expander)window.FindName("ScenarioConditionExpander")).IsExpanded = true; window.UpdateLayout();
             var conditionKind = (ComboBox)window.FindName("ConditionOperationPicker");
             var conditionPower = (PowerButtons)window.FindName("ConditionPowerButtons");
@@ -84,22 +84,22 @@ public static partial class Program
             Require(conditionPower.IsVisible && !conditionNumber.IsVisible, "Power precondition retained numeric input");
             await Click(vm, (Button)conditionPower.FindName("OnButton"));
             await Execute(vm, vm.RefreshCommand);
-            Require(vm.ConditionValueText == "1" && vm.CommandValue == 1, "Condition button or polling changed another editor");
+            Require(vm.ScenarioEditor.ConditionValueText == "1" && vm.CommandValue == 1, "Condition button or polling changed another editor");
             var before = vm.Jobs.Count;
-            await Execute(vm, vm.AddStepCommand);
-            SetScenarioValue(vm, "light", DeviceOperation.Power, 0); await Execute(vm, vm.AddStepCommand);
+            await Execute(vm, vm.ScenarioEditor.AddStepCommand);
+            SetScenarioValue(vm, "light", DeviceOperation.Power, 0); await Execute(vm, vm.ScenarioEditor.AddStepCommand);
             SetScenarioValue(vm, "light", DeviceOperation.Brightness, 20);
             await Click(vm, (Button)conditionPower.FindName("OffButton"));
-            Require(vm.CommandValue == 1 && vm.ConditionValueText == "0", "Condition and manual ON/OFF controls shared draft values");
-            await Execute(vm, vm.AddStepCommand);
-            Require(vm.Jobs.Count == before && vm.DraftSteps.Select(s => s.ConditionValue).SequenceEqual(new int?[] { 1, 1, 0 }) &&
-                vm.DraftSteps.All(s => s.ConditionOperation == DeviceOperation.Power), "Condition buttons lost step expectations or sent while editing");
-            await Execute(vm, vm.SaveScenarioCommand); vm.SelectedScenario = vm.Scenarios.Single();
-            await Execute(vm, vm.LoadScenarioCommand);
-            Require(vm.DraftSteps.Select(s => s.ConditionValue).SequenceEqual(new int?[] { 1, 1, 0 }), "Saved ON/OFF preconditions changed");
+            Require(vm.CommandValue == 1 && vm.ScenarioEditor.ConditionValueText == "0", "Condition and manual ON/OFF controls shared draft values");
+            await Execute(vm, vm.ScenarioEditor.AddStepCommand);
+            Require(vm.Jobs.Count == before && vm.ScenarioEditor.DraftSteps.Select(s => s.ConditionValue).SequenceEqual(new int?[] { 1, 1, 0 }) &&
+                vm.ScenarioEditor.DraftSteps.All(s => s.ConditionOperation == DeviceOperation.Power), "Condition buttons lost step expectations or sent while editing");
+            await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand); vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single();
+            await Execute(vm, vm.ScenarioEditor.LoadScenarioCommand);
+            Require(vm.ScenarioEditor.DraftSteps.Select(s => s.ConditionValue).SequenceEqual(new int?[] { 1, 1, 0 }), "Saved ON/OFF preconditions changed");
             conditionPower.BringIntoView(); window.UpdateLayout();
             Capture(window, Path.Combine(output, "scenario-power-condition.png"));
-            await Execute(vm, vm.RunScenarioCommand);
+            await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             await Wait(() => vm.Jobs.Any(j => j.Job.Kind == JobKind.Scenario && !j.Job.Active));
             Require(vm.Jobs.Single(j => j.Job.Kind == JobKind.Scenario).Job.Steps.All(s => s.Status == StepStatus.Simulated),
                 "Actual virtual ON/OFF preconditions did not match button choices");
@@ -109,16 +109,16 @@ public static partial class Program
             Require(!conditionPower.IsVisible && conditionNumber.IsVisible, "Numeric precondition did not restore editor");
             conditionNumber.SetCurrentValue(TextBox.TextProperty, "20");
             await Execute(vm, vm.RefreshCommand);
-            Require(vm.ConditionValueText == "20", "Condition numeric input lost across polling");
-            vm.SelectedScenarioTarget = vm.ScenarioTargets.Single(t => t.Role.Id == "lift");
+            Require(vm.ScenarioEditor.ConditionValueText == "20", "Condition numeric input lost across polling");
+            vm.ScenarioEditor.SelectedScenarioTarget = vm.ScenarioEditor.ScenarioTargets.Single(t => t.Role.Id == "lift");
             window.UpdateLayout(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(vm.ConditionOperationText == "" && vm.ConditionValueText == "" &&
-                vm.ConditionOperations.All(c => c.Value != "Power"), "Changing target carried an unsupported power condition");
+            Require(vm.ScenarioEditor.ConditionOperationText == "" && vm.ScenarioEditor.ConditionValueText == "" &&
+                vm.ScenarioEditor.ConditionOperations.All(c => c.Value != "Power"), "Changing target carried an unsupported power condition");
 
-            vm.SelectedScenarioTarget = vm.ScenarioTargets.Single(t => t.Role.Id == "light");
+            vm.ScenarioEditor.SelectedScenarioTarget = vm.ScenarioEditor.ScenarioTargets.Single(t => t.Role.Id == "light");
             window.UpdateLayout();
             var settings = (ScenarioSettingsView)window.FindName("ScenarioDeviceSettings");
-            var brightness = vm.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Brightness);
+            var brightness = vm.ScenarioEditor.ScenarioSettings.Single(s => s.Operation == DeviceOperation.Brightness);
             var slider = FindAll<Slider>(settings).Single(s => ReferenceEquals(s.DataContext, brightness));
             slider.BringIntoView(); window.UpdateLayout();
             Require(slider.IsMoveToPointEnabled && slider.IsSnapToTickEnabled &&

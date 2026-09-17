@@ -12,7 +12,7 @@
   <TabControl x:Name="MainTabs" Margin="18,12,18,12" Background="Transparent" BorderBrush="#D5DFEA">
    <TabItem Header="장비 제어">
     <TabControl x:Name="DeviceViews" SelectedIndex="{Binding DeviceViewIndex}" BorderThickness="0" Background="#F3F6FA" Margin="8">
-     <TabItem Header="조명 모아보기"><local:LightingView/></TabItem>
+     <TabItem Header="조명 모아보기"><local:LightingView DataContext="{Binding Lighting}"/></TabItem>
      <TabItem Header="장비 목록 · 상세 조작">
     <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="330"/></Grid.ColumnDefinitions>
      <Grid Margin="0,0,16,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -49,7 +49,7 @@
    </TabItem>
    <TabItem x:Name="HiperwallTab" Header="Hiperwall 편집"><local:HiperwallView x:Name="HiperwallInventory" DataContext="{Binding Hiperwall}"/></TabItem>
    <TabItem x:Name="CameraTab" Header="카메라 · 영상"><local:CameraView x:Name="CameraWorkspace" DataContext="{Binding Cameras}"/></TabItem>
-   <TabItem x:Name="ScenarioTab" Header="시나리오">
+   <TabItem x:Name="ScenarioTab" Header="시나리오" DataContext="{Binding ScenarioEditor}">
     <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="330"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
      <DockPanel Margin="0,0,18,0">
       <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">

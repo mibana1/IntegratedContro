@@ -40,7 +40,6 @@ public sealed partial class MainViewModel
             return TimingInputError(30000);
         }
     }
-    public string ScenarioTimingError => TimingInputError(DraftStepKind == ScenarioStepKind.DeviceCommand ? 30000 : 3600000);
     private string TimingInputError(int maximumTimeout)
     {
         if (!InRange(DelayMsText, 0, 3600000)) return "시작 전 대기는 0~3600000ms 범위의 정수로 입력하세요.";
@@ -55,7 +54,7 @@ public sealed partial class MainViewModel
         TryInteger(text, out var value) && value >= minimum && value <= maximum;
     private void NotifyNumericInput()
     {
-        Changed(nameof(CommandPowerValue)); Changed(nameof(ManualInputError)); Changed(nameof(ScenarioTimingError));
-        SubmitCommand?.Raise(); AddStepCommand?.Raise();
+        Changed(nameof(CommandPowerValue)); Changed(nameof(ManualInputError));
+        SubmitCommand?.Raise();
     }
 }

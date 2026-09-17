@@ -536,6 +536,26 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 
 ## 10. 구현 단계와 완료 기준
 
+### 조명·시나리오 기능별 ViewModel 책임 분리 (2026-09-17)
+
+- 조명·시나리오 편집을 `MainViewModel` partial에서 실제 `LightingViewModel`·`ScenarioEditorViewModel` 인스턴스로 분리했다.
+  조명은 카드·그룹·순서·전원 요청을, 시나리오는 대상·단계 입력·정의 초안·순서·저장·삭제·실행 요청을 소유한다.
+  화면은 각 기능 인스턴스에 직접 바인딩하고, 조명 상세 이동은 장비 ID 이벤트로 앱 탐색에 연결한다.
+- `FeatureContext`로 조회 상태·연결·권한·실행 가능 여부를 전달하고 `ILightingHost`·`IScenarioHost`로 요청한다.
+  두 기능에 MainViewModel·HostClient·WPF 창/Dispatcher 의존성이 없다. HTTP·인증·주기 조회·오류 처리는 앱 연결 지점에 둔다.
+  접수 불확실 요청·동일 ID 재확인·공통 busy 처리는 기존 단일 경로를 유지한다.
+- 수동 조작과 시나리오 대기/제한시간 입력을 각각 소유하도록 변경했다. 화면 간 숫자 입력이 서로 덮어써지지 않는다.
+  정기 갱신 시 선택과 잘못된 입력도 유지하며, 역할/실행 대상 변경 시 시나리오 설정과 조건을 재구성한다.
+- 검증: 호스트·창·DB 없는 기능 단위 테스트 20개를 추가했다. 기존 테스트와 합계 310개 통과, 빌드 경고/오류 0.
+  조명 및 시나리오 편집의 개별 WPF 회귀와 `scripts/verify.ps1` 전체 WPF 회귀도 통과했다.
+  근거: `artifacts/feature-viewmodels-verify.log`, `feature-lighting-ui.log`, `feature-scenario-ui.log`.
+- 배포: `scripts/publish.ps1`로 `artifacts/publish/Build-20260917-105519-107`의 App·ControlHost를 생성했다.
+  작업 공간 `IntegratedContro.lnk`의 최신 App 대상과 Release DLL 일치를 확인했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 운영 프로세스는 종료하지 않았다.
+  새 App을 실행하면 이번 UI 구조 변경이 적용된다. 근거: `artifacts/feature-viewmodels-publish.log`.
+- 수정 위치와 기능별 독립 검증 명령: [기능별 ViewModel 안내](FEATURE_VIEWMODELS.md).
+  App 구조 변경이며 호스트 API·운영 DB 형식은 유지한다. 실제 장비·물리 두 PC 검증은 별도다.
+
 ### 장비 기능·드라이버·통신 책임 분리 (2026-09-17)
 
 - 운영 역할과 전원·밝기 같은 공통 기능을 유지한 채 드라이버와 설정으로 장비를 교체하는 구조를 구현했다.

@@ -4,7 +4,7 @@ using IntegratedContro.Core;
 namespace IntegratedContro.App;
 
 public sealed record ScenarioKindChoice(ScenarioStepKind Kind, string Label);
-public sealed partial class MainViewModel
+public sealed partial class ScenarioEditorViewModel
 {
     public ScenarioKindChoice[] ScenarioKinds { get; } =
     [
@@ -46,13 +46,13 @@ public sealed partial class MainViewModel
     }
     private void RequireScenarioExtensions(IEnumerable<ScenarioStep> steps)
     {
-        if (_state?.ScenarioExtensionsSupported != true && steps.Any(s => s.Kind != ScenarioStepKind.DeviceCommand))
+        if (State?.ScenarioExtensionsSupported != true && steps.Any(s => s.Kind != ScenarioStepKind.DeviceCommand))
             throw new ArgumentException("확장 단계를 사용하려면 최신 호스트에 연결하세요.");
     }
     private Task AddScenarioStep()
     {
         if (ScenarioTimingError.Length > 0) throw new ArgumentException(ScenarioTimingError);
-        if (DraftStepKind != ScenarioStepKind.DeviceCommand && _state?.ScenarioExtensionsSupported != true)
+        if (DraftStepKind != ScenarioStepKind.DeviceCommand && State?.ScenarioExtensionsSupported != true)
             throw new ArgumentException("호스트를 최신 버전으로 시작한 뒤 다시 연결하세요.");
         ScenarioStep[] steps;
         if (DraftStepKind == ScenarioStepKind.DisplayLayout)
@@ -63,15 +63,7 @@ public sealed partial class MainViewModel
         else steps = ReadScenarioDeviceSteps();
         if (DraftSteps.Count + steps.Length > 100) throw new ArgumentException("시나리오는 최대 100단계입니다.");
         foreach (var step in steps) DraftSteps.Add(step);
-        Message = $"{steps.Length}개 설정을 마지막 단계로 추가했습니다. 정의를 저장한 뒤 실행하세요.";
+        ReportStatus($"{steps.Length}개 설정을 마지막 단계로 추가했습니다. 정의를 저장한 뒤 실행하세요.");
         return Task.CompletedTask;
-    }
-    private static string FormatScenarioStep(StepSnapshot step, StepRun run, int index)
-    {
-        var target = step.Display is { } d
-            ? $"배치: {d.Layout.Name} v{d.Layout.Version} / 연결 v{d.Layout.ConfigurationVersion}\n   Controller: {d.Endpoint}\n   표시 요청 ID: {d.RequestId} / 대상 {d.Layout.Placements.Length}개 / 기간: {d.Layout.Duration}"
-            : $"역할: {step.Role?.Id} → {step.TargetLabel}\n   고정 PC ID: {step.Target?.PcId} / 장비 ID: {step.Target?.Id}\n   장비 설정 v{step.Target?.Version} / 역할 v{step.Role?.Version}\n   {step.Operation} = {step.Value} {step.Unit} / 전송 전 조건: {step.ConditionOperation} = {step.ConditionValue}";
-        return $"{index + 1}. {step.KindLabel}\n   {target}\n   시작 전 대기 {step.DelayBeforeMs}ms / 제한 {step.TimeoutMs}ms / 실패 정책 {step.OnFailure}\n" +
-            $"   시작: {run.StartedAt?.ToLocalTime():HH:mm:ss} / 제한: {run.DeadlineAt?.ToLocalTime():HH:mm:ss}\n   {run.Status} / {run.Result}";
     }
 }
