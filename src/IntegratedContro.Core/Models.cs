@@ -17,11 +17,21 @@ public enum VirtualFault { None, Failure, Disconnected, NoResponse, ResponseLost
 public enum FailurePolicy { Stop, Continue }
 public enum JobKind { Manual, Scenario, LightBatch }
 public enum JobStatus { Queued, Running, StopRequested, Completed, Cancelled, Interrupted, NeedsReview }
-public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped, Waiting, ConditionMet, Acknowledged }
+public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped, Waiting, ConditionMet, Acknowledged, Sent, Observed }
 public enum ScenarioStepKind { DeviceCommand, WaitUntil, DisplayLayout }
 
-public sealed record Capability(DeviceOperation Operation, int Minimum, int Maximum, string Unit);
-public sealed record DeviceModel(string Id, string Name, Capability[] Capabilities, DeviceCategory Category = DeviceCategory.Other);
+public sealed record Capability(DeviceOperation Operation, int Minimum, int Maximum, string Unit, bool CanRead = true);
+public sealed record DeviceModel(string Id, string Name, Capability[] Capabilities, DeviceCategory Category = DeviceCategory.Other)
+{
+    public string DriverId { get; init; } = "virtual";
+    public string DriverVersion { get; init; } = "1";
+    public string[] TransportIds { get; init; } = ["virtual"];
+    public bool IsSimulation { get; init; } = true;
+    public bool Equals(DeviceModel? other) => other is not null && Id == other.Id && Name == other.Name &&
+        Category == other.Category && DriverId == other.DriverId && DriverVersion == other.DriverVersion && IsSimulation == other.IsSimulation &&
+        Capabilities.SequenceEqual(other.Capabilities) && TransportIds.SequenceEqual(other.TransportIds);
+    public override int GetHashCode() => HashCode.Combine(Id, Name, Category, DriverId, IsSimulation);
+}
 public sealed record LightGroup(Guid Id, string Name, Guid[] DeviceIds);
 public sealed record LightLayout(int Version, Guid[] DeviceIds)
 {
@@ -32,9 +42,16 @@ public sealed record DeviceConfig(Guid Id, Guid PcId, string PcName, string Name
 {
     // Legacy records without this field start from their saved edit version.
     public int ExecutionVersion { get; init; } = Version;
+    public string DriverId { get; init; } = "virtual";
+    public DeviceConnection Connection { get; init; } = new();
+    public Dictionary<string, string> DriverOptions { get; init; } = [];
     public bool HasSameExecutionSettings(DeviceConfig other) => Id == other.Id && PcId == other.PcId &&
         ConnectionId == other.ConnectionId && ModelId == other.ModelId && Enabled == other.Enabled &&
-        Fault == other.Fault && LatencyMs == other.LatencyMs;
+        Fault == other.Fault && LatencyMs == other.LatencyMs && DriverId == other.DriverId &&
+        Connection.HasSameSettings(other.Connection) && DeviceConnection.SameOptions(DriverOptions, other.DriverOptions);
+    public bool Equals(DeviceConfig? other) => other is not null && Version == other.Version &&
+        ExecutionVersion == other.ExecutionVersion && Name == other.Name && PcName == other.PcName && HasSameExecutionSettings(other);
+    public override int GetHashCode() => HashCode.Combine(Id, Version, ExecutionVersion, Name, PcName);
     public bool MatchesExecutionTarget(DeviceConfig other) => ExecutionVersion == other.ExecutionVersion &&
         HasSameExecutionSettings(other);
 }
@@ -44,7 +61,9 @@ public sealed class DeviceState
 {
     public Dictionary<DeviceOperation, int> Desired { get; set; } = [];
     public Dictionary<DeviceOperation, StateValue> Simulated { get; set; } = [];
-    public string Connection { get; set; } = "가상 / 아직 조회하지 않음";
+    public Dictionary<DeviceOperation, StateValue> Observed { get; set; } = [];
+    [JsonIgnore] public IReadOnlyDictionary<DeviceOperation, StateValue> Values => Observed.Count > 0 ? Observed : Simulated;
+    public string Connection { get; set; } = "아직 조회하지 않음";
     public string LastResult { get; set; } = "없음";
 }
 public sealed record ScenarioStep(string RoleId, DeviceOperation Operation, int Value,
@@ -64,6 +83,7 @@ public sealed record StepSnapshot(RoleBinding? Role, DeviceConfig? Target, Devic
 {
     public ScenarioStepKind Kind { get; init; }
     public ScenarioDisplaySnapshot? Display { get; init; }
+    public DeviceModel? ModelDefinition { get; init; }
     [JsonIgnore] public string TargetLabel => Display is { } d ? $"{d.Layout.Name} / {d.Endpoint}" : $"{Target?.Name} ({Target?.PcName})";
     [JsonIgnore] public string KindLabel => Kind switch { ScenarioStepKind.WaitUntil => "조건 충족까지 대기", ScenarioStepKind.DisplayLayout => "저장 배치 표시", _ => "장비 명령" };
 }

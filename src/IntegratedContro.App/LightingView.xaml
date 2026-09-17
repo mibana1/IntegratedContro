@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="IntegratedContro.App.LightingView"
+<UserControl x:Class="IntegratedContro.App.LightingView"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <UserControl.Resources>
   <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
@@ -48,7 +48,7 @@
   <ScrollViewer x:Name="BoardScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
    <StackPanel>
     <Border Padding="28" Background="#EDF2F8" CornerRadius="16" Visibility="{Binding HasNoLights, Converter={StaticResource BoolVisibility}}">
-     <StackPanel><TextBlock Text="등록된 조명이 없습니다" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="관리자 설정에서 가상 조명 모델을 등록하면 여기에 모아 표시됩니다." TextWrapping="Wrap" Margin="0,12,0,0"/></StackPanel>
+     <StackPanel><TextBlock Text="등록된 조명이 없습니다" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="관리자 설정에서 조명 모델을 등록하면 여기에 모아 표시됩니다." TextWrapping="Wrap" Margin="0,12,0,0"/></StackPanel>
     </Border>
     <ItemsControl x:Name="LightGroupList" ItemsSource="{Binding LightGroups}">
      <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>

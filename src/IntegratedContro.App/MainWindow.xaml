@@ -16,12 +16,12 @@
      <TabItem Header="장비 목록 · 상세 조작">
     <Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="330"/></Grid.ColumnDefinitions>
      <Grid Margin="0,0,16,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel><TextBlock Text="등록 장비와 가상 상태" Style="{StaticResource SectionTitle}"/><TextBlock Text="요청값과 가상 상태를 구분합니다. 실제 PC 이름은 표시용이며, 제어 대상은 PC ID·장비 ID로 고정됩니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,0,0,12"/></StackPanel>
+      <StackPanel><TextBlock Text="등록 장비와 상태" Style="{StaticResource SectionTitle}"/><TextBlock Text="요청값·가상 상태·장비 관측을 구분합니다. 실제 PC 이름은 표시용이며, 제어 대상은 PC ID·장비 ID로 고정됩니다." TextWrapping="Wrap" Foreground="#65778E" Margin="0,0,0,12"/></StackPanel>
       <DataGrid x:Name="DeviceGrid" Grid.Row="1" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" AutomationProperties.AutomationId="DeviceGrid">
-       <DataGrid.Columns><DataGridTextColumn Header="장비" Binding="{Binding Name}" Width="140"/><DataGridTextColumn Header="대상 PC 이름" Binding="{Binding PcName}" Width="170"/><DataGridTextColumn Header="가상 상태 · 확인 시각" Binding="{Binding State}" Width="*"/><DataGridTextColumn Header="요청값" Binding="{Binding Desired}" Width="130"/><DataGridTextColumn Header="제한" Binding="{Binding Restriction}" Width="110"/></DataGrid.Columns>
+       <DataGrid.Columns><DataGridTextColumn Header="장비" Binding="{Binding Name}" Width="140"/><DataGridTextColumn Header="대상 PC 이름" Binding="{Binding PcName}" Width="170"/><DataGridTextColumn Header="상태 · 증거 · 확인 시각" Binding="{Binding State}" Width="*"/><DataGridTextColumn Header="요청값" Binding="{Binding Desired}" Width="130"/><DataGridTextColumn Header="제한" Binding="{Binding Restriction}" Width="110"/></DataGrid.Columns>
       </DataGrid>
       <StackPanel Grid.Row="2" Margin="0,12,0,0"><TextBlock Text="{Binding SelectedDevice.Connection}"/><TextBlock Text="{Binding SelectedDevice.Result}" TextWrapping="Wrap" Foreground="#65778E"/><TextBlock Text="{Binding SelectedDevice.Config.Id, StringFormat=장비 ID: {0}}" FontFamily="Consolas" FontSize="11"/><TextBlock Text="{Binding SelectedDevice.Config.PcId, StringFormat=PC ID: {0}}" FontFamily="Consolas" FontSize="11"/>
-       <WrapPanel><Button Content="선택 장비 가상 상태 조회·대조" Command="{Binding ReconcileCommand}"/><Button Content="선택 장비를 설정 편집에 불러오기" Command="{Binding LoadDeviceCommand}"/></WrapPanel>
+       <WrapPanel><Button Content="선택 장비 상태 조회·대조" Command="{Binding ReconcileCommand}"/><Button Content="선택 장비를 설정 편집에 불러오기" Command="{Binding LoadDeviceCommand}"/></WrapPanel>
        <Border BorderBrush="#D5DFEA" BorderThickness="1" Background="#F3F6FA" Padding="10" Margin="0,8,0,0"><StackPanel>
         <TextBlock Text="선택 장비 역할 배정 · 관리자" FontWeight="SemiBold"/>
         <TextBlock Text="{Binding RoleTargetSummary}" TextWrapping="Wrap" Margin="0,4"/>
@@ -142,13 +142,24 @@
    <TabItem x:Name="AdminTab" Header="관리자 설정" Visibility="{Binding IsAdmin, Converter={StaticResource BoolVisibility}}">
     <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
      <Border Style="{StaticResource Card}"><StackPanel>
-      <TextBlock Text="가상 장비 등록 · 변경" Style="{StaticResource SectionTitle}"/><TextBlock Text="기존 장비는 장비 제어 탭에서 선택한 뒤 편집에 불러옵니다." TextWrapping="Wrap" Foreground="#65778E"/>
+      <TextBlock Text="장비 등록 · 변경" Style="{StaticResource SectionTitle}"/><TextBlock Text="기존 장비는 장비 제어 탭에서 선택한 뒤 편집에 불러옵니다." TextWrapping="Wrap" Foreground="#65778E"/>
       <WrapPanel><Button Content="새 장비 ID" Command="{Binding NewDeviceCommand}"/><TextBlock Text="{Binding DeviceExpectedVersion, StringFormat=편집 기준 버전: {0}}" VerticalAlignment="Center"/></WrapPanel>
-      <TextBlock Text="장비 ID"/><TextBox Text="{Binding DeviceIdText}"/><TextBlock Text="대상 PC ID"/><TextBox Text="{Binding PcIdText}"/><TextBlock Text="대상 PC의 실제 이름 (가상 등록 정보)"/><TextBox Text="{Binding PcName}"/>
+      <TextBlock Text="장비 ID"/><TextBox Text="{Binding DeviceIdText}"/><TextBlock Text="대상 PC ID"/><TextBox Text="{Binding PcIdText}"/><TextBlock Text="대상 PC의 실제 이름"/><TextBox Text="{Binding PcName}"/>
       <TextBlock Text="장비 이름"/><TextBox Text="{Binding DeviceName}"/><TextBlock Text="연결 ID (현장 설정값)"/><TextBox Text="{Binding ConnectionId}"/>
-      <TextBlock Text="가상 모델"/><ComboBox ItemsSource="{Binding Models}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedModel}"/>
-      <WrapPanel><CheckBox Content="활성 장비" IsChecked="{Binding DeviceEnabled}" VerticalAlignment="Center" Margin="0,0,20,0"/><TextBlock Text="가상 지연 ms" VerticalAlignment="Center"/><TextBox Width="95" Text="{Binding DeviceLatencyMs, ValidatesOnExceptions=True}"/></WrapPanel>
-      <TextBlock Text="가상 장애 주입"/><ComboBox ItemsSource="{Binding Faults}" SelectedItem="{Binding DeviceFault}"/>
+      <TextBlock Text="장비 모델"/><ComboBox ItemsSource="{Binding Models}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedModel}"/>
+      <TextBlock Text="{Binding DeviceDriverId, StringFormat=드라이버: {0}}" Margin="0,4"/>
+      <TextBlock Text="통신 방식"/><ComboBox ItemsSource="{Binding DeviceTransports}" SelectedItem="{Binding DeviceTransportId}"/>
+      <Expander x:Name="DeviceConnectionSettings" Header="통신 주소 · 드라이버 옵션" Margin="0,6">
+       <StackPanel>
+        <TextBlock Text="연결 주소 (가상 장비는 비워 둠)"/><TextBox x:Name="DeviceEndpointInput" Text="{Binding DeviceEndpoint}"/>
+        <TextBlock Text="장비 주소 · 채널"/><TextBox Text="{Binding DeviceAddress}"/>
+        <TextBlock Text="통신 옵션 (JSON)"/><TextBox Text="{Binding DeviceTransportOptions}"/>
+        <TextBlock Text="드라이버 옵션 (JSON)"/><TextBox Text="{Binding DeviceDriverOptions}"/>
+        <TextBlock Text="드라이버 명세의 옵션만 사용하세요. 비밀번호·토큰은 입력하지 않습니다." TextWrapping="Wrap"/>
+       </StackPanel>
+      </Expander>
+      <WrapPanel><CheckBox Content="활성 장비" IsChecked="{Binding DeviceEnabled}" VerticalAlignment="Center" Margin="0,0,20,0"/><TextBlock Text="가상 지연 ms" VerticalAlignment="Center"/><TextBox Width="95" Text="{Binding DeviceLatencyMs, ValidatesOnExceptions=True}" IsEnabled="{Binding DeviceIsSimulation}"/></WrapPanel>
+      <TextBlock Text="가상 장애 주입"/><ComboBox ItemsSource="{Binding Faults}" SelectedItem="{Binding DeviceFault}" IsEnabled="{Binding DeviceIsSimulation}"/>
       <Button Content="장비 설정 저장" Command="{Binding SaveDeviceCommand}" Style="{StaticResource Primary}"/>
       <Separator Margin="0,12"/><TextBlock Text="역할 배정" FontSize="16" FontWeight="SemiBold"/>
       <TextBlock Text="배정할 등록 장비"/><ComboBox x:Name="RoleDevicePicker" ItemsSource="{Binding Devices}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedDevice}" IsEnabled="{Binding CanConfigure}"/>
@@ -236,7 +247,7 @@
   <Border Grid.Row="1" Background="#E7EEF6" Padding="18,10"><StackPanel>
    <DockPanel>
     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-     <TextBlock Text="장비: 가상 · Hiperwall: 실장비 연동" FontSize="11" Foreground="#0C6657" Margin="0,0,16,0"/>
+     <TextBlock Text="{Binding DeviceModeSummary}" FontSize="11" Foreground="#0C6657" Margin="0,0,16,0"/>
      <TextBlock Text="{Binding ConnectionSummary}" FontSize="11" Foreground="#536C85"/>
     </StackPanel>
     <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,18,0" AutomationProperties.AutomationId="StatusMessage"/>

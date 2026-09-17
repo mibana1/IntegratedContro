@@ -22,7 +22,7 @@ public sealed class LightCard(DeviceRow device) : Bindable
     public bool IsDragging { get => _isDragging; internal set => Set(ref _isDragging, value); }
     private string _dropEdge = "";
     public string DropEdge { get => _dropEdge; internal set => Set(ref _dropEdge, value); }
-    public string LastChecked { get; internal set; } = "가상 상태 · 조회 전";
+    public string LastChecked { get; internal set; } = "상태 · 조회 전";
     public AsyncCommand PowerCommand { get; internal set; } = null!;
     public AsyncCommand ReadCommand { get; internal set; } = null!;
     public AsyncCommand DetailsCommand { get; internal set; } = null!;
@@ -113,7 +113,7 @@ public sealed partial class MainViewModel
         card.ReadCommand = Command(async () =>
         {
             await Client.Post<DeviceState>("/api/devices/reconcile", new ReconcileRequest(Generation, card.Id));
-            Message = $"{card.Name}: 가상 상태를 확인했습니다. 과거 작업 결과는 그대로 유지됩니다.";
+            Message = $"{card.Name}: 상태를 확인했습니다. 과거 작업 결과는 그대로 유지됩니다.";
         }, () => !_editingLightOrder && CanControl && AllowedLight(card.Id) && !LightHasWork(card.Id));
         card.DetailsCommand = Command(() => { SelectedDevice = Devices.SingleOrDefault(d => d.Id == card.Id); DeviceViewIndex = 1; return Task.CompletedTask; });
         card.EarlierCommand = Command(() => MoveLight(card, -1), () => CanConfigure && _editingLightOrder && Lights.IndexOf(card) > 0);
@@ -196,7 +196,7 @@ public sealed partial class MainViewModel
         _state.Devices.Any(d => d.Id == id && d.Enabled);
     private bool LightHasWork(Guid id) => _state?.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(s => s.Target?.Id == id)) == true;
     private RoleBinding? LightRole(Guid id) => _state?.Roles.Where(r => r.DeviceId == id).OrderBy(r => r.Id, StringComparer.Ordinal).FirstOrDefault();
-    private StateValue? LightPower(Guid id) => _state?.DeviceStates.GetValueOrDefault(id)?.Simulated.GetValueOrDefault(DeviceOperation.Power);
+    private StateValue? LightPower(Guid id) => _state?.DeviceStates.GetValueOrDefault(id)?.Values.GetValueOrDefault(DeviceOperation.Power);
     private string? LightBlockReason(Guid id)
     {
         if (_state?.LightCardsSupported != true) return "호스트 업데이트 필요";
@@ -275,7 +275,7 @@ public sealed partial class MainViewModel
                 card.NeedsCheck = !_connected || _state.UncertainDevices.Contains(card.Id);
                 card.Position = Lights.IndexOf(card) + 1; card.IsEditing = _editingLightOrder;
                 card.Hint = LightBlockReason(card.Id) ?? card.ActionText;
-                card.LastChecked = power is null ? "가상 상태 · 조회 전" : $"가상 상태 · {power.At.ToLocalTime():HH:mm:ss} 확인";
+                card.LastChecked = power is null ? "상태 · 조회 전" : $"{power.Evidence} · {power.At.ToLocalTime():HH:mm:ss} 확인";
                 card.Refresh();
             }
         }

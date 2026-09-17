@@ -17,6 +17,9 @@ internal sealed class TestHasher : IPasswordHasher
 }
 internal sealed class GateDriver : IDeviceDriver
 {
+    public string Id => "virtual";
+    public string Version => "1";
+    public void ValidateConfiguration(DeviceConfig device) { }
     public DeviceModel[] Models => [new("test", "Test model", [
         new(DeviceOperation.Power,0,1,"on/off"), new(DeviceOperation.Brightness,0,100,"%"),
         new(DeviceOperation.Lift,-1,1,"direction"), new(DeviceOperation.Stop,0,0,"STOP")], DeviceCategory.Lighting)];

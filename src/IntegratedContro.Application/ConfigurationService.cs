@@ -41,20 +41,29 @@ public sealed partial class ControlService
         var session = Owner(s, token, request.Generation); Admin(s, token);
         Require(request.Id != Guid.Empty && request.PcId != Guid.Empty, "target_required", "PC ID와 장비 ID를 명시하세요.", 400);
         Text(request.PcName, "대상 PC 이름"); Text(request.Name, "장비 이름"); Text(request.ConnectionId, "연결 ID");
-        Require(_driver.Models.Any(m => m.Id == request.ModelId), "unsupported_model", "등록된 가상 모델을 선택하세요.", 400);
-        Require(Enum.IsDefined(request.Fault) && request.LatencyMs is >= 0 and <= 30000,
-            "invalid_device", "가상 지연은 0~30000ms입니다.", 400);
+        var model = _drivers.Model(request.ModelId);
         var old = s.Devices.SingleOrDefault(d => d.Id == request.Id);
         Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "장비 설정을 다시 조회하세요.");
         var device = new DeviceConfig(request.Id, request.PcId, request.PcName.Trim(), request.Name.Trim(),
-            request.ConnectionId.Trim(), request.ModelId, (old?.Version ?? 0) + 1, request.Enabled, request.Fault, request.LatencyMs);
+            request.ConnectionId.Trim(), request.ModelId, (old?.Version ?? 0) + 1, request.Enabled, request.Fault, request.LatencyMs)
+        {
+            DriverId = request.DriverId ?? model.DriverId,
+            Connection = JsonDefaults.Copy(request.Connection ?? old?.Connection ?? new DeviceConnection()),
+            DriverOptions = JsonDefaults.Copy(request.DriverOptions ?? old?.DriverOptions ?? new Dictionary<string, string>())
+        };
+        _drivers.Resolve(device);
         var executionChanged = old is null || !old.HasSameExecutionSettings(device);
         device = device with { ExecutionVersion = old is null ? device.Version :
             executionChanged ? old.ExecutionVersion + 1 : old.ExecutionVersion };
         s.Devices.RemoveAll(d => d.Id == device.Id); s.Devices.Add(device);
         if (executionChanged)
-            s.DeviceStates[device.Id] = new DeviceState { Connection = "가상 설정 저장 / 새 상태 조회 필요" };
-        Audit(s, session.Info.UserId, "VirtualDeviceSaved", $"pc={device.PcId}; device={device.Id}; v={device.Version}");
+            s.DeviceStates[device.Id] = new DeviceState { Connection = "장비 설정 저장 / 새 상태 조회 필요" };
+        // Replacing a model in-place must satisfy the same role requirements as assigning a new device.
+        if (device.Enabled)
+            foreach (var role in s.Roles.Where(r => r.DeviceId == device.Id))
+                foreach (var step in s.Scenarios.SelectMany(x => x.Steps).Where(x => x.RoleId == role.Id))
+                    Resolve(s, User(s, session), step);
+        Audit(s, session.Info.UserId, "DeviceSaved", $"pc={device.PcId}; device={device.Id}; v={device.Version}");
         return device;
     });
     public RoleBinding SaveRole(string token, RoleRequest request) => Change(s =>
@@ -147,21 +156,23 @@ public sealed partial class ControlService
         var device = s.Devices.SingleOrDefault(d => d.Id == role!.DeviceId);
         Require(device is not null && device.Enabled, "target_missing", "대상이 없거나 비활성화되었습니다.", 400);
         Require(CanControl(user, device!.Id), "target_forbidden", "대상 장비 제어 권한이 없습니다.", 403);
-        var capability = _driver.Models.Single(m => m.Id == device.ModelId).Capabilities.SingleOrDefault(c => c.Operation == step.Operation);
+        _drivers.Resolve(device);
+        var model = _drivers.Model(device.ModelId);
+        var capability = model.Capabilities.SingleOrDefault(c => c.Operation == step.Operation);
         Require(capability is not null, "unsupported", "이 모델은 해당 기능을 지원하지 않습니다.", 400);
         Require(step.Value >= capability!.Minimum && step.Value <= capability.Maximum, "value_range",
             $"허용 범위: {capability.Minimum}~{capability.Maximum} {capability.Unit}", 400);
         Require((step.ConditionOperation is null) == (step.ConditionValue is null), "invalid_condition", "확인 조건의 동작과 값을 함께 지정하세요.", 400);
         if (step.Kind == ScenarioStepKind.WaitUntil)
-            Require(step.Operation != DeviceOperation.Stop && step.ConditionOperation is null,
+            Require(capability.CanRead && step.Operation != DeviceOperation.Stop && step.ConditionOperation is null,
                 "invalid_condition", "조건 대기는 읽을 기능·기대값만 지정합니다. STOP은 상태 조건이 아닙니다.", 400);
         if (step.ConditionOperation is { } condition)
         {
-            var c = _driver.Models.Single(m => m.Id == device.ModelId).Capabilities.SingleOrDefault(x => x.Operation == condition);
-            Require(c is not null && step.ConditionValue >= c.Minimum && step.ConditionValue <= c.Maximum,
-                "invalid_condition", "지원되는 가상 상태 확인 조건을 지정하세요.", 400);
+            var c = model.Capabilities.SingleOrDefault(x => x.Operation == condition);
+            Require(c is { CanRead: true } && step.ConditionValue >= c.Minimum && step.ConditionValue <= c.Maximum,
+                "invalid_condition", "조회 가능한 기능과 상태 확인 조건을 지정하세요.", 400);
         }
         return new(role!, device, step.Operation, step.Value, capability.Unit, step.DelayBeforeMs, step.TimeoutMs,
-            step.OnFailure, step.ConditionOperation, step.ConditionValue) { Kind = step.Kind };
+            step.OnFailure, step.ConditionOperation, step.ConditionValue) { Kind = step.Kind, ModelDefinition = model };
     }
 }

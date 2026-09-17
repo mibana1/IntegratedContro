@@ -37,7 +37,7 @@ try
         throw new InvalidDataException("인증서 지문 또는 유효기간을 확인하세요.");
     using var hiperwallReader = new HiperwallHttpReader();
     using var media = new MediaMtxHttpClient();
-    var service = new ControlService(store, new Pbkdf2PasswordHasher(), new VirtualDeviceDriver(store.ConnectionString),
+    var service = new ControlService(store, new Pbkdf2PasswordHasher(), new DeviceDriverRegistry(new VirtualDeviceDriver(new SqliteVirtualDeviceTransport(store.ConnectionString))),
         heartbeatTimeoutSeconds: config.HeartbeatTimeoutSeconds, hiperwall: hiperwallReader,
         credentials: new HiperwallCredentialStore(store.DataPath), media: media,
         mediaSecrets: new MediaCredentialStore(store.DataPath));

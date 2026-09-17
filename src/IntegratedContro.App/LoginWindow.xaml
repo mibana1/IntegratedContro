@@ -9,6 +9,18 @@
     Visibility="{Binding IsLoginPage, Converter={StaticResource BoolVisibility}}" Padding="10,5" Margin="12,0,0,0"/>
    <TextBlock Text="{Binding LoginPageTitle}" FontSize="25" FontWeight="Bold" Foreground="#172B46"/>
   </DockPanel>
+  <Border x:Name="PreferencesRecoveryPanel" Visibility="{Binding HasPreferencesRecovery, Converter={StaticResource BoolVisibility}}"
+   Background="#FFF2DA" BorderBrush="#DFC697" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,16">
+   <StackPanel>
+    <TextBlock Text="접속 설정 복구" FontWeight="Bold" Foreground="#674A20" Margin="0,0,0,6"/>
+    <TextBlock Text="{Binding PreferencesRecoveryMessage}" TextWrapping="Wrap" Foreground="#674A20"/>
+    <TextBlock Text="{Binding PreferencesBackupSummary}" TextWrapping="Wrap" Foreground="#674A20" Margin="0,8,0,4"/>
+    <WrapPanel>
+     <Button x:Name="RestorePreferencesBackup" Content="백업 설정 복구" Command="{Binding RestorePreferencesBackupCommand}" MinHeight="36"/>
+     <Button x:Name="ReloadPreferences" Content="설정 다시 읽기" Command="{Binding ReloadPreferencesCommand}" MinHeight="36" Margin="8,0,0,0"/>
+    </WrapPanel>
+   </StackPanel>
+  </Border>
   <StackPanel x:Name="LoginPage" Visibility="{Binding IsLoginPage, Converter={StaticResource BoolVisibility}}">
    <TextBlock Text="{Binding LoginHostSummary}" TextWrapping="Wrap" Foreground="#596E85" Margin="0,0,0,20"/>
    <StackPanel IsEnabled="{Binding CanEditLogin}">

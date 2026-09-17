@@ -40,7 +40,7 @@ public sealed record JobRow(Job Job, bool PreviousSession)
     public string Status => Job.Status switch
     {
         JobStatus.Queued => "접수·대기", JobStatus.Running => "실행 중", JobStatus.StopRequested => "취소 요청·결과 대기",
-        JobStatus.Completed => Job.Snapshot.Mode == "Mixed" ? "시나리오 실행 종료" : "가상 실행 종료", JobStatus.Cancelled => "미전송 부분 취소", JobStatus.Interrupted => "중단",
+        JobStatus.Completed => Job.Snapshot.Mode == "Virtual" ? "가상 실행 종료" : "실행 종료", JobStatus.Cancelled => "미전송 부분 취소", JobStatus.Interrupted => "중단",
         _ => "불확실·대조 필요"
     };
     public string AcceptedAt => Job.Snapshot.AcceptedAt.ToLocalTime().ToString("MM-dd HH:mm:ss");
@@ -50,7 +50,7 @@ public sealed partial class MainViewModel : Bindable
 {
     public HiperwallViewModel Hiperwall { get; } = new();
     public CameraViewModel Cameras { get; }
-    private ClientPreferences _preferences = ClientPreferences.Load();
+    private ClientPreferences _preferences;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly List<AsyncCommand> _commands = [];
     private HostClient? _client;
@@ -144,7 +144,6 @@ public sealed partial class MainViewModel : Bindable
                 string.Join("\n\n", snapshot.Steps.Select((step, i) => FormatScenarioStep(step, job.Steps[i], i)));
         }
     }
-    public DeviceModel? SelectedModel { get; set; }
     public string DeviceIdText { get; set; } = Guid.NewGuid().ToString();
     public string PcIdText { get; set; }
     public string PcName { get; set; } = Environment.MachineName;
@@ -201,12 +200,14 @@ public sealed partial class MainViewModel : Bindable
 
     public MainViewModel()
     {
+        var initialPreferences = ClientPreferences.ReadForStartup();
+        _preferences = initialPreferences.Preferences;
         Cameras = new CameraViewModel(Hiperwall);
         Cameras.StatusReported += message => Message = message;
         Endpoint = _preferences.Endpoint; Fingerprint = _preferences.Fingerprint; PcIdText = _preferences.PcId.ToString();
         LoginName = _preferences.LastLoginName ?? "";
-        InitializeLoginSettings();
-        LoginCommand = Command(Login, () => !IsLoggedIn && IsLoginPage);
+        InitializeLoginSettings(initialPreferences);
+        LoginCommand = Command(Login, () => !IsLoggedIn && IsLoginPage && !HasPreferencesRecovery);
         LogoutCommand = Command(Logout, () => IsLoggedIn);
         AcquireCommand = Command(async () => { await Client.Post<Lease>("/api/lease/acquire"); }, () => _connected && IsLoggedIn && _state?.Lease.Mode == LeaseMode.Free);
         ReleaseCommand = Command(async () => { await Client.Post<Lease>("/api/lease/release", new LeaseRequest(Generation)); Message = "사용 종료 완료. 접수 작업과 예약은 호스트에서 유지됩니다."; }, () => CanControl);
@@ -221,7 +222,7 @@ public sealed partial class MainViewModel : Bindable
             await Client.Post<Job>("/api/jobs/manual-switch", new JobActionRequest(Generation, SelectedJob.Id));
             Message = "시나리오 후속 단계를 차단했습니다. 처리 종료 후 장비 상태를 대조하고 Hiperwall의 남은 전송·불확실 표시를 확인하세요.";
         }, () => CanControl && SelectedJob?.Job.Kind == JobKind.Scenario && SelectedJob.Job.Active);
-        ReconcileCommand = Command(async () => { await Client.Post<DeviceState>("/api/devices/reconcile", new ReconcileRequest(Generation, SelectedDevice!.Id)); Message = "가상 상태 대조 완료. 과거 불확실 명령의 이력은 그대로 유지됩니다."; }, () => CanControl && SelectedDevice is not null);
+        ReconcileCommand = Command(async () => { await Client.Post<DeviceState>("/api/devices/reconcile", new ReconcileRequest(Generation, SelectedDevice!.Id)); Message = "상태 대조 완료. 과거 불확실 명령의 이력은 그대로 유지됩니다."; }, () => CanControl && SelectedDevice is not null);
         SaveDeviceCommand = Command(SaveDevice, () => CanConfigure);
         LoadDeviceCommand = Command(() => { LoadDevice(); return Task.CompletedTask; }, () => SelectedDevice is not null);
         NewDeviceCommand = Command(() => { DeviceIdText = Guid.NewGuid().ToString(); DeviceExpectedVersion = 0; DeviceName = ""; NotifyEditors(); return Task.CompletedTask; });
@@ -380,7 +381,7 @@ public sealed partial class MainViewModel : Bindable
         {
             var value = state.DeviceStates[d.Id];
             var reserved = state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(x => x.Target?.Id == d.Id));
-            var row = new DeviceRow(d, string.Join(" / ", value.Simulated.Select(x => $"{x.Key}={x.Value.Value} ({x.Value.At.ToLocalTime():HH:mm:ss})")),
+            var row = new DeviceRow(d, string.Join(" / ", value.Values.Select(x => $"{x.Key}={x.Value.Value} ({x.Value.Evidence} · {x.Value.At.ToLocalTime():HH:mm:ss})")),
                 string.Join(" / ", value.Desired.Select(x => $"{x.Key}={x.Value}")), value.Connection, value.LastResult,
                 state.UncertainDevices.Contains(d.Id) ? "대조 필요" : reserved ? "시나리오 예약" : "사용 가능");
             var existing = Devices.SingleOrDefault(x => x.Id == d.Id);
@@ -441,17 +442,23 @@ public sealed partial class MainViewModel : Bindable
     }
     private async Task SaveDevice()
     {
-        if (SelectedModel is null) throw new ArgumentException("가상 모델을 선택하세요.");
+        if (SelectedModel is null) throw new ArgumentException("장비 모델을 선택하세요.");
         var device = await Client.Post<DeviceConfig>("/api/devices", new DeviceRequest(Generation, Guid.Parse(DeviceIdText),
-            Guid.Parse(PcIdText), PcName, DeviceName, ConnectionId, SelectedModel.Id, DeviceEnabled, DeviceFault, DeviceLatencyMs, DeviceExpectedVersion));
-        DeviceExpectedVersion = device.Version; Message = "가상 장비 설정을 저장했습니다."; NotifyEditors();
+            Guid.Parse(PcIdText), PcName, DeviceName, ConnectionId, SelectedModel.Id, DeviceEnabled,
+            DeviceIsSimulation ? DeviceFault : VirtualFault.None, DeviceIsSimulation ? DeviceLatencyMs : 0, DeviceExpectedVersion)
+        {
+            DriverId = DeviceDriverId,
+            Connection = new(DeviceTransportId, DeviceEndpoint.Trim(), DeviceAddress.Trim()) { Options = ParseDeviceOptions(DeviceTransportOptions) },
+            DriverOptions = ParseDeviceOptions(DeviceDriverOptions)
+        });
+        DeviceExpectedVersion = device.Version; Message = "장비 설정을 저장했습니다."; NotifyEditors();
     }
     private void LoadDevice()
     {
         var d = SelectedDevice!.Config;
         DeviceIdText = d.Id.ToString(); PcIdText = d.PcId.ToString(); PcName = d.PcName; DeviceName = d.Name;
         ConnectionId = d.ConnectionId; SelectedModel = Models.Single(x => x.Id == d.ModelId); DeviceEnabled = d.Enabled;
-        DeviceFault = d.Fault; DeviceLatencyMs = d.LatencyMs; DeviceExpectedVersion = d.Version; NotifyEditors();
+        DeviceFault = d.Fault; DeviceLatencyMs = d.LatencyMs; DeviceExpectedVersion = d.Version; LoadDeviceSettings(d); NotifyEditors();
     }
     private void NotifyEditors()
     {
@@ -462,7 +469,7 @@ public sealed partial class MainViewModel : Bindable
     private void Notify()
     {
         foreach (var name in new[] { nameof(IsBusy), nameof(CanEditLogin), nameof(IsLoggedIn), nameof(IsAdmin), nameof(CanControl), nameof(CanConfigure), nameof(SiteTitle),
-            nameof(UserSummary), nameof(LeaseSummary), nameof(PreviousSummary), nameof(ConnectionSummary), nameof(PendingSummary),
+            nameof(DeviceModeSummary), nameof(UserSummary), nameof(LeaseSummary), nameof(PreviousSummary), nameof(ConnectionSummary), nameof(PendingSummary),
             nameof(RecoverySummary), nameof(RoleTargetSummary), nameof(RoleAssignmentHint) }) Changed(name);
         NotifyMyInfo();
         NotifyScenarioEditor();

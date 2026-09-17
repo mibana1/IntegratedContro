@@ -30,7 +30,7 @@ public sealed partial class ControlService
                 if (target is not null && next.Devices.Any(d => d.MatchesExecutionTarget(target)) &&
                     next.DeviceStates.TryGetValue(target.Id, out var recoveredDevice))
                 {
-                    recoveredDevice.Connection = "호스트 중단 / 가상 상태 대조 필요"; recoveredDevice.LastResult = run.Result;
+                    recoveredDevice.Connection = "호스트 중단 / 상태 대조 필요"; recoveredDevice.LastResult = run.Result;
                     if (!next.UncertainDevices.Contains(target.Id)) next.UncertainDevices.Add(target.Id);
                 }
             }
@@ -104,10 +104,10 @@ public sealed partial class ControlService
                 {
                     if (snapshot.ConditionOperation is { } condition)
                     {
-                        var reading = await _driver.ReadAsync(snapshot.Target!, timeout.Token);
-                        if (!reading.Available) result = new(StepStatus.Failed, "가상 조건 상태 조회 실패");
+                        var reading = await _drivers.Resolve(snapshot.Target!).ReadAsync(JsonDefaults.Copy(snapshot.Target!), timeout.Token);
+                        if (!ValidReading(snapshot.Target!, reading)) result = new(StepStatus.Failed, "조건 상태 조회 실패 / 관측 증거 없음");
                         else if (!reading.Values.TryGetValue(condition, out var value) || value != snapshot.ConditionValue)
-                            result = new(StepStatus.Failed, "최신 가상 상태 확인 조건 불충족");
+                            result = new(StepStatus.Failed, "최신 상태 확인 조건 불충족");
                         else result = await ExecuteIfStillAllowedAsync(jobId, stepIndex, snapshot, timeout.Token);
                     }
                     else result = await ExecuteIfStillAllowedAsync(jobId, stepIndex, snapshot, timeout.Token);
@@ -116,6 +116,12 @@ public sealed partial class ControlService
                 catch (Exception) { result = new(StepStatus.Unknown, "드라이버 예외: 결과 불확실. 자동 재전송 없음."); }
             }
             if (result is null) return true;
+            if (snapshot.Target is { } resultTarget &&
+                ((result.Status == StepStatus.Simulated && (!_drivers.Model(resultTarget.ModelId).IsSimulation || result.Evidence != DeviceEvidence.Simulation)) ||
+                 (result.Status == StepStatus.Observed && (_drivers.Model(resultTarget.ModelId).IsSimulation || result.Evidence != DeviceEvidence.Observed)) ||
+                 (result.Status == StepStatus.Observed && result.Values is null) ||
+                 (result.Status is StepStatus.Simulated or StepStatus.Observed && result.Values is not null && !ValidValues(resultTarget, result.Values))))
+                result = new(StepStatus.Unknown, "드라이버 결과와 상태 증거 불일치 / 대조 필요");
             lock (_gate)
             {
                 if (_storageFailed) return false;
@@ -126,9 +132,10 @@ public sealed partial class ControlService
                     next.Devices.Any(d => d.MatchesExecutionTarget(target)) && next.DeviceStates.TryGetValue(target.Id, out var device))
                 {
                     device.LastResult = result.Detail;
-                    device.Connection = result.Status == StepStatus.Simulated ? "가상 연결됨" : "가상 오류/대조 필요";
-                    if (result.Values is not null)
-                        foreach (var pair in result.Values) device.Simulated[pair.Key] = new(pair.Value, Now);
+                    device.Connection = result.Status is StepStatus.Simulated or StepStatus.Observed or StepStatus.Acknowledged
+                        ? ConnectedLabel(target) : result.Status == StepStatus.Sent ? "전송 완료 / 장비 응답 미확인" : "장비 오류/대조 필요";
+                    if (result.Values is not null && result.Status is StepStatus.Simulated or StepStatus.Observed)
+                        RecordValues(device, target, result.Values, result.Evidence);
                     if (result.Status == StepStatus.Unknown && !next.UncertainDevices.Contains(target.Id)) next.UncertainDevices.Add(target.Id);
                 }
                 FinishStep(next, job, stepIndex, result); Persist(next);
@@ -142,7 +149,7 @@ public sealed partial class ControlService
         var run = job.Steps[index]; var snapshot = job.Snapshot.Steps[index];
         run.Status = result.Status; run.Result = result.Detail; run.FinishedAt = Now;
         var cancelled = job.CancelRequestedAt is not null;
-        var success = result.Status is StepStatus.Simulated or StepStatus.ConditionMet or StepStatus.Acknowledged;
+        var success = result.Status is StepStatus.Simulated or StepStatus.ConditionMet or StepStatus.Acknowledged or StepStatus.Sent or StepStatus.Observed;
         var stop = cancelled || result.Status is StepStatus.Unknown or StepStatus.Skipped || (!success && snapshot.OnFailure == FailurePolicy.Stop);
         if (!success) StopScenarioPendingDisplays(next, job, result.Detail);
         if (stop)
@@ -157,7 +164,7 @@ public sealed partial class ControlService
             var nextIndex = job.Steps.FindIndex(x => x.Status == StepStatus.Pending);
             job.Status = nextIndex < 0 ? JobStatus.Completed : JobStatus.Running;
             job.Result = nextIndex < 0 ? (job.Steps.Any(x => x.Status == StepStatus.Failed) ? "순차 실행 종료 / 실패 단계 포함" :
-                job.Snapshot.Mode == "Mixed" ? "순차 실행 완료 / 가상 상태·Controller 응답 확인, 물리 표시 검증 아님" : "가상 순차 실행 완료 / 실측 아님")
+                job.Snapshot.Mode == "Virtual" ? "가상 순차 실행 완료 / 실측 아님" : "순차 실행 종료 / 단계별 전송·응답·관측 결과를 확인하세요")
                 : $"단계 {index + 1}/{job.Steps.Count} 종료";
             if (nextIndex >= 0) job.ReadyAt = Now.AddMilliseconds(job.Snapshot.Steps[nextIndex].DelayBeforeMs);
         }
@@ -170,7 +177,7 @@ public sealed partial class ControlService
             var job = FindJob(_state, jobId); var invalid = Revalidate(_state, job, step);
             if (_stopping || job.CancelRequestedAt is not null || invalid is not null)
                 return Task.FromResult(new DriverResult(StepStatus.Skipped, invalid ?? "전송 진입 전 취소/호스트 종료 확인"));
-            return _driver.ExecuteAsync(step, ct);
+            return _drivers.Resolve(step.Target!).ExecuteAsync(JsonDefaults.Copy(step), ct);
         }
     }
 }

@@ -1,11 +1,18 @@
 using System.IO;
+using System.Text.Json;
 
 namespace IntegratedContro.App;
 
 public sealed partial class MainViewModel
 {
     private bool _editingConnectionSettings;
+    private ClientPreferencesLoadResult? _preferencesLoad;
     private string _connectionEndpoint = "", _connectionFingerprint = "", _connectionSettingsMessage = "";
+    public bool HasPreferencesRecovery => _preferencesLoad?.RecoveryRequired == true;
+    public bool HasPreferencesBackup => _preferencesLoad?.Backup is not null;
+    public string PreferencesRecoveryMessage => _preferencesLoad?.Message ?? "";
+    public string PreferencesBackupSummary => _preferencesLoad?.Backup is not { } backup ? "복구할 정상 백업 없음" :
+        string.IsNullOrEmpty(backup.Endpoint) ? "백업: 접속 정보 미설정" : $"백업 호스트: {backup.Endpoint}";
     public bool IsEditingConnectionSettings
     {
         get => _editingConnectionSettings;
@@ -34,7 +41,9 @@ public sealed partial class MainViewModel
     public AsyncCommand OpenConnectionSettingsCommand { get; private set; } = null!;
     public AsyncCommand CancelConnectionSettingsCommand { get; private set; } = null!;
     public AsyncCommand SaveConnectionSettingsCommand { get; private set; } = null!;
-    private void InitializeLoginSettings()
+    public AsyncCommand RestorePreferencesBackupCommand { get; private set; } = null!;
+    public AsyncCommand ReloadPreferencesCommand { get; private set; } = null!;
+    private void InitializeLoginSettings(ClientPreferencesLoadResult initial)
     {
         OpenConnectionSettingsCommand = Command(() =>
         {
@@ -58,14 +67,51 @@ public sealed partial class MainViewModel
                 var preferences = _preferences with { Endpoint = endpoint, Fingerprint = fingerprint };
                 preferences.Save();
                 _preferences = preferences; Endpoint = endpoint; Fingerprint = fingerprint;
+                UpdatePreferencesRecovery(new(preferences));
                 Changed(nameof(Endpoint)); Changed(nameof(Fingerprint)); Changed(nameof(LoginHostSummary)); NotifyMyInfo();
                 IsEditingConnectionSettings = false;
                 Message = "접속 설정을 저장했습니다. 앱 계정으로 로그인하세요.";
             }
             catch (ArgumentException e) { ConnectionSettingsMessage = e.Message; }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            { ConnectionSettingsMessage = "접속 설정을 저장하지 못했습니다. 앱 설정 폴더의 접근 권한과 저장 공간을 확인하세요."; }
+            catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
+            { ConnectionSettingsMessage = "접속 설정을 저장하지 못했습니다. 앱 설정 폴더의 접근 권한과 저장 공간을 확인하세요. 기존 파일은 유지됩니다."; }
             return Task.CompletedTask;
         }, () => !IsLoggedIn && IsEditingConnectionSettings);
+        RestorePreferencesBackupCommand = Command(() =>
+        {
+            try
+            {
+                ApplyClientPreferences(new(ClientPreferences.RestoreBackup()));
+                Message = "백업 접속 설정을 복구했습니다. 호스트 주소를 확인하고 로그인하세요.";
+            }
+            catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException)
+            { ConnectionSettingsMessage = "백업을 복구하지 못했습니다. 설정을 다시 읽거나 주소와 지문을 입력해 저장하세요. 기존 파일은 유지됩니다."; IsEditingConnectionSettings = true; }
+            return Task.CompletedTask;
+        }, () => !IsLoggedIn && HasPreferencesRecovery && HasPreferencesBackup);
+        ReloadPreferencesCommand = Command(() =>
+        {
+            ApplyClientPreferences(ClientPreferences.ReadForStartup());
+            Message = HasPreferencesRecovery ? PreferencesRecoveryMessage : "접속 설정을 다시 읽었습니다. 호스트 주소를 확인하고 로그인하세요.";
+            return Task.CompletedTask;
+        }, () => !IsLoggedIn);
+        ApplyClientPreferences(initial);
+    }
+    private void ApplyClientPreferences(ClientPreferencesLoadResult result)
+    {
+        _preferences = result.Preferences;
+        Endpoint = _preferences.Endpoint; Fingerprint = _preferences.Fingerprint;
+        PcIdText = _preferences.PcId.ToString(); LoginName = _preferences.LastLoginName;
+        ConnectionEndpoint = Endpoint; ConnectionFingerprint = Fingerprint; ConnectionSettingsMessage = "";
+        UpdatePreferencesRecovery(result);
+        IsEditingConnectionSettings = result.RecoveryRequired;
+        if (result.RecoveryRequired) Message = result.Message;
+        foreach (var name in new[] { nameof(Endpoint), nameof(Fingerprint), nameof(PcIdText), nameof(LoginName), nameof(LoginHostSummary) }) Changed(name);
+        NotifyMyInfo();
+    }
+    private void UpdatePreferencesRecovery(ClientPreferencesLoadResult result)
+    {
+        _preferencesLoad = result;
+        foreach (var name in new[] { nameof(HasPreferencesRecovery), nameof(HasPreferencesBackup), nameof(PreferencesRecoveryMessage), nameof(PreferencesBackupSummary) }) Changed(name);
+        RestorePreferencesBackupCommand?.Raise(); ReloadPreferencesCommand?.Raise(); LoginCommand?.Raise();
     }
 }

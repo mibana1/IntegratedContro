@@ -12,7 +12,7 @@ public sealed partial class ControlService
     private readonly object _gate = new();
     private readonly IStateStore _store;
     private readonly IPasswordHasher _passwords;
-    private readonly IDeviceDriver _driver;
+    private readonly DeviceDriverRegistry _drivers;
     private readonly TimeProvider _time;
     private readonly Dictionary<string, Session> _sessions = [];
     private readonly Dictionary<Guid, ReviewTicket> _reviews = [];
@@ -29,9 +29,15 @@ public sealed partial class ControlService
         TimeProvider? time = null, int heartbeatTimeoutSeconds = 15,
         IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null,
         IMediaMtxClient? media = null, IMediaSecretStore? mediaSecrets = null)
+        : this(store, passwords, new DeviceDriverRegistry(driver), time, heartbeatTimeoutSeconds, hiperwall, credentials, media, mediaSecrets) { }
+
+    public ControlService(IStateStore store, IPasswordHasher passwords, DeviceDriverRegistry drivers,
+        TimeProvider? time = null, int heartbeatTimeoutSeconds = 15,
+        IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null,
+        IMediaMtxClient? media = null, IMediaSecretStore? mediaSecrets = null)
     {
         Require(heartbeatTimeoutSeconds is >= 3 and <= 300, "invalid_timeout", "생존 확인 제한은 3~300초입니다.", 400);
-        _store = store; _passwords = passwords; _driver = driver;
+        _store = store; _passwords = passwords; _drivers = drivers;
         _hiperwall = hiperwall; _credentials = credentials;
         _media = media; _mediaSecrets = mediaSecrets;
         _time = time ?? TimeProvider.System;
@@ -149,7 +155,7 @@ public sealed partial class ControlService
                 s.Devices.ToArray(), s.DeviceStates, s.Roles.ToArray(), s.Scenarios.ToArray(), s.Jobs.ToArray(),
                 s.UncertainDevices.ToArray(), User(s, session).Role == AccountRole.Administrator
                     ? s.Accounts.Select(a => new AccountView(a.Id, a.Name, a.Role, a.Enabled, a.AllDevices, a.DeviceIds.ToArray())).ToArray() : [],
-                s.Audit.TakeLast(200).Select(a => AuditPresentation.Enrich(a, s)).ToArray(), _driver.Models, (int)_heartbeatTimeout.TotalSeconds)
+                s.Audit.TakeLast(200).Select(a => AuditPresentation.Enrich(a, s)).ToArray(), _drivers.Models, (int)_heartbeatTimeout.TotalSeconds)
                 { HiperwallWriteSupported = _hiperwall is IHiperwallWriter, CanControlHiperwall = HiperwallPermission(User(s, session)), HiperwallReadSupported = _hiperwall is not null, HiperwallConfigurationVersion = s.Hiperwall?.Version ?? 0,
                     OutstandingHiperwallEdits = s.HiperwallEdits.Where(r => r.NeedsAttention).OrderByDescending(r => r.AcceptedAt).ToArray(),
                     OutstandingHiperwallDisplays = s.HiperwallDisplays.Where(j => j.Outstanding).ToArray(),

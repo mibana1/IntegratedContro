@@ -62,9 +62,9 @@ public sealed partial class ControlService
         {
             Require(conflicts.Length == 0, "device_reserved",
                 "장비가 예약되어 있습니다. 작업을 확인하고 '시나리오 중단 후 수동 전환'을 명시적으로 선택하세요.");
-            Require(!targets.Overlaps(s.UncertainDevices), "device_uncertain", "불확실 장비의 가상 상태를 먼저 대조하세요.");
+            Require(!targets.Overlaps(s.UncertainDevices), "device_uncertain", "불확실 장비의 상태를 먼저 대조하세요.");
         }
-        var snapshot = new ExecutionSnapshot(s.SiteId, snapshots.Any(x => x.Kind == ScenarioStepKind.DisplayLayout) ? "Mixed" : "Virtual", request.RequestId, session.Info.UserId,
+        var snapshot = new ExecutionSnapshot(s.SiteId, ExecutionMode(snapshots), request.RequestId, session.Info.UserId,
             session.Info.UserName, session.Info.Id, session.Info.PcId, session.Info.PcName, request.Generation,
             Now, Now.AddSeconds(request.ExpiresAfterSeconds), definition?.Id, definition?.Version,
             definition?.Name ?? $"{request.RoleId}: {request.Operation}={request.Value}", snapshots);
@@ -95,7 +95,7 @@ public sealed partial class ControlService
         // Reconciliation is a separate explicit operation. Never enqueue the earlier conflicting click.
         foreach (var id in job.Snapshot.Steps.Where(x => x.Target is not null).Select(x => x.Target!.Id).Distinct())
             if (!s.UncertainDevices.Contains(id)) s.UncertainDevices.Add(id);
-        job.Result += " / 장비는 가상 상태 대조, Hiperwall은 남은 전송·불확실 표시를 확인한 뒤 새 수동 조작을 선택하세요.";
+        job.Result += " / 장비는 상태 대조, Hiperwall은 남은 전송·불확실 표시를 확인한 뒤 새 수동 조작을 선택하세요.";
         return job;
     });
     private static Job FindJob(HostState s, Guid id)
@@ -145,27 +145,27 @@ public sealed partial class ControlService
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
         DriverReading reading;
-        try { reading = await _driver.ReadAsync(target, timeout.Token); }
-        catch (OperationCanceledException) { throw new DomainException("read_timeout", "가상 상태 조회 제한시간 초과"); }
+        try { reading = await _drivers.Resolve(target).ReadAsync(JsonDefaults.Copy(target), timeout.Token); }
+        catch (OperationCanceledException) { throw new DomainException("read_timeout", "상태 조회 제한시간 초과"); }
         return Change(s =>
         {
             var session = Owner(s, token, request.Generation);
             Require(CanControl(User(s, session), target.Id) && s.Devices.Any(x => x.MatchesExecutionTarget(target)) &&
                 !s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == target.Id)),
                 "reconcile_changed", "대상/권한/작업이 변경되었습니다. 다시 대조하세요.");
-            Require(reading.Available, "read_failed", reading.Detail);
+            Require(ValidReading(target, reading), "read_failed", "상태 조회 실패 또는 관측 증거 없음");
             var state = s.DeviceStates[target.Id];
-            state.Simulated = reading.Values.ToDictionary(x => x.Key, x => new StateValue(x.Value, Now));
-            state.Connection = "가상 연결됨";
-            state.LastResult = "가상 상태 대조 완료 / 과거 불확실 명령의 성공 판정 아님";
+            RecordValues(state, target, reading.Values, reading.Evidence, replace: true);
+            state.Connection = ConnectedLabel(target);
+            state.LastResult = "상태 대조 완료 / 과거 불확실 명령의 성공 판정 아님";
             s.UncertainDevices.Remove(target.Id);
-            Audit(s, session.Info.UserId, "VirtualStateReconciled", $"device={target.Id}; 과거 작업 상태는 보존");
+            Audit(s, session.Info.UserId, "DeviceStateReconciled", $"device={target.Id}; 과거 작업 상태는 보존");
             return state;
         });
     }
     private string? Revalidate(HostState s, Job job, StepSnapshot step)
     {
-        if (job.Snapshot.SiteId != s.SiteId || job.Snapshot.Mode is not ("Virtual" or "Mixed")) return "현장/실행 모드 불일치";
+        if (job.Snapshot.SiteId != s.SiteId || job.Snapshot.Mode is not ("Virtual" or "Mixed" or "Physical")) return "현장/실행 모드 불일치";
         if (Now >= job.Snapshot.ExpiresAt) return "작업 만료";
         if (job.Snapshot.ScenarioId is { } scenarioId &&
             !s.Scenarios.Any(x => x.Id == scenarioId && x.Version == job.Snapshot.ScenarioVersion)) return "시나리오 정의 변경";
@@ -181,6 +181,20 @@ public sealed partial class ControlService
         if (user is null || !CanControl(user, target.Id)) return "원 요청자 계정/대상 권한 회수";
         var device = s.Devices.SingleOrDefault(d => d.Id == target.Id);
         if (device is null || !device.Enabled || !device.MatchesExecutionTarget(target)) return "장비 대상/설정 버전 변경";
+        try
+        {
+            _drivers.Resolve(device);
+            var model = _drivers.Model(device.ModelId);
+            if (step.ModelDefinition is { } admitted && !DeviceDriverRegistry.SameDefinition(admitted, model))
+                return "드라이버 기능 정의 변경";
+            if (step.ModelDefinition is null && !model.IsSimulation) return "기존 가상 snapshot의 실장비 실행 차단";
+            var capability = model.Capabilities.SingleOrDefault(c => c.Operation == step.Operation);
+            if (capability is null || step.Unit != capability.Unit || step.Value < capability.Minimum || step.Value > capability.Maximum ||
+                (step.Kind == ScenarioStepKind.WaitUntil && !capability.CanRead)) return "지원 기능 변경";
+            if (step.ConditionOperation is { } condition && !model.Capabilities.Any(c => c.Operation == condition && c.CanRead &&
+                step.ConditionValue >= c.Minimum && step.ConditionValue <= c.Maximum)) return "조회 기능 변경";
+        }
+        catch (DomainException) { return "드라이버/통신 설정을 사용할 수 없음"; }
         var role = s.Roles.SingleOrDefault(r => r.Id == binding.Id);
         if (role is null || role.Version != binding.Version || role.DeviceId != target.Id) return "역할 배정 변경";
         if (s.UncertainDevices.Contains(device.Id) && (step.Kind != ScenarioStepKind.DeviceCommand || step.Operation != DeviceOperation.Stop)) return "장비 상태 대조 필요";

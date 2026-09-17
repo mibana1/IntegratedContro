@@ -15,7 +15,7 @@ public sealed partial class MainViewModel
     }
     public ConditionOperationChoice[] ConditionOperations =>
         [new("", "조건 없음"), .. (SelectedScenarioTarget?.Capabilities ?? [])
-            .Where(c => c.Operation != DeviceOperation.Stop)
+            .Where(c => c.CanRead && c.Operation != DeviceOperation.Stop)
             .Select(c => new ConditionOperationChoice(c.Operation.ToString(), DeviceLabels.Operation(c.Operation)))];
     private string _conditionOperationText = "";
     public string ConditionOperationText

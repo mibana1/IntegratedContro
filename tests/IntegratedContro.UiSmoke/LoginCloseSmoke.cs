@@ -77,7 +77,7 @@ public static partial class Program
         Console.WriteLine("PASS: closing/cancelling login shuts down the UI, including a pending connection; successful login keeps the app open.");
     }
 
-    private static int RunLoginCloseChild()
+    private static int RunLoginCloseChild(bool requireRecovery = false)
     {
         var app = new IntegratedContro.App.App();
         app.InitializeComponent();
@@ -86,6 +86,7 @@ public static partial class Program
             try
             {
                 await Wait(() => app.MainWindow is MainWindow { LoginDialog.IsVisible: true });
+                if (requireRecovery) Require(((MainViewModel)app.MainWindow.DataContext).IsEditingConnectionSettings, "Damaged profile did not open settings");
                 ((MainWindow)app.MainWindow).LoginDialog!.Close();
                 await Task.Delay(3000);
                 app.Shutdown(1); // Only reached if the production last-window shutdown failed.

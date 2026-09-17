@@ -18,7 +18,7 @@ public sealed partial class ControlService
         DriverReading? reading = null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1, Math.Min(3000, (deadline - Now).TotalMilliseconds))));
-        try { reading = await _driver.ReadAsync(step.Target!, timeout.Token).ConfigureAwait(false); }
+        try { reading = await _drivers.Resolve(step.Target!).ReadAsync(JsonDefaults.Copy(step.Target!), timeout.Token).ConfigureAwait(false); }
         catch (Exception e) when (e is not OutOfMemoryException) { /* A failed read is not a failed physical command. */ }
         lock (_gate)
         {
@@ -29,15 +29,15 @@ public sealed partial class ControlService
             var invalid = Revalidate(next, job, step);
             if (invalid is not null) return new(StepStatus.Skipped, invalid);
             if (Now >= deadline) return new(StepStatus.Failed, "조건 대기 제한시간 초과 / 후속 단계 실패 정책 적용");
-            if (reading is { Available: true })
+            if (reading is not null && ValidReading(step.Target!, reading))
             {
                 var device = next.DeviceStates[step.Target!.Id];
-                foreach (var pair in reading.Values) device.Simulated[pair.Key] = new(pair.Value, Now);
-                device.Connection = "가상 연결됨"; device.LastResult = "조건 대기 중 최신 가상 상태 조회";
+                RecordValues(device, step.Target!, reading.Values, reading.Evidence);
+                device.Connection = ConnectedLabel(step.Target!); device.LastResult = "조건 대기 중 최신 상태 조회";
                 if (reading.Values.TryGetValue(step.Operation, out var value) && value == step.Value)
-                { Persist(next); return new(StepStatus.ConditionMet, $"가상 상태 조건 충족: {step.Operation} = {value} / 실제 장비 관측 아님"); }
+                { Persist(next); return new(StepStatus.ConditionMet, $"{(reading.Evidence == DeviceEvidence.Simulation ? "가상 상태" : "장비 관측")} 조건 충족: {step.Operation} = {value}"); }
             }
-            job.Steps[index].Result = reading is { Available: true } ? $"조건 대기: {step.Operation} = {step.Value} / 아직 충족하지 않음" :
+            job.Steps[index].Result = reading is not null && ValidReading(step.Target!, reading) ? $"조건 대기: {step.Operation} = {step.Value} / 아직 충족하지 않음" :
                 "조건 상태 조회 실패 / 제한시간 안에서 재확인";
             job.ReadyAt = Now.AddMilliseconds(500); if (job.ReadyAt > deadline) job.ReadyAt = deadline;
             job.Result = $"단계 {index + 1}/{job.Steps.Count} · {job.Steps[index].Result}";

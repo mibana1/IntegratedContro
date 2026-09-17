@@ -7,7 +7,12 @@ public sealed record CreateAccountRequest(long Generation, string Name, string P
 public sealed record UpdateAccountRequest(long Generation, Guid AccountId, bool Enabled, bool AllDevices, Guid[] DeviceIds);
 public sealed record DeviceRequest(long Generation, Guid Id, Guid PcId, string PcName, string Name,
     string ConnectionId, string ModelId, bool Enabled = true, VirtualFault Fault = VirtualFault.None,
-    int LatencyMs = 50, int ExpectedVersion = 0);
+    int LatencyMs = 50, int ExpectedVersion = 0)
+{
+    public string? DriverId { get; init; }
+    public DeviceConnection? Connection { get; init; }
+    public Dictionary<string, string>? DriverOptions { get; init; }
+}
 public sealed record RoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion = 0);
 public sealed record UnassignRoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion);
 public sealed record ScenarioRequest(long Generation, Guid Id, string Name, ScenarioStep[] Steps, int ExpectedVersion = 0);

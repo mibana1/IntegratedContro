@@ -19,13 +19,7 @@ public sealed class HostClient : IDisposable
     private readonly HttpClient _http;
     public HostClient(string endpoint, string fingerprint)
     {
-        if (!Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
-            !string.IsNullOrEmpty(uri.UserInfo) || uri.AbsolutePath != "/" || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
-            throw new ArgumentException("https://호스트주소:포트 형식으로 입력하세요.");
-        byte[] pin;
-        try { pin = Convert.FromHexString(fingerprint.Replace(" ", "").Replace(":", "").Trim()); }
-        catch (FormatException) { throw new ArgumentException("호스트 설정에 표시된 SHA-256 지문을 입력하세요."); }
-        if (pin.Length != 32) throw new ArgumentException("SHA-256 지문은 64자리 16진수입니다.");
+        var (uri, pin) = ClientPreferences.ValidateConnection(endpoint, fingerprint);
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
         handler.ServerCertificateCustomValidationCallback = (_, cert, _, _) =>
             cert is not null && DateTime.UtcNow >= cert.NotBefore.ToUniversalTime() &&
@@ -83,29 +77,4 @@ public sealed class HostClient : IDisposable
             asset.EndsWith(".ts", StringComparison.Ordinal) ? "video/mp2t" : "video/mp4");
     }
     public void Dispose() => _http.Dispose();
-}
-public sealed record ClientPreferences(Guid PcId, string Endpoint, string Fingerprint)
-{
-    public string LastLoginName { get; init; } = "";
-    public static string ProfilePath
-    {
-        get
-        {
-            var args = Environment.GetCommandLineArgs();
-            var index = Array.IndexOf(args, "--profile-dir");
-            var directory = index >= 0 && index + 1 < args.Length ? Path.GetFullPath(args[index + 1]) :
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IntegratedContro");
-            Directory.CreateDirectory(directory);
-            return Path.Combine(directory, "client.json");
-        }
-    }
-    public static ClientPreferences Load()
-    {
-        var path = ProfilePath;
-        if (File.Exists(path))
-            return JsonSerializer.Deserialize<ClientPreferences>(File.ReadAllText(path), JsonDefaults.Options)
-                ?? throw new InvalidDataException("앱 설정 파일을 확인하세요.");
-        var value = new ClientPreferences(Guid.NewGuid(), "", ""); value.Save(); return value;
-    }
-    public void Save() => File.WriteAllText(ProfilePath, JsonSerializer.Serialize(this, JsonDefaults.Options));
 }

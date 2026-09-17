@@ -44,14 +44,14 @@ public sealed partial class ControlService
                 "card_target_changed", $"{step.Target!.Name}: 대상 또는 역할이 변경되었습니다.");
             Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(x => x.Target?.Id == expected.DeviceId)),
                 "device_busy", $"{step.Target!.Name}: 진행 중 작업 또는 시나리오 예약이 있습니다. 작업 탭에서 확인하세요.");
-            Require(!s.UncertainDevices.Contains(expected.DeviceId), "device_uncertain", $"{step.Target!.Name}: 가상 상태 대조가 필요합니다.");
-            var actual = s.DeviceStates[expected.DeviceId].Simulated.GetValueOrDefault(DeviceOperation.Power);
+            Require(!s.UncertainDevices.Contains(expected.DeviceId), "device_uncertain", $"{step.Target!.Name}: 상태 대조가 필요합니다.");
+            var actual = s.DeviceStates[expected.DeviceId].Values.GetValueOrDefault(DeviceOperation.Power);
             Require(expected.Power is 0 or 1 && actual is not null && actual.Value == expected.Power && actual.At == expected.ObservedAt,
                 "light_state_changed", $"{step.Target!.Name}: 상태가 변경되었거나 확인되지 않았습니다. 상태 확인 후 다시 누르세요.");
             return step with { ConditionOperation = DeviceOperation.Power, ConditionValue = expected.Power };
         }).ToArray();
         var name = $"{(request.GroupId is null ? "전체 조명" : group?.Name ?? "미분류")} · {(request.Value == 1 ? "ON" : "OFF")} ({snapshots.Length}개)";
-        var snapshot = new ExecutionSnapshot(s.SiteId, "Virtual", request.RequestId, session.Info.UserId,
+        var snapshot = new ExecutionSnapshot(s.SiteId, ExecutionMode(snapshots), request.RequestId, session.Info.UserId,
             session.Info.UserName, session.Info.Id, session.Info.PcId, session.Info.PcName, request.Generation,
             Now, Now.AddMinutes(5), null, null, name, snapshots);
         var job = new Job { RequestFingerprint = fingerprint, Snapshot = snapshot, Kind = JobKind.LightBatch, Steps = snapshots.Select(_ => new StepRun()).ToList(), ReadyAt = Now };

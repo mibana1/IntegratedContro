@@ -38,7 +38,7 @@ public sealed partial class MainViewModel
     private void RefreshScenarioSettings(bool reset)
     {
         if (reset) ResetScenarioCondition();
-        var capabilities = _scenarioTarget?.Capabilities.Where(c => IsCommandScenarioStep || c.Operation != DeviceOperation.Stop).ToArray() ?? [];
+        var capabilities = _scenarioTarget?.Capabilities.Where(c => IsCommandScenarioStep || (c.CanRead && c.Operation != DeviceOperation.Stop)).ToArray() ?? [];
         var old = reset ? [] : ScenarioSettings.ToArray();
         // Preserve input objects during ordinary polling and compatible kind switches.
         if (!reset && ScenarioSettings.Select(s => s.Capability).SequenceEqual(capabilities)) return;
