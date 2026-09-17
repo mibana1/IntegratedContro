@@ -1,18 +1,21 @@
+using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
+using static IntegratedContro.Application.ControlAuthorization;
+using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 
-public sealed partial class ControlService
+internal sealed partial class HiperwallService
 {
     public async Task<HiperwallSlot> SaveHiperwallSlotAsync(string token, SaveHiperwallSlotRequest request, CancellationToken ct)
     {
         HiperwallConfiguration config;
-        lock (_gate)
+        lock (_host.Gate)
         {
             DisplayOwner(token, request.Generation, request.ConfigurationVersion);
-            CheckSlotVersion(_state, request.Number, request.ExpectedVersion);
-            config = _state.Hiperwall!;
+            CheckSlotVersion(_host.State, request.Number, request.ExpectedVersion);
+            config = _host.State.Hiperwall!;
         }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(config.TimeoutMs);
         var secret = config.CredentialId is { } key ? _credentials!.Read(key) : null;
@@ -38,27 +41,27 @@ public sealed partial class ControlService
             return p;
         }).ToArray();
         ValidatePlacements(placements);
-        return Change(s =>
+        return _host.Change(s =>
         {
             ct.ThrowIfCancellationRequested();
             var session = DisplayOwner(token, request.Generation, request.ConfigurationVersion);
             CheckSlotVersion(s, request.Number, request.ExpectedVersion);
-            var slot = new HiperwallSlot(request.Number, checked(request.ExpectedVersion + 1), config.Version, placements, Now);
+            var slot = new HiperwallSlot(request.Number, checked(request.ExpectedVersion + 1), config.Version, placements, _host.Now);
             s.HiperwallSlots.RemoveAll(x => x.Number == slot.Number); s.HiperwallSlots.Add(slot);
-            Audit(s, session.Info.UserId, "HiperwallSlotSaved", $"slot={slot.Number}; version={slot.Version}; count={placements.Length}");
+            _host.Audit(s, session.Info.UserId, "HiperwallSlotSaved", $"slot={slot.Number}; version={slot.Version}; count={placements.Length}");
             return slot;
         });
     }
-    public bool DeleteHiperwallSlot(string token, DeleteHiperwallSlotRequest request) => Change(s =>
+    public bool DeleteHiperwallSlot(string token, DeleteHiperwallSlotRequest request) => _host.Change(s =>
     {
-        var session = Owner(s, token, request.Generation);
-        Require(HiperwallPermission(User(s, session)), "hiperwall_scope", "전체 장비 제어 권한이 필요합니다.", 403);
+        var session = _host.Owner(s, token, request.Generation);
+        Require(HiperwallPermission(_host.User(s, session)), "hiperwall_scope", "전체 장비 제어 권한이 필요합니다.", 403);
         CheckSlotVersion(s, request.Number, request.ExpectedVersion);
         var slot = s.HiperwallSlots.SingleOrDefault(x => x.Number == request.Number);
         Require(slot is { IsEmpty: false }, "slot_empty", "저장된 슬롯을 선택하세요.");
         s.HiperwallSlots.Remove(slot!);
         s.HiperwallSlots.Add(new(request.Number, checked(request.ExpectedVersion + 1), 0, [], null));
-        Audit(s, session.Info.UserId, "HiperwallSlotDeleted", $"slot={request.Number}; version={request.ExpectedVersion}");
+        _host.Audit(s, session.Info.UserId, "HiperwallSlotDeleted", $"slot={request.Number}; version={request.ExpectedVersion}");
         return true;
     });
     private static void CheckSlotVersion(HostState s, int number, int version)
@@ -71,8 +74,8 @@ public sealed partial class ControlService
     {
         Require(request.SlotNumber is not null && request.SlotVersion is not null,
             "invalid_slot", "불러올 슬롯과 버전이 필요합니다.", 400);
-        CheckSlotVersion(_state, request.SlotNumber!.Value, request.SlotVersion!.Value);
-        var slot = _state.HiperwallSlots.SingleOrDefault(x => x.Number == request.SlotNumber);
+        CheckSlotVersion(_host.State, request.SlotNumber!.Value, request.SlotVersion!.Value);
+        var slot = _host.State.HiperwallSlots.SingleOrDefault(x => x.Number == request.SlotNumber);
         Require(slot is { IsEmpty: false } && slot.ConfigurationVersion == request.ConfigurationVersion,
             "slot_changed", "슬롯이 비어 있거나 Controller 설정이 변경되었습니다. 현재 연결에서 다시 저장하세요.");
         return JsonDefaults.Copy(slot!);
@@ -123,7 +126,7 @@ public sealed partial class ControlService
     }
     private void RequireNoSlotRestore()
     {
-        Require(!_state.HiperwallEdits.Any(e => e.Active && e.Request.Action == HiperwallEditAction.RestoreSlot),
+        Require(!_host.State.HiperwallEdits.Any(e => e.Active && e.Request.Action == HiperwallEditAction.RestoreSlot),
             "hiperwall_busy", "저장 슬롯을 불러오는 중입니다. 완료 후 다시 조작하세요.");
     }
 }

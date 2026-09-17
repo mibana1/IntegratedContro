@@ -538,6 +538,44 @@ Windows 보호 저장소의 사용자/장치 범위는 배포 환경에 맞춰 �
 
 ## 10. 구현 단계와 완료 기준
 
+### 장비 실행·시나리오·카메라·영상벽 서비스 책임 분리 (2026-09-17)
+
+- 파일만 나뉘어 있던 단일 `ControlService` partial 구현을 실제 독립 클래스로 분리했다.
+  `ControlService`는 기존 호스트 API, 서비스 구성, 전체 상태 조회와 시작·종료 순서만 담당한다.
+  HTTP 요청·응답과 SQLite 저장 모델은 변경하지 않는다.
+- `DeviceExecutionService`: 장비/역할/조명 설정, 드라이버 선택·실행·조회, snapshot 대상 검증,
+  상태 증거 검사와 관측 결과 반영을 소유한다. 카메라·MediaMTX·Hiperwall 어댑터를 참조하지 않는다.
+- `ScenarioService`: 일반 명령·시나리오·조명 일괄 작업 접수, 대상 예약, 단계 순서·조건 대기,
+  취소·수동 전환과 재시작 복구를 담당한다. 장비와 표시 단계는 각각
+  `IDeviceScenarioOperations`와 `IScenarioDisplayOperations` 계약으로 호출한다.
+- `CameraService`: 등록·변경·삭제, MediaMTX 동기화·경로 정리, RTSP 보호 참조와 HLS 읽기를 소유한다.
+  영상벽 콘텐츠 매핑은 `ICameraContentCatalog.ValidateMapping`만 호출한다.
+  영상벽 캐시·드라이버·일반 장비 실행 메서드에 접근하지 않는다.
+- `HiperwallService`: 연결·Contents 캐시, LIVE/슬롯/저장 배치 편집·표시·정리,
+  시나리오 표시 단계와 이미지 프리뷰를 소유한다. 카메라 영상과 프리뷰의 취소 소스도 각각 소유한다.
+- `HostAuthority`는 모든 서비스가 공유하는 하나의 잠금·상태 커밋·인증·사용권 경계다.
+  어댑터와 도메인 실행 코드를 넣지 않는다. 서비스별 별도 잠금/DB로 접수·취소·전송을 분산하지 않는다.
+  `ScenarioJobLifecycle`은 표시 결과와 부모 작업의 취소·후속 단계 차단을 같은 트랜잭션에 반영한다.
+- 기능 변경은 해당 서비스와 계약 안에서 수행한다. 새 카메라 기능 때문에 일반 장비 드라이버나
+  시나리오의 장비 전송 코드를 수정해야 한다면 경계 침범 여부를 먼저 검토한다.
+  공통 모델·권한·저장 계약을 실제로 변경하는 요구는 별도 영향 검토와 관련 회귀 검증이 필요하다.
+- 임시 `ControlJobLifecycle.cs` 위임 파일을 `ControlScenarioFacade.cs`로 정리했다.
+- 검증: 최신 환경 어댑터·ViewModel 변경을 포함한 서비스·통합 테스트 330개(기존 321개 + 신규 9개) 통과.
+  카메라 수정·동기화 실패와 장비 전송 경합, 사용권 반납 후 시나리오 snapshot/실행 유지,
+  잘못된 매핑 거절 시 기존 작업 보존, 공통 저장 실패 시 전 서비스 차단을 확인했다.
+  비동기 장비 사전 조회 중 다른 서비스의 저장이 실패하는 경합을 재현하고,
+  실제 전송 직전 저장 실패를 다시 검사하도록 공통 실행 경계를 보완했다.
+  빌드 경고/오류 0, 기존 공개 호스트 메서드 52개 시그니처 유지, 전체 WPF 회귀 통과.
+  초기 WPF 실행에서 카메라 입력 포커스 검사 실패가 있어 실패 메시지에 활성·포커스 상태를 추가했다.
+  검사 조건은 유지했으며 단독 카메라 입력 검사와 전체 WPF 재실행을 모두 통과했다.
+  근거: `artifacts/service-separation-applied-verify.log`, `service-separation-camera-diagnostic.log`,
+  `service-separation-applied-ui.log`, `artifacts/test-results/service-separation-applied.trx`.
+  실장비·현장 카메라 재연결 검증은 이번 구조 변경 검증에 포함하지 않는다.
+- 배포: `scripts/publish.ps1`로 `artifacts/publish/Build-20260917-112308-527`의 App·ControlHost를 생성했다.
+  작업 공간 `IntegratedContro.lnk`의 최신 App 대상과 배포 DLL·Release DLL 일치를 확인했다.
+  최신 3개 보관·이전 빌드 1개 정리·보류 0개. 근거: `artifacts/service-separation-applied-publish.log`.
+  실행 중인 운영 프로세스를 종료하지 않았다. 최신 배포본으로 App·ControlHost를 실행하면 적용된다.
+
 ### OS·영상 엔진·저장소 환경 어댑터 책임 분리 (2026-09-17)
 
 - OS 지원 규칙을 Application의 PlatformPolicy, 실제 레지스트리·아키텍처 조회를 Infrastructure/Platform의 WindowsEnvironment로 분리했다.

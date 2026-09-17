@@ -1,40 +1,42 @@
+using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
+using static IntegratedContro.Application.ControlAuthorization;
+using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 
-public sealed partial class ControlService
+internal sealed partial class HiperwallService
 {
     private readonly SemaphoreSlim _hiperwallAdmission = new(1, 1);
     private int _hiperwallDispatching;
-    private static bool HiperwallPermission(Account account) => account.Enabled && account.Role != AccountRole.Viewer && account.AllDevices;
     public HiperwallEditReceipt[] GetHiperwallEdits(string token)
     {
-        lock (_gate)
+        lock (_host.Gate)
         {
             HiperwallReaderSession(token);
-            var recent = _state.HiperwallEdits.TakeLast(100).Select(r => r.Request.RequestId).ToHashSet();
-            return JsonDefaults.Copy(_state.HiperwallEdits.Where(r => r.NeedsAttention || recent.Contains(r.Request.RequestId))
+            var recent = _host.State.HiperwallEdits.TakeLast(100).Select(r => r.Request.RequestId).ToHashSet();
+            return JsonDefaults.Copy(_host.State.HiperwallEdits.Where(r => r.NeedsAttention || recent.Contains(r.Request.RequestId))
                 .Reverse().ToArray());
         }
     }
     public HiperwallEditReceipt GetHiperwallEdit(string token, Guid id)
     {
-        lock (_gate)
+        lock (_host.Gate)
         {
             HiperwallReaderSession(token);
-            var receipt = _state.HiperwallEdits.SingleOrDefault(r => r.Request.RequestId == id);
+            var receipt = _host.State.HiperwallEdits.SingleOrDefault(r => r.Request.RequestId == id);
             Require(receipt is not null, "request_not_found", "접수 기록이 없습니다. 목록과 전송 이력을 확인하세요.", 404);
             return JsonDefaults.Copy(receipt!);
         }
     }
     private Session HiperwallOwner(string token, HiperwallEditRequest request)
     {
-        Healthy(); CheckConnectionUnsafe();
-        var session = Owner(_state, token, request.Generation);
-        Require(HiperwallPermission(User(_state, session)), "hiperwall_scope", "Hiperwall 제어에는 전체 장비 제어 권한이 필요합니다.", 403);
+        _host.Healthy(); _host.CheckConnectionUnsafe();
+        var session = _host.Owner(_host.State, token, request.Generation);
+        Require(HiperwallPermission(_host.User(_host.State, session)), "hiperwall_scope", "Hiperwall 제어에는 전체 장비 제어 권한이 필요합니다.", 403);
         Require(_hiperwall is IHiperwallWriter && _credentials is not null, "hiperwall_unavailable", "Hiperwall 편집을 지원하는 호스트가 필요합니다.", 503);
-        Require(_state.Hiperwall is not null && _state.Hiperwall.Version == request.ConfigurationVersion,
+        Require(_host.State.Hiperwall is not null && _host.State.Hiperwall.Version == request.ConfigurationVersion,
             "hiperwall_settings_changed", "연결 설정이 변경되었습니다. 다시 조회하세요.");
         return session;
     }
@@ -43,18 +45,18 @@ public sealed partial class ControlService
         Require(request.RequestId != Guid.Empty && Enum.IsDefined(request.Action), "invalid_request", "유효한 요청 ID와 동작이 필요합니다.", 400);
         Require(request.Action == HiperwallEditAction.RestoreSlot || request.SlotNumber is null && request.SlotVersion is null,
             "invalid_request", "일반 편집 명령에는 저장 슬롯을 지정할 수 없습니다.", 400);
-        lock (_gate)
+        lock (_host.Gate)
         {
             var session = HiperwallReaderSession(token);
-            if (_state.HiperwallEdits.SingleOrDefault(r => r.Request.RequestId == request.RequestId) is { } existing)
+            if (_host.State.HiperwallEdits.SingleOrDefault(r => r.Request.RequestId == request.RequestId) is { } existing)
             {
                 Require(existing.Requester.UserId == session.Info.UserId && existing.Request == request,
                     "request_conflict", "같은 요청 ID의 내용 또는 요청자가 다릅니다.");
                 return JsonDefaults.Copy(existing);
             }
         }
-        lock (_gate)
-            Require(!_state.HiperwallDisplays.Any(j => j.Request.RequestId == request.RequestId), "request_conflict", "표시 작업 ID가 이미 사용되었습니다.");
+        lock (_host.Gate)
+            Require(!_host.State.HiperwallDisplays.Any(j => j.Request.RequestId == request.RequestId), "request_conflict", "표시 작업 ID가 이미 사용되었습니다.");
         Require(await _hiperwallAdmission.WaitAsync(0, ct), "hiperwall_busy", "다른 Hiperwall 요청을 확인 중입니다. 처리 후 다시 조작하세요.");
         var ownsWriteLane = false;
         try
@@ -65,14 +67,14 @@ public sealed partial class ControlService
                 Require(ownsWriteLane, "hiperwall_busy", "현재 전송을 처리 중입니다. 완료 후 불러오세요.");
             }
             HiperwallConfiguration config; HiperwallSlot? slot = null;
-            lock (_gate)
+            lock (_host.Gate)
             {
-                HiperwallOwner(token, request); RequireHiperwallScenarioAvailable(_state);
-                Require(!_state.HiperwallEdits.Any(r => r.Active), "hiperwall_busy", "접수된 Hiperwall 명령을 처리 중입니다.");
-                config = _state.Hiperwall!;
+                HiperwallOwner(token, request); RequireHiperwallScenarioAvailable(_host.State);
+                Require(!_host.State.HiperwallEdits.Any(r => r.Active), "hiperwall_busy", "접수된 Hiperwall 명령을 처리 중입니다.");
+                config = _host.State.Hiperwall!;
                 if (request.Action == HiperwallEditAction.RestoreSlot)
                 {
-                    Require(!_state.HiperwallDisplays.Any(j => j.Targets.Any(t => t.OpenState is HiperwallSendState.Pending or HiperwallSendState.Sending)),
+                    Require(!_host.State.HiperwallDisplays.Any(j => j.Targets.Any(t => t.OpenState is HiperwallSendState.Pending or HiperwallSendState.Sending)),
                         "hiperwall_busy", "접수된 표시가 진행 중입니다. 완료 후 불러오세요.");
                     slot = ReadRestoreSlot(request);
                 }
@@ -86,19 +88,19 @@ public sealed partial class ControlService
             Require(reading.State == HiperwallConnectionState.Connected && reading.Controller?.Role is "Primary" or "Default",
                 "hiperwall_not_writable", "Controller 연결·인증·역할을 확인하세요. Shadow Controller에는 편집 명령을 보내지 않습니다.");
             var commands = slot is null ? ValidateHiperwallEdit(request, reading) : BuildSlotRestore(request, slot, reading);
-            lock (_gate)
+            lock (_host.Gate)
             {
                 ct.ThrowIfCancellationRequested();
-                var session = HiperwallOwner(token, request); RequireHiperwallScenarioAvailable(_state);
+                var session = HiperwallOwner(token, request); RequireHiperwallScenarioAvailable(_host.State);
                 if (slot is not null) ReadRestoreSlot(request);
-                var next = JsonDefaults.Copy(_state);
+                var next = JsonDefaults.Copy(_host.State);
                 var receipt = new HiperwallEditReceipt { Request = request, Requester = session.Info, Endpoint = config.Endpoint,
-                    AcceptedAt = Now, SlotSnapshot = slot, Steps = commands.Select(c => new HiperwallEditStep { Command = c,
+                    AcceptedAt = _host.Now, SlotSnapshot = slot, Steps = commands.Select(c => new HiperwallEditStep { Command = c,
                         ExpectedTargetRevision = c.Action is HiperwallEditAction.Close or HiperwallEditAction.Change
                             ? HiperwallEditing.Revision(reading.Instances.Items.Where(i => i.Id == c.InstanceId)) : null }).ToList() };
                 next.HiperwallEdits.Add(receipt);
-                Audit(next, session.Info.UserId, "HiperwallEditAccepted", $"{HiperwallEditing.ActionName(request.Action)}; request={request.RequestId}; targets={commands.Length}");
-                Persist(next);
+                _host.Audit(next, session.Info.UserId, "HiperwallEditAccepted", $"{HiperwallEditing.ActionName(request.Action)}; request={request.RequestId}; targets={commands.Length}");
+                _host.Persist(next);
                 _hiperwallSequence++;
                 _hiperwallView = EmptyHiperwall(message: "편집 명령을 접수했습니다. 전송 결과와 새 목록을 확인하세요.");
                 return JsonDefaults.Copy(receipt);
@@ -162,15 +164,15 @@ public sealed partial class ControlService
         Require(r.Muted is not null, "invalid_request", "전체 음소거 값을 지정하세요.", 400);
         return [new(r.Action, Muted: r.Muted)];
     }
-    public HiperwallEditReceipt CancelHiperwallEdit(string token, JobActionRequest request) => Change(s =>
+    public HiperwallEditReceipt CancelHiperwallEdit(string token, JobActionRequest request) => _host.Change(s =>
     {
-        var session = Owner(s, token, request.Generation);
-        Require(HiperwallPermission(User(s, session)), "hiperwall_scope", "전체 장비 제어 권한이 필요합니다.", 403);
+        var session = _host.Owner(s, token, request.Generation);
+        Require(HiperwallPermission(_host.User(s, session)), "hiperwall_scope", "전체 장비 제어 권한이 필요합니다.", 403);
         var receipt = s.HiperwallEdits.SingleOrDefault(r => r.Request.RequestId == request.JobId);
         Require(receipt is not null, "request_not_found", "접수 기록이 없습니다.", 404);
         foreach (var step in receipt!.Steps.Where(s => s.State == HiperwallSendState.Pending))
         { step.State = HiperwallSendState.Rejected; step.Message = "현재 사용권자가 미전송 부분을 취소했습니다."; }
-        Audit(s, session.Info.UserId, "HiperwallEditCancelled", $"request={request.JobId}; 이미 전송한 명령은 유지");
+        _host.Audit(s, session.Info.UserId, "HiperwallEditCancelled", $"request={request.JobId}; 이미 전송한 명령은 유지");
         return receipt;
     });
     public async Task DispatchHiperwallNextAsync(CancellationToken stopping)
@@ -180,15 +182,15 @@ public sealed partial class ControlService
         try
         {
             Guid id; int index; HiperwallEditStep snapshot; HiperwallEditReceipt receiptSnapshot; HiperwallConfiguration config; HiperwallEditRequest request;
-            lock (_gate)
+            lock (_host.Gate)
             {
-                if (_stopping || _storageFailed || stopping.IsCancellationRequested) return;
-                var receipt = _state.HiperwallEdits.FirstOrDefault(r => r.Steps.Any(s => s.State == HiperwallSendState.Pending));
+                if (_host.Stopping || _host.StorageFailed || stopping.IsCancellationRequested) return;
+                var receipt = _host.State.HiperwallEdits.FirstOrDefault(r => r.Steps.Any(s => s.State == HiperwallSendState.Pending));
                 if (receipt is null) return;
                 id = receipt.Request.RequestId; index = receipt.Steps.FindIndex(s => s.State == HiperwallSendState.Pending);
                 if (!ValidateHiperwallDispatch(receipt)) { RejectHiperwallPending(id); return; }
                 receiptSnapshot = JsonDefaults.Copy(receipt);
-                snapshot = receiptSnapshot.Steps[index]; config = _state.Hiperwall!; request = receipt.Request;
+                snapshot = receiptSnapshot.Steps[index]; config = _host.State.Hiperwall!; request = receipt.Request;
             }
             HiperwallWriteResult result;
             var sent = false;
@@ -212,16 +214,16 @@ public sealed partial class ControlService
                     else
                     {
                         Task<HiperwallWriteResult> sending;
-                        lock (_gate)
+                        lock (_host.Gate)
                         {
-                            var current = _state.HiperwallEdits.Single(r => r.Request.RequestId == id);
+                            var current = _host.State.HiperwallEdits.Single(r => r.Request.RequestId == id);
                             if (current.Steps[index].State != HiperwallSendState.Pending) return;
                             if (!ValidateHiperwallDispatch(current)) { RejectHiperwallPending(id); return; }
                             stopping.ThrowIfCancellationRequested(); timeout.Token.ThrowIfCancellationRequested();
-                            var next = JsonDefaults.Copy(_state); var step = next.HiperwallEdits.Single(r => r.Request.RequestId == id).Steps[index];
+                            var next = JsonDefaults.Copy(_host.State); var step = next.HiperwallEdits.Single(r => r.Request.RequestId == id).Steps[index];
                             step.State = HiperwallSendState.Sending; step.Message = "전송 중";
-                            TrackLiveOpen(next, next.HiperwallEdits.Single(r => r.Request.RequestId == id), Now);
-                            Persist(next);
+                            TrackLiveOpen(next, next.HiperwallEdits.Single(r => r.Request.RequestId == id), _host.Now);
+                            _host.Persist(next);
                             // The adapter initiates its HTTP send here, at the same authority boundary as permission/config validation.
                             sent = true; sending = ((IHiperwallWriter)_hiperwall!).WriteAsync(config, secret, command, timeout.Token);
                         }
@@ -243,9 +245,9 @@ public sealed partial class ControlService
             catch (Exception e) when (e is not OutOfMemoryException)
             { result = new(sent ? HiperwallSendState.Unknown : HiperwallSendState.Rejected,
                 sent ? "전송 결과 확인 필요 · 자동 재전송하지 않습니다." : "전송 전 확인에 실패하여 명령을 보내지 않았습니다."); }
-            lock (_gate)
+            lock (_host.Gate)
             {
-                var next = JsonDefaults.Copy(_state);
+                var next = JsonDefaults.Copy(_host.State);
                 var receipt = next.HiperwallEdits.Single(r => r.Request.RequestId == id);
                 var step = receipt.Steps[index];
                 if (step.State == HiperwallSendState.Rejected) return; // A cancel during the read preflight wins over its late result.
@@ -257,21 +259,21 @@ public sealed partial class ControlService
                 if (request.Action == HiperwallEditAction.RestoreSlot && result.State != HiperwallSendState.Acknowledged)
                     foreach (var pending in receipt.Steps.Where(s => s.State == HiperwallSendState.Pending))
                     { pending.State = HiperwallSendState.Rejected; pending.Message = "앞 단계 결과를 확인할 수 없어 불러오기 후속 전송을 중단했습니다."; }
-                Audit(next, receipt.Requester.UserId, "HiperwallEditResult", $"request={id}; {HiperwallEditing.ActionName(step.Command.Action)}; result={result.State}");
-                Persist(next); _hiperwallSequence++;
+                _host.Audit(next, receipt.Requester.UserId, "HiperwallEditResult", $"request={id}; {HiperwallEditing.ActionName(step.Command.Action)}; result={result.State}");
+                _host.Persist(next); _hiperwallSequence++;
                 _hiperwallView = EmptyHiperwall(message: "편집 전송이 처리되었습니다. 목록을 새로 고쳐 실제 상태를 확인하세요.");
             }
         }
         finally { _hiperwallWrites.Release(); Interlocked.Exchange(ref _hiperwallDispatching, 0); }
     }
-    private bool ValidateHiperwallDispatch(HiperwallEditReceipt receipt) => !_stopping && !_storageFailed &&
-        _hiperwall is IHiperwallWriter && _state.Accounts.Any(a => a.Id == receipt.Requester.UserId && HiperwallPermission(a)) &&
-        _state.Hiperwall?.Version == receipt.Request.ConfigurationVersion;
+    private bool ValidateHiperwallDispatch(HiperwallEditReceipt receipt) => !_host.Stopping && !_host.StorageFailed &&
+        _hiperwall is IHiperwallWriter && _host.State.Accounts.Any(a => a.Id == receipt.Requester.UserId && HiperwallPermission(a)) &&
+        _host.State.Hiperwall?.Version == receipt.Request.ConfigurationVersion;
     private void RejectHiperwallPending(Guid id)
     {
-        var next = JsonDefaults.Copy(_state);
+        var next = JsonDefaults.Copy(_host.State);
         foreach (var step in next.HiperwallEdits.Single(r => r.Request.RequestId == id).Steps.Where(s => s.State == HiperwallSendState.Pending))
         { step.State = HiperwallSendState.Rejected; step.Message = "계정 권한·연결 설정·호스트 상태가 변경되어 전송하지 않았습니다."; }
-        Persist(next);
+        _host.Persist(next);
     }
 }

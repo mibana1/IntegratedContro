@@ -1,17 +1,15 @@
+using System.Text.Json;
 using IntegratedContro.Core;
+using static IntegratedContro.Application.Validation;
+using static IntegratedContro.Application.ControlAuthorization;
+using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 
-public sealed partial class ControlService
+internal sealed partial class ScenarioService
 {
-    private void RecoverStartup()
+    internal void RecoverJobs(HostState next)
     {
-        var next = JsonDefaults.Copy(_state);
-        if (next.Lease.Mode != LeaseMode.Free) Fence(next, "호스트 재시작: 이전 인증 세션 무효");
-        foreach (var edit in next.HiperwallEdits.Where(r => r.Active))
-            foreach (var step in edit.Steps.Where(s => s.State is HiperwallSendState.Pending or HiperwallSendState.Sending))
-            { step.State = step.State == HiperwallSendState.Sending ? HiperwallSendState.Unknown : HiperwallSendState.Rejected;
-              step.Message = "호스트 재시작: 자동 재전송하지 않습니다. Controller 목록과 대조하세요."; }
         foreach (var job in next.Jobs.Where(j => j.Active))
         {
             foreach (var (run, index) in job.Steps.Select((x, i) => (x, i)))
@@ -21,7 +19,7 @@ public sealed partial class ControlService
                     var display = next.HiperwallDisplays.SingleOrDefault(d => d.ScenarioJobId == job.Id && d.ScenarioStepIndex == index);
                     run.Status = display?.Targets.Any(t => t.OpenState is HiperwallSendState.Sending or HiperwallSendState.Unknown) == true
                         ? StepStatus.Unknown : StepStatus.Skipped;
-                    run.Result = "호스트 재시작: 대기·시나리오 자동 재개 금지 / 표시 기록 유지"; run.FinishedAt = Now;
+                    run.Result = "호스트 재시작: 대기·시나리오 자동 재개 금지 / 표시 기록 유지"; run.FinishedAt = _host.Now;
                     continue;
                 }
                 if (run.Status != StepStatus.Dispatching) continue;
@@ -37,16 +35,13 @@ public sealed partial class ControlService
             if (job.Kind == JobKind.Scenario || (job.IsLightBatch && job.Steps.Any(x => x.SentAt is not null)) ||
                 job.Steps.Any(x => x.Status == StepStatus.Unknown) || job.Status == JobStatus.StopRequested)
             {
-                StopScenarioPendingDisplays(next, job, "호스트 재시작: 미전송 표시 자동 재개 금지");
+                _jobs.StopScenarioPendingDisplays(next, job, "호스트 재시작: 미전송 표시 자동 재개 금지");
                 foreach (var step in job.Steps.Where(x => x.Status == StepStatus.Pending))
                 { step.Status = StepStatus.Skipped; step.Result = "호스트 재시작: 자동 재개 금지"; }
                 job.Status = job.Steps.Any(x => x.Status == StepStatus.Unknown) ? JobStatus.NeedsReview : JobStatus.Interrupted;
                 job.Result = "재시작 복구: 기록 보존, 중단 작업 자동 재실행 없음";
             }
         }
-        RecoverHiperwallDisplays(next);
-        Audit(next, null, "HostStarted", "전송 중 명령 대조 및 중단 시나리오 자동 재개 차단");
-        Persist(next);
     }
     public async Task<bool> DispatchNextAsync(CancellationToken hostStopping = default)
     {
@@ -54,12 +49,12 @@ public sealed partial class ControlService
         try
         {
             Guid jobId; int stepIndex; StepSnapshot snapshot;
-            lock (_gate)
+            lock (_host.Gate)
             {
-                if (_stopping || _storageFailed || hostStopping.IsCancellationRequested) return false;
-                CheckConnectionUnsafe();
-                var next = JsonDefaults.Copy(_state);
-                var job = next.Jobs.Where(j => j.Active && j.ReadyAt <= Now &&
+                if (_host.Stopping || _host.StorageFailed || hostStopping.IsCancellationRequested) return false;
+                _host.CheckConnectionUnsafe();
+                var next = JsonDefaults.Copy(_host.State);
+                var job = next.Jobs.Where(j => j.Active && j.ReadyAt <= _host.Now &&
                         j.Steps.Any(s => s.Status is StepStatus.Pending or StepStatus.Waiting))
                     .OrderByDescending(j => j.Kind == JobKind.Manual && j.Snapshot.Steps[0].Operation == DeviceOperation.Stop)
                     .ThenBy(j => j.ReadyAt).ThenBy(j => j.Snapshot.AcceptedAt).FirstOrDefault();
@@ -69,34 +64,34 @@ public sealed partial class ControlService
                 var invalid = Revalidate(next, job, snapshot);
                 if (invalid is not null && job.CancelRequestedAt is null)
                 {
-                    StopScenarioPendingDisplays(next, job, invalid);
+                    _jobs.StopScenarioPendingDisplays(next, job, invalid);
                     // An in-flight display may already have been transmitted. Preserve it as unknown.
                     var uncertain = next.HiperwallDisplays.Any(d => d.ScenarioJobId == jobId &&
                         d.Targets.Any(t => t.OpenState is HiperwallSendState.Sending or HiperwallSendState.Unknown));
-                    FinishStep(next, job, stepIndex, new(uncertain ? StepStatus.Unknown : StepStatus.Skipped, "전송 차단: " + invalid));
-                    Persist(next); return true;
+                    _jobs.FinishStep(next, job, stepIndex, new(uncertain ? StepStatus.Unknown : StepStatus.Skipped, "전송 차단: " + invalid));
+                    _host.Persist(next); return true;
                 }
                 var run = job.Steps[stepIndex];
                 if (run.Status == StepStatus.Pending)
                 {
-                    run.StartedAt = Now;
+                    run.StartedAt = _host.Now;
                     run.Status = snapshot.Kind == ScenarioStepKind.DeviceCommand ? StepStatus.Dispatching : StepStatus.Waiting;
                     if (snapshot.Kind == ScenarioStepKind.DeviceCommand)
                     {
-                        run.SentAt = Now; run.Result = "전송 의도 영속화 / 결과 대기";
+                        run.SentAt = _host.Now; run.Result = "전송 의도 영속화 / 결과 대기";
                         next.DeviceStates[snapshot.Target!.Id].Desired[snapshot.Operation] = snapshot.Value;
                     }
-                    else { run.DeadlineAt = Now.AddMilliseconds(snapshot.TimeoutMs); run.Result = "단계 시작 / 확인 대기"; }
+                    else { run.DeadlineAt = _host.Now.AddMilliseconds(snapshot.TimeoutMs); run.Result = "단계 시작 / 확인 대기"; }
                     job.Status = JobStatus.Running;
-                    Audit(next, null, "DispatchIntent", $"job={job.Id}; step={stepIndex}; kind={snapshot.Kind}");
-                    Persist(next);
+                    _host.Audit(next, null, "DispatchIntent", $"job={job.Id}; step={stepIndex}; kind={snapshot.Kind}");
+                    _host.Persist(next);
                 }
             }
             DriverResult? result;
             if (snapshot.Kind == ScenarioStepKind.WaitUntil)
                 result = await PollScenarioConditionAsync(jobId, stepIndex, snapshot, hostStopping);
             else if (snapshot.Kind == ScenarioStepKind.DisplayLayout)
-                result = await PollScenarioDisplayAsync(jobId, stepIndex, snapshot, hostStopping);
+                result = await _displays.PollScenarioDisplayAsync(jobId, stepIndex, snapshot, hostStopping);
             else
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(hostStopping); timeout.CancelAfter(snapshot.TimeoutMs);
@@ -105,7 +100,7 @@ public sealed partial class ControlService
                     if (snapshot.ConditionOperation is { } condition)
                     {
                         var reading = await _devices.ReadAsync(snapshot.Target!, timeout.Token);
-                        if (!ValidReading(snapshot.Target!, reading)) result = new(StepStatus.Failed, "조건 상태 조회 실패 / 관측 증거 없음");
+                        if (!_devices.ValidReading(snapshot.Target!, reading)) result = new(StepStatus.Failed, "조건 상태 조회 실패 / 관측 증거 없음");
                         else if (!reading.Values.TryGetValue(condition, out var value) || value != snapshot.ConditionValue)
                             result = new(StepStatus.Failed, "최신 상태 확인 조건 불충족");
                         else result = await ExecuteIfStillAllowedAsync(jobId, stepIndex, snapshot, timeout.Token);
@@ -117,14 +112,14 @@ public sealed partial class ControlService
             }
             if (result is null) return true;
             result = _devices.NormalizeResult(snapshot, result);
-            lock (_gate)
+            lock (_host.Gate)
             {
-                if (_storageFailed) return false;
-                var next = JsonDefaults.Copy(_state); var job = FindJob(next, jobId);
+                if (_host.StorageFailed) return false;
+                var next = JsonDefaults.Copy(_host.State); var job = FindJob(next, jobId);
                 // A cancelled read-only wait cannot be resurrected by a late reading.
                 if (job.Steps[stepIndex].Status is not (StepStatus.Dispatching or StepStatus.Waiting)) return true;
                 _devices.RecordResult(next, snapshot, result);
-                FinishStep(next, job, stepIndex, result); Persist(next);
+                _jobs.FinishStep(next, job, stepIndex, result); _host.Persist(next);
             }
             return true;
         }
@@ -132,11 +127,11 @@ public sealed partial class ControlService
     }
     private Task<DriverResult> ExecuteIfStillAllowedAsync(Guid jobId, int index, StepSnapshot step, CancellationToken ct)
     {
-        lock (_gate)
+        lock (_host.Gate)
         {
-            var job = FindJob(_state, jobId); var invalid = Revalidate(_state, job, step);
-            if (_stopping || job.CancelRequestedAt is not null || invalid is not null)
-                return Task.FromResult(new DriverResult(StepStatus.Skipped, invalid ?? "전송 진입 전 취소/호스트 종료 확인"));
+            var job = FindJob(_host.State, jobId); var invalid = Revalidate(_host.State, job, step);
+            if (_host.Stopping || _host.StorageFailed || job.CancelRequestedAt is not null || invalid is not null)
+                return Task.FromResult(new DriverResult(StepStatus.Skipped, invalid ?? "전송 진입 전 취소/저장 실패/호스트 종료 확인"));
             return _devices.ExecuteAsync(step, ct);
         }
     }

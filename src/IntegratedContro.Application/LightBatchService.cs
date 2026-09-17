@@ -1,15 +1,17 @@
 using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
+using static IntegratedContro.Application.ControlAuthorization;
+using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 
-public sealed partial class ControlService
+internal sealed partial class ScenarioService
 {
     // Validate the entire frozen set before a single transaction accepts the sequential work.
-    public Job SubmitLightBatch(string token, LightBatchRequest request) => Change(s =>
+    public Job SubmitLightBatch(string token, LightBatchRequest request) => _host.Change(s =>
     {
-        var session = Authenticate(token);
+        var session = _host.Authenticate(token);
         Require(request.RequestId != Guid.Empty, "request_id_required", "요청 ID가 필요합니다.", 400);
         var fingerprint = Digest("light-batch:" + JsonSerializer.Serialize(request, JsonDefaults.Options));
         var existing = s.Jobs.SingleOrDefault(j => j.Snapshot.RequestId == request.RequestId);
@@ -20,10 +22,10 @@ public sealed partial class ControlService
                 "request_id_conflict", "같은 요청 ID를 다른 내용이나 세션에서 사용할 수 없습니다.");
             return existing;
         }
-        Owner(s, token, request.Generation);
+        _host.Owner(s, token, request.Generation);
         Require(request.Value is 0 or 1, "invalid_power", "전원 값은 ON 또는 OFF여야 합니다.", 400);
         Require(request.LayoutVersion == s.LightLayout.Version, "layout_changed", "조명 그룹이나 순서가 변경되었습니다. 새로 고침 후 다시 누르세요.");
-        var layout = CurrentLightLayout(s);
+        var layout = _devices.CurrentLightLayout(s);
         var group = request.GroupId is { } id && id != Guid.Empty ? layout.Groups.SingleOrDefault(g => g.Id == id) : null;
         Require(request.GroupId is null || request.GroupId == Guid.Empty || group is not null,
             "light_group_missing", "조명 그룹이 변경되었습니다. 새로 고침 후 다시 누르세요.");
@@ -37,7 +39,7 @@ public sealed partial class ControlService
             "light_list_changed", "대상 조명 목록이 변경되었거나 누락되었습니다. 새로 고침 후 다시 누르세요.");
         var snapshots = request.Targets.Select(t =>
         {
-            var step = Resolve(s, User(s, session), new(t.RoleId, DeviceOperation.Power, request.Value));
+            var step = Resolve(s, _host.User(s, session), new(t.RoleId, DeviceOperation.Power, request.Value));
             var expected = t.Expected;
             Require(step.Target!.Id == expected.DeviceId && step.Target!.PcId == expected.PcId &&
                 step.Target!.Version == expected.DeviceVersion && step.Role!.Version == expected.RoleVersion,
@@ -53,10 +55,10 @@ public sealed partial class ControlService
         var name = $"{(request.GroupId is null ? "전체 조명" : group?.Name ?? "미분류")} · {(request.Value == 1 ? "ON" : "OFF")} ({snapshots.Length}개)";
         var snapshot = new ExecutionSnapshot(s.SiteId, ExecutionMode(snapshots), request.RequestId, session.Info.UserId,
             session.Info.UserName, session.Info.Id, session.Info.PcId, session.Info.PcName, request.Generation,
-            Now, Now.AddMinutes(5), null, null, name, snapshots);
-        var job = new Job { RequestFingerprint = fingerprint, Snapshot = snapshot, Kind = JobKind.LightBatch, Steps = snapshots.Select(_ => new StepRun()).ToList(), ReadyAt = Now };
+            _host.Now, _host.Now.AddMinutes(5), null, null, name, snapshots);
+        var job = new Job { RequestFingerprint = fingerprint, Snapshot = snapshot, Kind = JobKind.LightBatch, Steps = snapshots.Select(_ => new StepRun()).ToList(), ReadyAt = _host.Now };
         s.Jobs.Add(job);
-        Audit(s, session.Info.UserId, "LightBatchAccepted", $"job={job.Id}; request={request.RequestId}");
+        _host.Audit(s, session.Info.UserId, "LightBatchAccepted", $"job={job.Id}; request={request.RequestId}");
         return job;
     });
 }

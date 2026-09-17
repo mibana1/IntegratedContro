@@ -72,7 +72,7 @@ public static partial class Program
                     foreach (var digit in "123456789")
                     {
                         Require(input.IsKeyboardFocused && input.IsEnabled,
-                            $"{input.Name}: input lost focus or became disabled during periodic refresh");
+                            $"{input.Name}: input lost focus or became disabled during periodic refresh; windowActive={window.IsActive}, enabled={input.IsEnabled}, focused={input.IsKeyboardFocused}, canConfigure={camera.CanConfigure}, canControl={vm.CanControl}, disabledEvents={disabled}, focusLostEvents={focusLost}, catalogUpdates={polls - startPolls}");
                         TextCompositionManager.StartComposition(new TextComposition(InputManager.Current, input, digit.ToString()));
                         await Task.Delay(550);
                     }

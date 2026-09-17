@@ -1,27 +1,60 @@
+using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
+using static IntegratedContro.Application.ControlAuthorization;
+using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 
-public sealed partial class ControlService
+internal sealed partial class ScenarioService
 {
-    private static bool CanControlJob(Account user, Job job) => job.Snapshot.Steps.All(s =>
-        s.Kind == ScenarioStepKind.DisplayLayout ? HiperwallPermission(user) : s.Target is { } target && CanControl(user, target.Id));
-    private static void RequireHiperwallScenarioAvailable(HostState state)
+    private readonly HostAuthority _host;
+    private readonly IDeviceScenarioOperations _devices;
+    private readonly IScenarioDisplayOperations _displays;
+    private readonly IScenarioJobLifecycle _jobs;
+    private int _dispatching;
+    internal ScenarioService(HostAuthority host, IDeviceScenarioOperations devices,
+        IScenarioDisplayOperations displays, IScenarioJobLifecycle jobs)
+    { _host = host; _devices = devices; _displays = displays; _jobs = jobs; }
+    private StepSnapshot Resolve(HostState state, Account user, ScenarioStep step)
     {
-        Require(!state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(s => s.Kind == ScenarioStepKind.DisplayLayout)),
-            "hiperwall_reserved", "시나리오가 Hiperwall을 예약하고 있습니다. 작업·교대에서 시나리오 중단 후 수동 전환을 선택하세요.");
-        Require(!state.HiperwallDisplays.Any(d => d.ScenarioJobId is not null && d.Targets.Any(t => t.Outstanding && t.OpenState is HiperwallSendState.Sending or HiperwallSendState.Unknown)),
-            "hiperwall_uncertain", "이전 시나리오의 불확실한 표시를 먼저 목록 대조·정리하세요.");
+        ValidateStep(step);
+        return step.Kind == ScenarioStepKind.DisplayLayout
+            ? _displays.ResolveDisplay(state, user, step) : _devices.Resolve(state, user, step);
     }
-    private bool ScenarioAllowsDisplay(HiperwallDisplayJob display)
+    private string? Revalidate(HostState state, Job job, StepSnapshot step) =>
+        RevalidateJob(state, job, _host.Now) ?? (step.Kind == ScenarioStepKind.DisplayLayout
+            ? _displays.RevalidateDisplay(state, job, step) : _devices.RevalidateTarget(state, job, step));
+    public ScenarioDefinition SaveScenario(string token, ScenarioRequest request) => _host.Change(s =>
     {
-        if (display.ScenarioJobId is not { } id) return true;
-        var parent = _state.Jobs.SingleOrDefault(j => j.Id == id);
-        return parent is { Active: true, CancelRequestedAt: null } && display.ScenarioStepIndex is { } index &&
-            index >= 0 && index < parent.Steps.Count && parent.Steps[index].Status == StepStatus.Waiting &&
-            Now < parent.Steps[index].DeadlineAt &&
-            Revalidate(_state, parent, parent.Snapshot.Steps[index]) is null &&
-            !display.Targets.Any(t => t.OpenState is HiperwallSendState.Rejected or HiperwallSendState.Unknown);
-    }
+        var session = _host.Owner(s, token, request.Generation); _host.Admin(s, token);
+        Text(request.Name, "시나리오 이름");
+        Require(request.Id != Guid.Empty && request.Steps is { Length: >= 1 and <= 100 },
+            "invalid_scenario", "시나리오는 1~100단계로 구성하세요.", 400);
+        var steps = request.Steps.ToArray();
+        foreach (var step in steps) Resolve(s, _host.User(s, session), step);
+        var old = s.Scenarios.SingleOrDefault(x => x.Id == request.Id);
+        Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "시나리오 설정을 다시 조회하세요.");
+        var definition = new ScenarioDefinition(request.Id, request.Name.Trim(),
+            checked(Math.Max(old?.Version ?? 0, s.DeletedScenarioVersions.GetValueOrDefault(request.Id)) + 1), steps);
+        s.Scenarios.RemoveAll(x => x.Id == definition.Id); s.Scenarios.Add(definition);
+        _host.Audit(s, session.Info.UserId, "ScenarioSaved", $"scenario={definition.Id}; v={definition.Version}");
+        return definition;
+    });
+    public bool DeleteScenario(string token, DeleteScenarioRequest request) => _host.Change(s =>
+    {
+        var session = _host.Owner(s, token, request.Generation); _host.Admin(s, token);
+        Require(request.Id != Guid.Empty && request.ExpectedVersion > 0,
+            "invalid_scenario", "삭제할 시나리오를 확인하세요.", 400);
+        var definition = s.Scenarios.SingleOrDefault(x => x.Id == request.Id);
+        Require(definition is not null && definition.Version == request.ExpectedVersion,
+            "version_conflict", "시나리오가 변경되었거나 삭제되었습니다. 다시 조회하세요.");
+        Require(!s.Jobs.Any(j => j.Active && j.Snapshot.ScenarioId == request.Id),
+            "scenario_in_use", "이 시나리오의 작업이 진행 중입니다. 작업·교대에서 완료를 확인하거나 취소한 뒤 삭제하세요.");
+        // Capture the definition name in the audit before removing it. Frozen job history remains intact.
+        _host.Audit(s, session.Info.UserId, "ScenarioDeleted", $"scenario={definition!.Id}; v={definition.Version}");
+        s.DeletedScenarioVersions[definition.Id] = definition.Version;
+        s.Scenarios.Remove(definition);
+        return true;
+    });
 }
