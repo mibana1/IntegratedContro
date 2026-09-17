@@ -216,4 +216,14 @@ public sealed partial class ControlService
             query.Dispose();
         }
     }
+    void ICameraContentCatalog.ValidateMapping(int configurationVersion, string? selector, string? value)
+    {
+        if (string.IsNullOrEmpty(selector) && string.IsNullOrEmpty(value)) return;
+        Require(_state.Hiperwall?.Version == configurationVersion &&
+            _hiperwallView?.ConfigurationVersion == configurationVersion &&
+            _hiperwallView.Contents.State == HiperwallListState.Available,
+            "mapping_inventory_required", "현재 Hiperwall Contents를 조회하고 매핑 대상을 선택하세요.");
+        Require(PreviewMatches(_hiperwallView!.Contents, selector ?? "", value ?? ""),
+            "mapping_not_unique", "현재 목록에서 유일한 UUID 또는 전체 이름만 매핑할 수 있습니다.", 400);
+    }
 }

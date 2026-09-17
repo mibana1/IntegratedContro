@@ -5,6 +5,7 @@ namespace IntegratedContro.Application;
 
 public sealed partial class ControlService
 {
+    private readonly CancellationTokenSource _previewStopping = new();
     private readonly SemaphoreSlim _previewReads = new(2, 2);
     private static bool PreviewMatches(HiperwallList list, string selector, string value) =>
         value is { Length: > 0 and <= 4096 } && !value.Any(char.IsControl) && selector is "name" or "uuid" &&
@@ -23,7 +24,7 @@ public sealed partial class ControlService
                 "preview_not_found", "현재 목록의 유일한 콘텐츠만 프리뷰를 조회할 수 있습니다.", 404);
             config = _state.Hiperwall!;
         }
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, _mediaStopping.Token);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, _previewStopping.Token);
         timeout.CancelAfter(Math.Min(config.TimeoutMs, 8000));
         Require(await _previewReads.WaitAsync(0, timeout.Token), "preview_busy", "프리뷰 조회 중입니다.", 429);
         try

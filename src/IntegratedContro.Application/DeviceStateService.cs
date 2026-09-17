@@ -1,20 +1,17 @@
+using System.Text.Json;
 using IntegratedContro.Core;
+using static IntegratedContro.Application.Validation;
+using static IntegratedContro.Application.ControlAuthorization;
+using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 
-public sealed partial class ControlService
+internal sealed partial class DeviceExecutionService
 {
-    private static string ExecutionMode(StepSnapshot[] steps)
-    {
-        var modes = steps.Select(s => s.Kind == ScenarioStepKind.DisplayLayout || s.ModelDefinition?.IsSimulation == false)
-            .Distinct().ToArray();
-        return modes.Length > 1 || steps.Any(s => s.Kind == ScenarioStepKind.DisplayLayout) ? "Mixed" : modes[0] ? "Physical" : "Virtual";
-    }
-
     private bool HasStateEvidence(DeviceConfig target, DeviceEvidence evidence) =>
         _drivers.Model(target.ModelId).IsSimulation ? evidence == DeviceEvidence.Simulation : evidence == DeviceEvidence.Observed;
 
-    private bool ValidReading(DeviceConfig target, DriverReading reading) => reading.Available &&
+    public bool ValidReading(DeviceConfig target, DriverReading reading) => reading.Available &&
         HasStateEvidence(target, reading.Evidence) && ValidValues(target, reading.Values);
 
     private bool ValidValues(DeviceConfig target, IReadOnlyDictionary<DeviceOperation, int> values)
@@ -30,7 +27,7 @@ public sealed partial class ControlService
         if (!HasStateEvidence(target, evidence) || !ValidValues(target, values)) return;
         var destination = evidence == DeviceEvidence.Simulation ? state.Simulated : state.Observed;
         if (replace) destination.Clear();
-        foreach (var pair in values) destination[pair.Key] = new(pair.Value, Now,
+        foreach (var pair in values) destination[pair.Key] = new(pair.Value, _host.Now,
             evidence == DeviceEvidence.Simulation ? "가상 상태" : "장비 관측");
     }
 

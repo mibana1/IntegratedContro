@@ -1,9 +1,12 @@
+using System.Text.Json;
 using IntegratedContro.Core;
 using static IntegratedContro.Application.Validation;
+using static IntegratedContro.Application.ControlAuthorization;
+using static IntegratedContro.Application.AcceptedJobRules;
 
 namespace IntegratedContro.Application;
 
-public sealed partial class ControlService
+internal sealed partial class DeviceExecutionService
 {
     private Guid[] OrderedLightIds(HostState s)
     {
@@ -11,15 +14,15 @@ public sealed partial class ControlService
             .Select(d => d.Id).ToArray();
         return s.LightLayout.DeviceIds.Where(ids.Contains).Concat(ids).Distinct().ToArray();
     }
-    private LightLayout CurrentLightLayout(HostState s)
+    public LightLayout CurrentLightLayout(HostState s)
     {
         var ids = OrderedLightIds(s);
         return new(s.LightLayout.Version, ids) { Groups = s.LightLayout.Groups.Select(g =>
             g with { DeviceIds = ids.Where(g.DeviceIds.Contains).ToArray() }).ToArray() };
     }
-    public LightLayout SaveLightOrder(string token, LightOrderRequest request) => Change(s =>
+    public LightLayout SaveLightOrder(string token, LightOrderRequest request) => _host.Change(s =>
     {
-        var session = Owner(s, token, request.Generation); Admin(s, token);
+        var session = _host.Owner(s, token, request.Generation); _host.Admin(s, token);
         Require(request.ExpectedVersion == s.LightLayout.Version, "layout_changed", "다른 앱에서 순서를 변경했습니다. 편집을 취소하고 다시 시작하세요.");
         var ids = OrderedLightIds(s);
         Require(request.DeviceIds is not null && request.DeviceIds.Length == ids.Length &&
@@ -38,10 +41,10 @@ public sealed partial class ControlService
             "invalid_group_members", "조명은 한 그룹에만 속할 수 있으며 등록된 조명만 배정할 수 있습니다.", 400);
         s.LightLayout = new(s.LightLayout.Version + 1, request.DeviceIds!.ToArray())
         { Groups = groups.Select(g => new LightGroup(g.Id, g.Name.Trim(), request.DeviceIds!.Where(g.DeviceIds.Contains).ToArray())).ToArray() };
-        Audit(s, session.Info.UserId, "LightOrderSaved", $"version={s.LightLayout.Version}; count={ids.Length}");
+        _host.Audit(s, session.Info.UserId, "LightOrderSaved", $"version={s.LightLayout.Version}; count={ids.Length}");
         return s.LightLayout;
     });
-    private void ValidateCardPower(HostState s, SubmitRequest request, StepSnapshot[] snapshots)
+    public void ValidateCardPower(HostState s, SubmitRequest request, StepSnapshot[] snapshots)
     {
         if (request.CardPower is not { } expected) return;
         Require(request.ScenarioId is null && request.Operation == DeviceOperation.Power && request.DelayBeforeMs == 0,

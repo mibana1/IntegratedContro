@@ -14,12 +14,6 @@ public sealed partial class ControlService
         Require(!state.HiperwallDisplays.Any(d => d.ScenarioJobId is not null && d.Targets.Any(t => t.Outstanding && t.OpenState is HiperwallSendState.Sending or HiperwallSendState.Unknown)),
             "hiperwall_uncertain", "이전 시나리오의 불확실한 표시를 먼저 목록 대조·정리하세요.");
     }
-    private void StopScenarioPendingDisplays(HostState state, Job job, string reason)
-    {
-        foreach (var display in state.HiperwallDisplays.Where(d => d.ScenarioJobId == job.Id))
-            foreach (var t in display.Targets.Where(t => t.OpenState == HiperwallSendState.Pending))
-            { t.OpenState = HiperwallSendState.Rejected; t.CleanupState = DisplayCleanupState.Closed; t.Message = reason; }
-    }
     private bool ScenarioAllowsDisplay(HiperwallDisplayJob display)
     {
         if (display.ScenarioJobId is not { } id) return true;

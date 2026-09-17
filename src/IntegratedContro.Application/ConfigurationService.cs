@@ -5,98 +5,8 @@ namespace IntegratedContro.Application;
 
 public sealed partial class ControlService
 {
-    public AccountView CreateAccount(string token, CreateAccountRequest request) => Change(s =>
-    {
-        var session = Owner(s, token, request.Generation); Admin(s, token);
-        AccountName(request.Name); Password(request.Password);
-        Require(Enum.IsDefined(request.Role), "invalid_role", "계정 역할을 확인하세요.", 400);
-        Require(!s.Accounts.Any(a => a.Name.Equals(request.Name.Trim(), StringComparison.OrdinalIgnoreCase)),
-            "duplicate_account", "이미 등록된 계정입니다.");
-        var ids = request.DeviceIds ?? [];
-        Require(ids.All(id => s.Devices.Any(d => d.Id == id)), "invalid_scope", "권한 대상 장비를 확인하세요.", 400);
-        var account = new Account { Name = request.Name.Trim(), PasswordHash = _passwords.Hash(request.Password),
-            Role = request.Role, AllDevices = request.AllDevices, DeviceIds = ids.Distinct().ToList() };
-        s.Accounts.Add(account);
-        Audit(s, session.Info.UserId, "AccountCreated", $"account={account.Id}; role={account.Role}");
-        return new AccountView(account.Id, account.Name, account.Role, account.Enabled, account.AllDevices, account.DeviceIds.ToArray());
-    });
-    public bool UpdateAccount(string token, UpdateAccountRequest request) => Change(s =>
-    {
-        var session = Owner(s, token, request.Generation); Admin(s, token);
-        var account = s.Accounts.SingleOrDefault(a => a.Id == request.AccountId);
-        Require(account is not null, "account_missing", "계정을 찾을 수 없습니다.", 404);
-        Require(request.Enabled || account!.Role != AccountRole.Administrator ||
-            s.Accounts.Any(a => a.Id != account.Id && a.Enabled && a.Role == AccountRole.Administrator),
-            "last_admin", "마지막 관리자는 비활성화할 수 없습니다.");
-        Require(request.DeviceIds.All(id => s.Devices.Any(d => d.Id == id)), "invalid_scope", "권한 대상 장비를 확인하세요.", 400);
-        account!.Enabled = request.Enabled; account.AllDevices = request.AllDevices;
-        account.DeviceIds = request.DeviceIds.Distinct().ToList();
-        if (!account.Enabled && s.Lease.UserId == account.Id && s.Lease.Mode == LeaseMode.Held)
-            Fence(s, "사용 계정 권한 회수");
-        Audit(s, session.Info.UserId, "AccountPermissionsChanged", $"account={account.Id}");
-        return true;
-    });
-    public DeviceConfig SaveDevice(string token, DeviceRequest request) => Change(s =>
-    {
-        var session = Owner(s, token, request.Generation); Admin(s, token);
-        Require(request.Id != Guid.Empty && request.PcId != Guid.Empty, "target_required", "PC ID와 장비 ID를 명시하세요.", 400);
-        Text(request.PcName, "대상 PC 이름"); Text(request.Name, "장비 이름"); Text(request.ConnectionId, "연결 ID");
-        var model = _drivers.Model(request.ModelId);
-        var old = s.Devices.SingleOrDefault(d => d.Id == request.Id);
-        Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "장비 설정을 다시 조회하세요.");
-        var device = new DeviceConfig(request.Id, request.PcId, request.PcName.Trim(), request.Name.Trim(),
-            request.ConnectionId.Trim(), request.ModelId, (old?.Version ?? 0) + 1, request.Enabled, request.Fault, request.LatencyMs)
-        {
-            DriverId = request.DriverId ?? model.DriverId,
-            Connection = JsonDefaults.Copy(request.Connection ?? old?.Connection ?? new DeviceConnection()),
-            DriverOptions = JsonDefaults.Copy(request.DriverOptions ?? old?.DriverOptions ?? new Dictionary<string, string>())
-        };
-        _drivers.Resolve(device);
-        var executionChanged = old is null || !old.HasSameExecutionSettings(device);
-        device = device with { ExecutionVersion = old is null ? device.Version :
-            executionChanged ? old.ExecutionVersion + 1 : old.ExecutionVersion };
-        s.Devices.RemoveAll(d => d.Id == device.Id); s.Devices.Add(device);
-        if (executionChanged)
-            s.DeviceStates[device.Id] = new DeviceState { Connection = "장비 설정 저장 / 새 상태 조회 필요" };
-        // Replacing a model in-place must satisfy the same role requirements as assigning a new device.
-        if (device.Enabled)
-            foreach (var role in s.Roles.Where(r => r.DeviceId == device.Id))
-                foreach (var step in s.Scenarios.SelectMany(x => x.Steps).Where(x => x.RoleId == role.Id))
-                    Resolve(s, User(s, session), step);
-        Audit(s, session.Info.UserId, "DeviceSaved", $"pc={device.PcId}; device={device.Id}; v={device.Version}");
-        return device;
-    });
-    public RoleBinding SaveRole(string token, RoleRequest request) => Change(s =>
-    {
-        var session = Owner(s, token, request.Generation); Admin(s, token);
-        Text(request.Id, "역할 ID");
-        Require(s.Devices.Any(d => d.Id == request.DeviceId && d.Enabled), "target_missing", "활성 장비를 선택하세요.", 400);
-        var old = s.Roles.SingleOrDefault(r => r.Id == request.Id.Trim());
-        Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "역할 설정을 다시 조회하세요.");
-        var role = new RoleBinding(request.Id.Trim(), request.DeviceId,
-            checked(Math.Max(old?.Version ?? 0, s.DeletedRoleVersions.GetValueOrDefault(request.Id.Trim())) + 1));
-        // Existing scenarios declare the required capabilities of this role.
-        foreach (var step in s.Scenarios.SelectMany(x => x.Steps).Where(x => x.RoleId == role.Id))
-            Resolve(s, User(s, session), step with { RoleId = role.Id }, role);
-        s.Roles.RemoveAll(r => r.Id == role.Id); s.Roles.Add(role);
-        Audit(s, session.Info.UserId, "RoleAssigned", $"role={role.Id}; device={role.DeviceId}; v={role.Version}");
-        return role;
-    });
-    public bool UnassignRole(string token, UnassignRoleRequest request) => Change(s =>
-    {
-        var session = Owner(s, token, request.Generation); Admin(s, token);
-        Text(request.Id, "역할 ID");
-        Require(request.DeviceId != Guid.Empty && request.ExpectedVersion > 0, "invalid_role", "해제할 장비와 역할 배정을 확인하세요.", 400);
-        var role = s.Roles.SingleOrDefault(r => r.Id == request.Id.Trim());
-        Require(role is not null && role.DeviceId == request.DeviceId && role.Version == request.ExpectedVersion,
-            "version_conflict", "역할 배정이 변경되었거나 해제되었습니다. 다시 조회하세요.");
-        Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(step => step.Role?.Id == role!.Id)),
-            "role_in_use", "이 역할을 사용하는 작업이 진행 중입니다. 작업·교대에서 완료를 확인하거나 취소한 뒤 해제하세요.");
-        s.DeletedRoleVersions[role!.Id] = role.Version;
-        s.Roles.Remove(role);
-        Audit(s, session.Info.UserId, "RoleUnassigned", $"role={role.Id}; device={role.DeviceId}; v={role.Version}");
-        return true;
-    });
+    public AccountView CreateAccount(string token, CreateAccountRequest request) => _host.CreateAccount(token, request);
+    public bool UpdateAccount(string token, UpdateAccountRequest request) => _host.UpdateAccount(token, request);
     public ScenarioDefinition SaveScenario(string token, ScenarioRequest request) => Change(s =>
     {
         var session = Owner(s, token, request.Generation); Admin(s, token);
@@ -150,29 +60,6 @@ public sealed partial class ControlService
             return new(null, null, default, 0, "", step.DelayBeforeMs, step.TimeoutMs, step.OnFailure, null, null)
             { Kind = step.Kind, Display = new(JsonDefaults.Copy(layout), s.Hiperwall!.Endpoint, Guid.NewGuid()) };
         }
-        Require(step.LayoutId is null, "invalid_step", "장비 단계에 배치를 지정할 수 없습니다.", 400);
-        var role = overrideRole ?? s.Roles.SingleOrDefault(r => r.Id == step.RoleId);
-        Require(role is not null, "role_missing", $"역할을 찾을 수 없습니다: {step.RoleId}", 400);
-        var device = s.Devices.SingleOrDefault(d => d.Id == role!.DeviceId);
-        Require(device is not null && device.Enabled, "target_missing", "대상이 없거나 비활성화되었습니다.", 400);
-        Require(CanControl(user, device!.Id), "target_forbidden", "대상 장비 제어 권한이 없습니다.", 403);
-        _drivers.Resolve(device);
-        var model = _drivers.Model(device.ModelId);
-        var capability = model.Capabilities.SingleOrDefault(c => c.Operation == step.Operation);
-        Require(capability is not null, "unsupported", "이 모델은 해당 기능을 지원하지 않습니다.", 400);
-        Require(step.Value >= capability!.Minimum && step.Value <= capability.Maximum, "value_range",
-            $"허용 범위: {capability.Minimum}~{capability.Maximum} {capability.Unit}", 400);
-        Require((step.ConditionOperation is null) == (step.ConditionValue is null), "invalid_condition", "확인 조건의 동작과 값을 함께 지정하세요.", 400);
-        if (step.Kind == ScenarioStepKind.WaitUntil)
-            Require(capability.CanRead && step.Operation != DeviceOperation.Stop && step.ConditionOperation is null,
-                "invalid_condition", "조건 대기는 읽을 기능·기대값만 지정합니다. STOP은 상태 조건이 아닙니다.", 400);
-        if (step.ConditionOperation is { } condition)
-        {
-            var c = model.Capabilities.SingleOrDefault(x => x.Operation == condition);
-            Require(c is { CanRead: true } && step.ConditionValue >= c.Minimum && step.ConditionValue <= c.Maximum,
-                "invalid_condition", "조회 가능한 기능과 상태 확인 조건을 지정하세요.", 400);
-        }
-        return new(role!, device, step.Operation, step.Value, capability.Unit, step.DelayBeforeMs, step.TimeoutMs,
-            step.OnFailure, step.ConditionOperation, step.ConditionValue) { Kind = step.Kind, ModelDefinition = model };
+        return _devices.Resolve(s, user, step, overrideRole);
     }
 }

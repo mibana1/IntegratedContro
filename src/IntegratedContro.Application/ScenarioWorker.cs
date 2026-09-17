@@ -18,7 +18,7 @@ public sealed partial class ControlService
         DriverReading? reading = null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1, Math.Min(3000, (deadline - Now).TotalMilliseconds))));
-        try { reading = await _drivers.Resolve(step.Target!).ReadAsync(JsonDefaults.Copy(step.Target!), timeout.Token).ConfigureAwait(false); }
+        try { reading = await _devices.ReadAsync(step.Target!, timeout.Token).ConfigureAwait(false); }
         catch (Exception e) when (e is not OutOfMemoryException) { /* A failed read is not a failed physical command. */ }
         lock (_gate)
         {
@@ -31,9 +31,7 @@ public sealed partial class ControlService
             if (Now >= deadline) return new(StepStatus.Failed, "조건 대기 제한시간 초과 / 후속 단계 실패 정책 적용");
             if (reading is not null && ValidReading(step.Target!, reading))
             {
-                var device = next.DeviceStates[step.Target!.Id];
-                RecordValues(device, step.Target!, reading.Values, reading.Evidence);
-                device.Connection = ConnectedLabel(step.Target!); device.LastResult = "조건 대기 중 최신 상태 조회";
+                _devices.RecordConditionReading(next, step, reading);
                 if (reading.Values.TryGetValue(step.Operation, out var value) && value == step.Value)
                 { Persist(next); return new(StepStatus.ConditionMet, $"{(reading.Evidence == DeviceEvidence.Simulation ? "가상 상태" : "장비 관측")} 조건 충족: {step.Operation} = {value}"); }
             }
