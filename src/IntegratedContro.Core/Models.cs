@@ -217,6 +217,7 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public bool ScenarioDeletionSupported { get; init; }
     public bool RoleUnassignmentSupported { get; init; }
     public bool RoleManagementSupported { get; init; }
+    public bool UnassignedRoleCreationSupported { get; init; }
     public SavedHiperwallLayout[] SavedHiperwallLayouts { get; init; } = [];
     public bool LightGroupsSupported { get; init; }
     public bool LightBatchSupported { get; init; }

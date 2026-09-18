@@ -130,6 +130,7 @@ try
     app.MapPost("/api/devices", (HttpContext c, DeviceRequest r) => service.SaveDevice(Token(c), r));
     app.MapPost("/api/layout/lights", (HttpContext c, LightOrderRequest r) => service.SaveLightOrder(Token(c), r));
     app.MapPost("/api/roles", (HttpContext c, RoleRequest r) => service.SaveRole(Token(c), r));
+    app.MapPost("/api/roles/create", (HttpContext c, CreateRoleRequest r) => service.CreateRole(Token(c), r));
     app.MapPost("/api/roles/rename", (HttpContext c, RenameRoleRequest r) => service.RenameRole(Token(c), r));
     app.MapPost("/api/roles/delete", (HttpContext c, DeleteRoleRequest r) => service.DeleteRole(Token(c), r));
     app.MapPost("/api/roles/unassign", (HttpContext c, UnassignRoleRequest r) => service.UnassignRole(Token(c), r));

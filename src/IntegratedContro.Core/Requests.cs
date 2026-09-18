@@ -24,6 +24,7 @@ public sealed record RoleRequest(long Generation, string Id, Guid DeviceId, int 
     public string? Name { get; init; }
 }
 public sealed record UnassignRoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion);
+public sealed record CreateRoleRequest(long Generation, string Name);
 public sealed record RenameRoleRequest(long Generation, RoleBinding ExpectedRole, bool ExpectedAssigned, string Name);
 public sealed record DeleteRoleRequest(long Generation, RoleBinding ExpectedRole, bool ExpectedAssigned);
 public sealed record ScenarioRequest(long Generation, Guid Id, string Name, ScenarioStep[] Steps, int ExpectedVersion = 0);

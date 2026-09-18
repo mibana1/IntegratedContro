@@ -9,6 +9,17 @@ public sealed partial class DeviceSettingsViewModel
     private bool _roleEditAssigned;
     private bool _refreshingRoleChoices;
     private string _roleDisplayName = "";
+    private string _newUnassignedRoleName = "";
+    public string NewUnassignedRoleName
+    {
+        get => _newUnassignedRoleName;
+        set { if (Set(ref _newUnassignedRoleName, value)) RefreshCommands(); }
+    }
+    public AsyncCommand CreateUnassignedRoleCommand { get; private set; } = null!;
+    public string RoleCreationHint => State?.UnassignedRoleCreationSupported != true
+        ? "장비 없이 역할을 생성하려면 최신 ControlHost가 필요합니다."
+        : !CanConfigure ? "역할 생성에는 관리자 사용권이 필요합니다."
+        : "장비 선택 없이 생성할 수 있습니다. 만든 역할은 아래에서 장비에 배정하세요.";
     public RoleChoice? ManagedRole
     {
         get => _managedRole;
@@ -43,6 +54,20 @@ public sealed partial class DeviceSettingsViewModel
 
     private void InitializeRoleManagement()
     {
+        CreateUnassignedRoleCommand = Command(async () =>
+        {
+            var session = State!.Session.Id;
+            var name = NewUnassignedRoleName;
+            var saved = await _host.CreateRoleAsync(new(Generation, name));
+            await _host.RefreshAsync();
+            if (State?.Session.Id != session || Context.Closing) return;
+            if (NewUnassignedRoleName == name) NewUnassignedRoleName = "";
+            ManagedRole = RoleChoices.FirstOrDefault(r => r.Id == saved.Id);
+            SelectedRoleToInherit = ManagedRole;
+            Changed(nameof(SelectedRoleToInherit));
+            ReportStatus($"‘{saved.Name}’ 역할을 생성했습니다. 배정할 장비를 선택하세요.");
+        }, () => CanConfigure && State?.UnassignedRoleCreationSupported == true && !string.IsNullOrWhiteSpace(NewUnassignedRoleName));
+
         ReloadRoleCommand = LocalCommand(LoadRoleEditor, () => ManagedRole is not null);
         RenameRoleCommand = Command(async () =>
         {
@@ -81,6 +106,7 @@ public sealed partial class DeviceSettingsViewModel
     }
     private void RefreshRoleManagement()
     {
+        Changed(nameof(RoleCreationHint));
         if (_managedRole is { } selected)
         {
             _managedRole = RoleChoices.FirstOrDefault(r => r.Id == selected.Id);

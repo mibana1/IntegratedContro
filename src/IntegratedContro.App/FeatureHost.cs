@@ -11,6 +11,7 @@ public sealed partial class MainViewModel
         public Task<PcRegistration> RegisterSessionPcAsync(RegisterSessionPcRequest request) => owner.Client.Post<PcRegistration>("/api/pcs/register-session", request);
         public Task<DeviceConfig> SaveDeviceAsync(DeviceRequest request) => owner.Client.Post<DeviceConfig>("/api/devices", request);
         public Task<RoleBinding> SaveRoleAsync(RoleRequest request) => owner.Client.Post<RoleBinding>("/api/roles", request);
+        public Task<RoleBinding> CreateRoleAsync(CreateRoleRequest request) => owner.Client.Post<RoleBinding>("/api/roles/create", request);
         public Task<RoleBinding> RenameRoleAsync(RenameRoleRequest request) => owner.Client.Post<RoleBinding>("/api/roles/rename", request);
         public async Task DeleteRoleAsync(DeleteRoleRequest request) => await owner.Client.Post<bool>("/api/roles/delete", request);
         public async Task UnassignRoleAsync(UnassignRoleRequest request) => await owner.Client.Post<bool>("/api/roles/unassign", request);

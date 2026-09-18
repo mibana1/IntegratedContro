@@ -8,6 +8,7 @@ public interface IDeviceSettingsHost : IFeatureSession
     Task<DeviceConfig> SaveDeviceDiagnosticsAsync(DeviceDiagnosticsRequest request);
     Task<PcRegistration> RegisterSessionPcAsync(RegisterSessionPcRequest request);
     Task<RoleBinding> SaveRoleAsync(RoleRequest request);
+    Task<RoleBinding> CreateRoleAsync(CreateRoleRequest request);
     Task UnassignRoleAsync(UnassignRoleRequest request);
     Task<RoleBinding> RenameRoleAsync(RenameRoleRequest request);
     Task DeleteRoleAsync(DeleteRoleRequest request);

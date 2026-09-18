@@ -266,6 +266,13 @@ internal sealed class ManagementHostFake : IDeviceSettingsHost, IAccountManageme
     {
         Unassignments.Add(request); Publish(State with { Roles = State.Roles.Where(r => r.Id != request.Id).ToArray() }); return Task.CompletedTask;
     }
+    public Task<RoleBinding> CreateRoleAsync(CreateRoleRequest request)
+    {
+        if (Fail) throw new InvalidOperationException("fixture role creation failure");
+        var role = new RoleBinding(Guid.NewGuid().ToString("N"), Guid.Empty, 0) { Name = request.Name.Trim() };
+        Publish(State with { UnassignedRoles = [.. State.UnassignedRoles, role] });
+        return Task.FromResult(role);
+    }
     public Task<RoleBinding> RenameRoleAsync(RenameRoleRequest request)
     {
         var saved = request.ExpectedRole with { Name = request.Name.Trim(), IsDefault = false };

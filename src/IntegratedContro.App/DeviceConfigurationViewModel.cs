@@ -75,7 +75,12 @@ public sealed partial class DeviceSettingsViewModel
     public AsyncCommand LoadDiagnosticsCommand { get; private set; } = null!;
     public AsyncCommand CreateRoleCommand { get; private set; } = null!;
     public AsyncCommand InheritRoleCommand { get; private set; } = null!;
-    public string NewRoleDisplayName { get; set; } = "";
+    private string _newRoleDisplayName = "";
+    public string NewRoleDisplayName
+    {
+        get => _newRoleDisplayName;
+        set { if (Set(ref _newRoleDisplayName, value)) RefreshCommands(); }
+    }
     public RoleChoice? SelectedRoleToInherit { get; set; }
     public VirtualFault DiagnosticFault { get; set; }
     public string DiagnosticLatencyText { get; set; } = "50";
@@ -115,10 +120,17 @@ public sealed partial class DeviceSettingsViewModel
         }, () => CanConfigure && CanSetDiagnostics && _diagnosticDeviceId == SelectedDevice?.Id);
         CreateRoleCommand = Command(async () =>
         {
-            if (string.IsNullOrWhiteSpace(NewRoleDisplayName)) throw new ArgumentException("역할 이름을 입력하세요.");
-            var saved = await _host.SaveRoleAsync(new(Generation, "", SelectedDevice!.Id) { Name = NewRoleDisplayName });
-            await _host.RefreshAsync(); RoleAssigned?.Invoke(saved.Id); ReportStatus("역할을 만들었습니다.");
-        }, () => CanConfigure && SelectedDevice is not null);
+            var session = State!.Session.Id;
+            var name = NewRoleDisplayName;
+            var target = SelectedDevice!;
+            var saved = await _host.SaveRoleAsync(new(Generation, "", target.Id) { Name = name });
+            await _host.RefreshAsync();
+            if (State?.Session.Id != session || Context.Closing) return;
+            if (NewRoleDisplayName == name) NewRoleDisplayName = "";
+            ManagedRole = RoleChoices.FirstOrDefault(r => r.Id == saved.Id);
+            RoleAssigned?.Invoke(saved.Id);
+            ReportStatus($"‘{saved.Name}’ 역할을 생성하고 {target.Name}에 추가했습니다.");
+        }, () => CanConfigure && SelectedDevice is { Config.Enabled: true } && !string.IsNullOrWhiteSpace(NewRoleDisplayName));
         InheritRoleCommand = Command(async () =>
         {
             var role = SelectedRoleToInherit?.Binding ?? throw new ArgumentException("이어받을 역할을 선택하세요.");
@@ -137,7 +149,7 @@ public sealed partial class DeviceSettingsViewModel
     {
         _selectedConnection = null; _connectionExpectedVersion = 0; _connectionMode = ConnectionSaveMode.Create;
         ConnectionName = ""; DeviceLocation = ""; ExecutionPc = null; SelectedTargetPc = null; _allConnections = false;
-        NewRoleDisplayName = ""; SelectedRoleToInherit = null; ResetRoleEditor(); SharedFields.Clear(); DeviceFields.Clear();
+        NewRoleDisplayName = ""; NewUnassignedRoleName = ""; SelectedRoleToInherit = null; ResetRoleEditor(); SharedFields.Clear(); DeviceFields.Clear();
         NotifyConnection(); Changed(nameof(DeviceLocation));
     }
     private void StartNewConnection(bool copy)

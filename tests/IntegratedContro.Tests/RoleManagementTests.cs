@@ -6,6 +6,69 @@ namespace IntegratedContro.Tests;
 public sealed class RoleManagementTests
 {
     [Fact]
+    public void Created_unassigned_role_persists_and_can_be_assigned_renamed_and_deleted()
+    {
+        using var r = new Rig();
+        var role = r.Service.CreateRole(r.Admin.Token, new(r.Generation, "  예비 조명  "));
+        var state = r.Service.GetState(r.Admin.Token);
+        Assert.True(state.UnassignedRoleCreationSupported);
+        Assert.Equal("예비 조명", role.Name); Assert.NotEmpty(role.Id);
+        Assert.Equal(Guid.Empty, role.DeviceId); Assert.Empty(state.Roles); Assert.Empty(state.Devices);
+        Assert.Equal(role, Assert.Single(state.UnassignedRoles));
+        r.Service.Release(r.Admin.Token, r.Generation); r.Restart();
+        Assert.Equal(role, Assert.Single(r.Service.GetState(r.Admin.Token).UnassignedRoles));
+        r.Generation = r.Service.Acquire(r.Admin.Token).Generation;
+        var renamed = r.Service.RenameRole(r.Admin.Token, new(r.Generation, role, false, "운영 조명"));
+        var device = r.Device();
+        var assigned = r.Service.SaveRole(r.Admin.Token, new(r.Generation, renamed.Id, device.Id));
+        Assert.Equal(renamed.Name, assigned.Name); Assert.Equal(device.Id, assigned.DeviceId);
+        Assert.True(assigned.Version > role.Version);
+        Assert.Empty(r.Service.GetState(r.Admin.Token).UnassignedRoles);
+        r.Service.UnassignRole(r.Admin.Token, new(r.Generation, assigned.Id, device.Id, assigned.Version));
+        Assert.True(r.Service.DeleteRole(r.Admin.Token, new(r.Generation, assigned, false)));
+        var unused = r.Service.CreateRole(r.Admin.Token, new(r.Generation, "미사용 역할"));
+        Assert.True(r.Service.DeleteRole(r.Admin.Token, new(r.Generation, unused, false)));
+        Assert.Single(r.Service.GetState(r.Admin.Token).Devices);
+    }
+
+    [Fact]
+    public void Creation_rejects_invalid_names_and_requires_current_admin_ownership()
+    {
+        using var r = new Rig();
+        var request = new CreateRoleRequest(r.Generation, "새 역할");
+        foreach (var name in new[] { "", "   ", "줄\n바꿈", new string('a', 121) })
+            Rig.Reject("invalid_input", () => r.Service.CreateRole(r.Admin.Token, request with { Name = name }));
+        Rig.Reject("unauthorized", () => r.Service.CreateRole("missing", request));
+        Rig.Reject("lease_required", () => r.Service.CreateRole(r.Admin.Token, request with { Generation = r.Generation - 1 }));
+        var op = r.Operator("operator");
+        r.Service.Release(r.Admin.Token, r.Generation);
+        Rig.Reject("lease_required", () => r.Service.CreateRole(r.Admin.Token, request));
+        var lease = r.Service.Acquire(op.Token);
+        Rig.Reject("admin_required", () => r.Service.CreateRole(op.Token, request with { Generation = lease.Generation }));
+        Assert.Empty(r.Service.GetState(r.Admin.Token).UnassignedRoles);
+    }
+
+    [Fact]
+    public void Creation_editor_preserves_failed_draft_and_gates_older_hosts_and_session_changes()
+    {
+        var host = new ManagementHostFake();
+        var vm = host.Attach(new DeviceSettingsViewModel(host, Guid.NewGuid()));
+        vm.NewUnassignedRoleName = "예비 역할";
+        Assert.False(vm.CreateUnassignedRoleCommand.CanExecute(null));
+        host.Publish(host.State with { UnassignedRoleCreationSupported = true });
+        host.Fail = true; vm.CreateUnassignedRoleCommand.Execute(null);
+        Assert.NotNull(host.Error); Assert.Equal("예비 역할", vm.NewUnassignedRoleName);
+        Assert.Empty(host.State.UnassignedRoles);
+        host.Fail = false; host.Execute(vm.CreateUnassignedRoleCommand);
+        var role = Assert.Single(host.State.UnassignedRoles);
+        Assert.Equal(role.Id, vm.ManagedRole?.Id); Assert.Equal(role.Id, vm.SelectedRoleToInherit?.Id);
+        Assert.Equal("", vm.NewUnassignedRoleName); Assert.False(vm.CreateUnassignedRoleCommand.CanExecute(null));
+        vm.NewUnassignedRoleName = "계정 초안"; vm.NewRoleDisplayName = "장비 초안";
+        host.Publish(host.State with { Session = host.State.Session with { Id = Guid.NewGuid() } });
+        Assert.Equal("", vm.NewUnassignedRoleName); Assert.Equal("", vm.NewRoleDisplayName);
+    }
+
+    [Fact]
     public async Task Rename_preserves_scenario_and_accepted_execution_and_rejects_stale_edits()
     {
         using var r = new Rig(); r.Device();

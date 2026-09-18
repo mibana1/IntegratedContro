@@ -8,6 +8,7 @@ public sealed partial class ControlService
     public PcRegistration RegisterSessionPc(string token, RegisterSessionPcRequest request) => _devices.RegisterSessionPc(token, request);
     public DeviceConfig SaveDevice(string token, DeviceRequest request) => _devices.SaveDevice(token, request);
     public RoleBinding SaveRole(string token, RoleRequest request) => _devices.SaveRole(token, request);
+    public RoleBinding CreateRole(string token, CreateRoleRequest request) => _devices.CreateRole(token, request);
     public bool UnassignRole(string token, UnassignRoleRequest request) => _devices.UnassignRole(token, request);
     public RoleBinding RenameRole(string token, RenameRoleRequest request) => _devices.RenameRole(token, request);
     public bool DeleteRole(string token, DeleteRoleRequest request) => _devices.DeleteRole(token, request);

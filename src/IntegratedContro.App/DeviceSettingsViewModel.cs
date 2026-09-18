@@ -184,7 +184,7 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
     public string RoleName { get => _roleName; set { if (Set(ref _roleName, value)) { _roleNameEdited = true; NotifyRoleAssignment(); } } }
     public string RoleTargetSummary => SelectedDevice is null ? "배정 대상: 장비를 선택하세요." : $"배정 대상: {SelectedDevice.Name}";
     public string RoleAssignmentHint => !CanConfigure ? "역할 변경에는 관리자 사용권이 필요합니다." :
-        SelectedDevice is null ? "배정할 장비를 선택하세요." : "기존 역할을 선택해 이어받을 수 있습니다. 역할 하나는 장비 한 대를 가리킵니다. 일괄 조작은 그룹을 사용하세요.";
+        SelectedDevice is null ? "배정할 장비를 선택하세요." : "이름을 입력해 새 역할을 생성하거나 기존 역할을 선택해 이어받을 수 있습니다. 역할 하나는 장비 한 대를 가리킵니다.";
     private async Task SaveDevice()
     {
         if (SelectedModel is null) throw new ArgumentException("장비 모델을 선택하세요.");

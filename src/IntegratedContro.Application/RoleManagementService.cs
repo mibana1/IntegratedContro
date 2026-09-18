@@ -5,6 +5,16 @@ namespace IntegratedContro.Application;
 
 internal sealed partial class DeviceExecutionService
 {
+    public RoleBinding CreateRole(string token, CreateRoleRequest request) => _host.Change(s =>
+    {
+        var session = _host.Owner(s, token, request.Generation); _host.Admin(s, token);
+        Text(request.Name, "역할 이름");
+        var role = new RoleBinding(Guid.NewGuid().ToString("N"), Guid.Empty, 0) { Name = request.Name.Trim() };
+        s.UnassignedRoles.Add(role);
+        _host.Audit(s, session.Info.UserId, "RoleCreated", $"role={role.Id}");
+        return role;
+    });
+
     public RoleBinding RenameRole(string token, RenameRoleRequest request) => _host.Change(s =>
     {
         var session = _host.Owner(s, token, request.Generation); _host.Admin(s, token);
