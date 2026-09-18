@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "hostDataPath": "C:\\IntegratedControData",
+  "controlHostExecutablePath": "../ControlHost/IntegratedContro.ControlHost.exe",
+  "mediaMtxExecutablePath": "C:\\MediaMTX\\mediamtx.exe",
+  "mediaMtxConfigurationPath": "C:\\IntegratedControData\\mediamtx.yml",
+  "mediaMtxApiEndpoint": "http://127.0.0.1:9997"
+}

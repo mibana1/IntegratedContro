@@ -3,4 +3,4 @@
 <VlcWindowsX64Enabled>true</VlcWindowsX64Enabled><VlcWindowsX86Enabled>false</VlcWindowsX86Enabled><VlcWindowsArm64Enabled>false</VlcWindowsArm64Enabled>
 </PropertyGroup><ItemGroup><ProjectReference Include="../IntegratedContro.Core/IntegratedContro.Core.csproj" /><PackageReference Include="LibVLCSharp.WPF" /><PackageReference Include="VideoLAN.LibVLC.Windows" /><Content Include="../../THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 <Content Include="../../licenses/LGPL-2.1.txt" Link="licenses/LGPL-2.1.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-</ItemGroup></Project>
+<InternalsVisibleTo Include="IntegratedContro.UiSmoke" /></ItemGroup></Project>

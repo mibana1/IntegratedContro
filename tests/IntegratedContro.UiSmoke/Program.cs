@@ -29,6 +29,7 @@ public static partial class Program
             return 2;
         }
         Directory.CreateDirectory(Path.GetFullPath(args[profileIndex + 1]));
+        if (args.Contains("--server-startup-child")) return RunServerStartupChild(args);
         if (args.Contains("--theme-startup-child")) return RunThemeStartupChild();
         if (args.Contains("--login-close-child")) return RunLoginCloseChild();
         if (args.Contains("--preferences-startup-child")) return RunLoginCloseChild(requireRecovery: true);
@@ -39,7 +40,8 @@ public static partial class Program
         {
             try
             {
-                if (args.Contains("--theme-only")) await RunThemeSwitching();
+                if (args.Contains("--server-startup-only")) await RunServerStartup();
+                else if (args.Contains("--theme-only")) await RunThemeSwitching();
                 else if (args.Contains("--design-only")) await RunDesignControls();
                 else if (args.Contains("--login-only")) { await RunLogin(); await RunLoginClose(); }
                 else if (args.Contains("--environment-adapters-only")) await RunEnvironmentAdapters();

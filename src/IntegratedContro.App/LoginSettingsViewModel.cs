@@ -5,6 +5,8 @@ namespace IntegratedContro.App;
 
 public sealed partial class MainViewModel
 {
+    internal void ReportServerStartup(string message) => Message = HasPreferencesRecovery ? PreferencesRecoveryMessage :
+        string.IsNullOrWhiteSpace(message) ? "앱 계정으로 로그인하세요." : message;
     private bool _editingConnectionSettings;
     private ClientPreferencesLoadResult? _preferencesLoad;
     private string _connectionEndpoint = "", _connectionFingerprint = "", _connectionSettingsMessage = "";

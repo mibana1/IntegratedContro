@@ -14,6 +14,12 @@ try {
         dotnet publish $taskProject -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true -o (Join-Path $taskStaging $taskName)
         if ($LASTEXITCODE -ne 0) { throw "Publish failed: $taskName. Incomplete files remain at $taskStaging" }
     }
+    # Keep machine-specific startup paths across new App builds; never copy credentials or the DB.
+    $taskStartupSettings = Join-Path $taskRoot 'config/server-startup.local.json'
+    if (Test-Path -LiteralPath $taskStartupSettings -PathType Leaf) {
+        Get-Content -LiteralPath $taskStartupSettings -Raw | ConvertFrom-Json -ErrorAction Stop | Out-Null
+        Copy-Item -LiteralPath $taskStartupSettings -Destination (Join-Path $taskStaging 'App/server-startup.json')
+    }
     Remove-Item -LiteralPath $taskMarker
     $taskSync = & (Join-Path $PSScriptRoot 'sync-published-app.ps1') -BuildPath $taskStaging
     [ordered]@{

@@ -61,6 +61,7 @@ try
                     Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     });
     var app = builder.Build();
+    using var appOwner = AppOwnerLifetime.Listen(args, app.Lifetime);
     app.UseRateLimiter();
     app.Use(async (context, next) =>
     {
