@@ -13,6 +13,8 @@ internal interface IDeviceScenarioOperations
     void RecordResult(StateContext state, StepSnapshot step, StepExecutionResult result);
     void RecordConditionReading(StateContext state, StepSnapshot step, DriverReading reading);
     LightLayout CurrentLightLayout(StateContext state);
+    LightSlot ReadLightSlot(StateContext state, int number, int version);
+    void RestoreLightSlotLayout(StateContext state, LightSlot slot, int expectedVersion);
     void ValidateCardPower(StateContext state, SubmitRequest request, StepSnapshot[] snapshots);
     void RecordDispatchIntent(StateContext context, StepSnapshot step);
     void MarkUncertain(StateContext context, IEnumerable<Guid> ids);

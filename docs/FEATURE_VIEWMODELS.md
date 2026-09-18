@@ -10,7 +10,7 @@
 | 계정 관리 | AccountManagementViewModel.cs | 계정 등록·권한 초안, 장비 선택 목록·전체/제한 범위, Hiperwall 정책 표시, 비밀번호 읽기/정리 |
 | 작업·교대 | `JobManagementViewModel.cs`, `HandoverViewModel.cs` | 일반/Hiperwall 작업 목록·선택·상세, 이전 세션 표시, 선택 취소·수동 전환·표시 정리 |
 | 복구·진단 | `RecoveryViewModel.cs`, `AuditRow.cs` | 감사 목록·선택, 복구 확인 결과·승인 ID·세대, 확인·승인 명령 |
-| 조명 | `src/IntegratedContro.App/LightingViewModel.cs` | 카드 관측값·조작 가능 여부, 그룹·순서 초안, 대상과 관측을 고정한 전원/일괄 요청 |
+| 조명·장비 슬롯 | `LightingViewModel.cs`, `LightingSlotsViewModel.cs` | 카드 관측값·조작 가능 여부, 그룹·순서 초안, 전원/일괄 요청, 슬롯 선택·이름 초안·저장·복원·삭제·전체 상태 확인 |
 | 시나리오 편집 | `ScenarioEditorViewModel.cs` | 저장 목록·선택, 정의 초안·버전, 단계 이동/삭제, 저장·삭제·실행 요청 |
 | 시나리오 단계 | `ScenarioViewModel.cs`, `ScenarioDeviceViewModel.cs`, `ScenarioInputViewModel.cs`, `ScenarioSetting.cs` | 단계 종류, 장비별 설정, 독립 대기/제한시간·조건 입력 |
 | 기능 공통 계약 | `FeatureViewModel.cs` | `FeatureContext`, 명령 활성화 알림, 형식화된 `ILightingHost`·`IScenarioHost` |
@@ -59,6 +59,7 @@ dotnet run --project tests/IntegratedContro.UiSmoke --no-build --no-restore -- -
 이 검증은 격리된 프로필·별도 가상 HTTPS 호스트와 실제 WPF 바인딩을 사용한다.
 등록·공유 연결·진단·권한 목록은 --device-drivers-only와 DeviceConfigurationViewModelTests로 검증한다.
 시나리오 장비별 입력은 `--scenario-settings-only`, 확장 단계는 `--scenarios-only`로 추가 검증한다.
+장비 제어 슬롯은 `--light-slots-only`와 `LightSlotTests`로 저장·배치/전원 복원·권한·실패/재시작·초안 보존을 검증한다.
 전체 회귀·배포는 기존 `scripts/verify.ps1`, `scripts/publish.ps1`을 따른다.
 물리 장비와 물리 포인터 검수를 대신하지 않는다.
 

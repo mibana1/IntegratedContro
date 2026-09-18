@@ -24,7 +24,7 @@ internal sealed partial class ScenarioService
                 run.Status = StepStatus.Unknown; run.Result = "호스트 중단: 전송/결과 불확실. 자동 재전송 금지.";
                 _devices.RecoverInterrupted(next, job.Snapshot.Steps[index], run.Result);
             }
-            if (job.Kind == JobKind.Scenario || (job.IsLightBatch && job.Steps.Any(x => x.SentAt is not null)) ||
+            if (job.Kind == JobKind.Scenario || (job.IsDeviceBatch && job.Steps.Any(x => x.SentAt is not null)) ||
                 job.Steps.Any(x => x.Status == StepStatus.Unknown) || job.Status == JobStatus.StopRequested)
             {
                 _jobs.StopScenarioPendingDisplays(next, job.Id, "호스트 재시작: 미전송 표시 자동 재개 금지");

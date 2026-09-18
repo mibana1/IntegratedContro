@@ -137,6 +137,9 @@ try
     app.MapPost("/api/scenarios", (HttpContext c, ScenarioRequest r) => service.SaveScenario(Token(c), r));
     app.MapPost("/api/scenarios/delete", (HttpContext c, DeleteScenarioRequest r) => service.DeleteScenario(Token(c), r));
     app.MapPost("/api/lights/power", (HttpContext c, LightBatchRequest r) => service.SubmitLightBatch(Token(c), r));
+    app.MapPost("/api/lights/slots/save", (HttpContext c, SaveLightSlotRequest r) => service.SaveLightSlot(Token(c), r));
+    app.MapPost("/api/lights/slots/delete", (HttpContext c, DeleteLightSlotRequest r) => service.DeleteLightSlot(Token(c), r));
+    app.MapPost("/api/lights/slots/restore", (HttpContext c, RestoreLightSlotRequest r) => service.RestoreLightSlot(Token(c), r));
     app.MapPost("/api/jobs", (HttpContext c, SubmitRequest r) => service.Submit(Token(c), r));
     app.MapPost("/api/jobs/cancel", (HttpContext c, JobActionRequest r) => service.Cancel(Token(c), r));
     app.MapPost("/api/jobs/manual-switch", (HttpContext c, JobActionRequest r) => service.BeginManualSwitch(Token(c), r));

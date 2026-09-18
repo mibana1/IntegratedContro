@@ -22,6 +22,9 @@ public interface ILightingHost : IFeatureSession
     Task<LightLayout> SaveLayoutAsync(LightOrderRequest request);
     Task<DeviceState> ReconcileAsync(ReconcileRequest request);
     Task SubmitBatchAsync(LightBatchRequest request);
+    Task<LightSlot> SaveLightSlotAsync(SaveLightSlotRequest request);
+    Task<LightSlot> DeleteLightSlotAsync(DeleteLightSlotRequest request);
+    Task RestoreLightSlotAsync(RestoreLightSlotRequest request);
 }
 
 public interface IScenarioHost : IFeatureSession

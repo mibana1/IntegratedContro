@@ -62,16 +62,20 @@ public sealed class LightGroupRow(Guid id, string name) : Bindable
     }
 }
 
-public sealed class LightingViewModel : FeatureViewModel
+public sealed partial class LightingViewModel : FeatureViewModel
 {
     private readonly ILightingHost _host;
     public event Action<Guid>? DeviceDetailsRequested;
     public LightingViewModel(ILightingHost host) : base(host)
     {
         _host = host;
-        InitializeLighting();
+        InitializeLighting(); InitializeLightSlots();
     }
-    protected override void OnContextChanged(FeatureContext previous) => RefreshLighting();
+    protected override void OnContextChanged(FeatureContext previous)
+    {
+        if (previous.State?.Session.Id != State?.Session.Id) _editingLightOrder = false;
+        RefreshLighting(); RefreshLightSlots(previous);
+    }
     public ObservableCollection<LightCard> Lights { get; } = [];
     public ObservableCollection<LightGroupRow> LightGroups { get; } = [];
     private string _newLightGroupName = "";

@@ -131,6 +131,7 @@ internal sealed partial class HostAuthority
         public override Dictionary<string, int> DeletedRoleVersions { get => state.DeletedRoleVersions; set => state.DeletedRoleVersions = value; }
         public override List<Guid> UncertainDevices { get => state.UncertainDevices; set => state.UncertainDevices = value; }
         public override LightLayout LightLayout { get => state.LightLayout; set => state.LightLayout = value; }
+        public override List<LightSlot> LightSlots { get => state.LightSlots; set => state.LightSlots = value; }
         public override IReadOnlyList<Job> Jobs => JsonDefaults.Copy(state.Jobs).AsReadOnly();
         public override IReadOnlyList<ScenarioDefinition> Scenarios => JsonDefaults.Copy(state.Scenarios).AsReadOnly();
     }

@@ -26,7 +26,9 @@ public sealed partial class MainViewModel : Bindable
     private LoginResult? _login;
     private SubmitRequest? _pending;
     private LightBatchRequest? _pendingLightBatch;
-    private bool HasPending => _pending is not null || _pendingLightBatch is not null;
+    private RestoreLightSlotRequest? _pendingLightSlot;
+    private Guid? PendingRequestId => _pending?.RequestId ?? _pendingLightBatch?.RequestId ?? _pendingLightSlot?.RequestId;
+    private bool HasPending => PendingRequestId is not null;
     private bool _busy, _polling, _closing, _connected;
     private readonly CancellationTokenSource _lifetime = new();
     private string _message = "접속 설정을 확인하고 앱 계정으로 로그인하세요.";
@@ -39,7 +41,7 @@ public sealed partial class MainViewModel : Bindable
     public bool IsAdmin => _connected && _login?.Session.Role == AccountRole.Administrator;
     public bool CanConfigure => CanControl && IsAdmin;
     public string ConnectionSummary => _connected ? $"HTTPS 연결 · 마지막 확인 {DateTime.Now:HH:mm:ss}" : "미연결 / 표시된 이전 상태를 최신 관측으로 사용하지 마세요.";
-    public string PendingSummary => !HasPending ? "" : $"접수 결과 확인 필요: {_pending?.RequestId ?? _pendingLightBatch?.RequestId} · 같은 요청 ID로만 재확인합니다.";
+    public string PendingSummary => !HasPending ? "" : $"접수 결과 확인 필요: {PendingRequestId} · 같은 요청 ID로만 재확인합니다.";
     public string Endpoint { get; set; }
     public string Fingerprint { get; set; }
     public string LoginName { get; set; } = "";
@@ -133,7 +135,7 @@ public sealed partial class MainViewModel : Bindable
         finally
         {
             _login = null; _connected = false; _state = null;
-            _pending = null; _pendingLightBatch = null;
+            _pending = null; _pendingLightBatch = null; _pendingLightSlot = null;
         }
     }
     private async Task Poll()
@@ -158,8 +160,8 @@ public sealed partial class MainViewModel : Bindable
         var state = await Client.Get<StateView>("/api/state");
         if (_closing || _login?.Session.Id != sessionId || _login is null || (_state is not null && state.Revision < _state.Revision)) return;
         _state = state; _connected = true;
-        if (HasPending && state.Jobs.Any(j => j.Snapshot.RequestId == (_pending?.RequestId ?? _pendingLightBatch?.RequestId)))
-        { _pending = null; _pendingLightBatch = null; Message = "요청 ID로 호스트 접수 기록을 확인했습니다."; }
+        if (HasPending && state.Jobs.Any(j => j.Snapshot.RequestId == PendingRequestId))
+        { _pending = null; _pendingLightBatch = null; _pendingLightSlot = null; Message = "요청 ID로 호스트 접수 기록을 확인했습니다."; }
         Notify();
     }
     private async Task SendPending()
@@ -167,10 +169,11 @@ public sealed partial class MainViewModel : Bindable
         if (!HasPending) return;
         try
         {
-            var job = _pendingLightBatch is not null ? await Client.Post<Job>("/api/lights/power", _pendingLightBatch) : await Client.Post<Job>("/api/jobs", _pending);
-            _pending = null; _pendingLightBatch = null; Message = $"접수 완료: {job.Id}. 실행 결과는 작업 탭에서 확인하세요.";
+            var job = _pendingLightSlot is not null ? await Client.Post<Job>("/api/lights/slots/restore", _pendingLightSlot)
+                : _pendingLightBatch is not null ? await Client.Post<Job>("/api/lights/power", _pendingLightBatch) : await Client.Post<Job>("/api/jobs", _pending);
+            _pending = null; _pendingLightBatch = null; _pendingLightSlot = null; Message = $"접수 완료: {job.Id}. 실행 결과는 작업 탭에서 확인하세요.";
         }
-        catch (ApiException error) when ((int)error.Status < 500) { _pending = null; _pendingLightBatch = null; throw; }
+        catch (ApiException error) when ((int)error.Status < 500) { _pending = null; _pendingLightBatch = null; _pendingLightSlot = null; throw; }
         finally { Notify(); }
     }
     private void Notify()

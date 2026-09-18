@@ -9,7 +9,7 @@ public sealed record JobRow(Job Job, bool PreviousSession)
     public string Name => Job.Snapshot.Name;
     public string Requester => $"{Job.Snapshot.RequesterName} / {Job.Snapshot.ClientPcName}";
     public string OriginSession => Job.Snapshot.SessionId.ToString()[..8];
-    public string Kind => Job.IsLightBatch ? "일괄 조명" : Job.Kind == JobKind.Scenario ? "시나리오" : "일반 명령";
+    public string Kind => Job.Kind == JobKind.LightSlot ? "장비 슬롯" : Job.IsLightBatch ? "일괄 조명" : Job.Kind == JobKind.Scenario ? "시나리오" : "일반 명령";
     public string Targets => string.Join(", ", Job.Snapshot.Steps.Select(x => x.TargetLabel).Distinct());
     public string Progress => $"{Job.Steps.Count(x => x.Status is not (StepStatus.Pending or StepStatus.Dispatching or StepStatus.Waiting))}/{Job.Steps.Count}";
     public string Status => Job.Status switch

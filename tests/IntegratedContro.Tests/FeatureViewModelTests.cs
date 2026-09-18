@@ -268,6 +268,21 @@ internal sealed class FeatureHostFake : ILightingHost, IScenarioHost
     public void ReportStatus(string message) { }
     public Task SubmitAsync(SubmitRequest request) { Submissions.Add(request); return Task.CompletedTask; }
     public Task SubmitBatchAsync(LightBatchRequest request) { Batches.Add(request); return Task.CompletedTask; }
+    public Task<LightSlot> SaveLightSlotAsync(SaveLightSlotRequest request)
+    {
+        if (FailSave) throw new InvalidOperationException("Save failed");
+        var slot = new LightSlot(request.Number, request.ExpectedVersion + 1, request.Name.Trim(), State.LightLayout, [], ObservedAt);
+        Publish(State with { LightSlots = [.. State.LightSlots.Where(s => s.Number != slot.Number), slot] });
+        return Task.FromResult(slot);
+    }
+    public Task<LightSlot> DeleteLightSlotAsync(DeleteLightSlotRequest request)
+    {
+        var slot = new LightSlot(request.Number, request.ExpectedVersion + 1, "", new(0, []), [], null);
+        Publish(State with { LightSlots = [.. State.LightSlots.Where(s => s.Number != slot.Number), slot] });
+        return Task.FromResult(slot);
+    }
+    public List<RestoreLightSlotRequest> SlotRestores { get; } = [];
+    public Task RestoreLightSlotAsync(RestoreLightSlotRequest request) { SlotRestores.Add(request); return Task.CompletedTask; }
     public Task<DeviceState> ReconcileAsync(ReconcileRequest request) => Task.FromResult(State.DeviceStates[request.DeviceId]);
     public Task<LightLayout> SaveLayoutAsync(LightOrderRequest request)
     {

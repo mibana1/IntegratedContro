@@ -52,6 +52,7 @@ internal abstract class DeviceStateScope : FeatureStateScope
     public abstract Dictionary<string, int> DeletedRoleVersions { get; set; }
     public abstract List<Guid> UncertainDevices { get; set; }
     public abstract LightLayout LightLayout { get; set; }
+    public abstract List<LightSlot> LightSlots { get; set; }
     public abstract IReadOnlyList<Job> Jobs { get; }
     public abstract IReadOnlyList<ScenarioDefinition> Scenarios { get; }
 }

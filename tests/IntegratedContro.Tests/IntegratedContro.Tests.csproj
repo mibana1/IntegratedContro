@@ -8,6 +8,7 @@
 <Compile Include="../../src/IntegratedContro.App/Binding.cs" Link="ViewModels/Binding.cs" />
 <Compile Include="../../src/IntegratedContro.App/FeatureViewModel.cs" Link="ViewModels/FeatureViewModel.cs" />
 <Compile Include="../../src/IntegratedContro.App/LightingViewModel.cs" Link="ViewModels/LightingViewModel.cs" />
+<Compile Include="../../src/IntegratedContro.App/LightingSlotsViewModel.cs" Link="ViewModels/LightingSlotsViewModel.cs" />
 <Compile Include="../../src/IntegratedContro.App/ScenarioEditorViewModel.cs" Link="ViewModels/ScenarioEditorViewModel.cs" />
 <Compile Include="../../src/IntegratedContro.App/ScenarioViewModel.cs" Link="ViewModels/ScenarioViewModel.cs" />
 <Compile Include="../../src/IntegratedContro.App/ScenarioDeviceViewModel.cs" Link="ViewModels/ScenarioDeviceViewModel.cs" />

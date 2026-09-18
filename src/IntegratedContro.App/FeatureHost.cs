@@ -37,6 +37,15 @@ public sealed partial class MainViewModel
             owner.Notify();
             return owner.SendPending();
         }
+        public Task<LightSlot> SaveLightSlotAsync(SaveLightSlotRequest request) => owner.Client.Post<LightSlot>("/api/lights/slots/save", request);
+        public Task<LightSlot> DeleteLightSlotAsync(DeleteLightSlotRequest request) => owner.Client.Post<LightSlot>("/api/lights/slots/delete", request);
+        public Task RestoreLightSlotAsync(RestoreLightSlotRequest request)
+        {
+            if (owner.HasPending) throw new InvalidOperationException("이전 요청의 접수 여부를 먼저 확인하세요.");
+            owner._pendingLightSlot = request;
+            owner.Notify();
+            return owner.SendPending();
+        }
         public Task SubmitBatchAsync(LightBatchRequest request)
         {
             if (owner.HasPending) throw new InvalidOperationException("이전 요청의 접수 여부를 먼저 확인하세요.");

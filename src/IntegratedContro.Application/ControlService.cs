@@ -59,6 +59,7 @@ public sealed partial class ControlService
                     ScenarioExtensionsSupported = true, ScenarioDeletionSupported = true, RoleUnassignmentSupported = true, RoleManagementSupported = true,
                     UnassignedRoleCreationSupported = true, SavedHiperwallLayouts = s.HiperwallLayouts.ToArray(),
                     CameraSupported = _cameras.Supported, MediaConfigurationVersion = s.Media?.Version ?? 0,
+                    LightSlotsSupported = true, LightSlots = s.LightSlots.ToArray(),
                     LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = _devices.CurrentLightLayout(_host.ReadContext),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(_host.User(s, session), d.Id)).Select(d => d.Id).ToArray() });
         }

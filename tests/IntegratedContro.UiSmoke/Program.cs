@@ -57,6 +57,7 @@ public static partial class Program
                 else if (args.Contains("--role-management-only")) { await RunRoleCreation(); await RunRoleManagement(); await RunRoleUnassignment(); }
                 else if (args.Contains("--role-unassignment-only")) await RunRoleUnassignment();
                 else if (args.Contains("--lighting-only")) await RunLighting();
+                else if (args.Contains("--light-slots-only")) await RunLightSlots();
                 else if (args.Contains("--scenario-editor-only")) await RunScenarioEditor();
                 else if (args.Contains("--numeric-input-only")) await RunNumericInputs();
                 else if (args.Contains("--power-input-only")) await RunPowerInputs();
@@ -67,7 +68,7 @@ public static partial class Program
                 else if (args.Contains("--handover-only")) await RunHandover();
                 else
                 {
-                    if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await RunPreferencesRecovery(); await Run(); await RunLighting(); await RunCameraInput(); await RunCameraStatus(); await RunDraftRecovery(); }
+                    if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await RunPreferencesRecovery(); await Run(); await RunLighting(); await RunLightSlots(); await RunCameraInput(); await RunCameraStatus(); await RunDraftRecovery(); }
                     await RunThemeSwitching(); await RunDesignControls(); await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunRoleCreation(); await RunRoleManagement(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
                 }
                 result = 0;

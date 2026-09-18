@@ -1,0 +1,33 @@
+<UserControl x:Class="IntegratedContro.App.LightingSlotsView"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Border BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="10" Background="{DynamicResource Surface}" Padding="10">
+  <StackPanel>
+   <ItemsControl x:Name="LightSlotList" ItemsSource="{Binding LightSlots}">
+    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+    <ItemsControl.ItemTemplate><DataTemplate>
+     <Button x:Name="SelectLightSlot" Command="{Binding SelectCommand}" ToolTip="{Binding Detail}" MinHeight="58" Padding="8,6" Margin="3,0"
+      AutomationProperties.Name="{Binding Title}">
+      <Button.Style><Style TargetType="Button" BasedOn="{StaticResource ActionButton}">
+       <Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+       </DataTrigger></Style.Triggers>
+      </Style></Button.Style>
+      <StackPanel><TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+       <TextBlock Text="{Binding Summary}" FontSize="11" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+      </StackPanel>
+     </Button>
+    </DataTemplate></ItemsControl.ItemTemplate>
+   </ItemsControl>
+   <WrapPanel Margin="3,8,0,0">
+    <TextBlock Text="슬롯 이름" VerticalAlignment="Center" Margin="0,0,8,0"/>
+    <TextBox x:Name="LightSlotNameEditor" Text="{Binding LightSlotName, UpdateSourceTrigger=PropertyChanged}" Width="170" MaxLength="50" Margin="0,0,8,0" AutomationProperties.Name="장비 슬롯 이름"/>
+    <Button x:Name="SaveLightSlotButton" Content="슬롯 저장" Command="{Binding SaveLightSlotCommand}" ToolTip="{Binding SaveLightSlotHint}" ToolTipService.ShowOnDisabled="True" Margin="0,0,8,0"/>
+    <Button x:Name="RestoreLightSlotButton" Content="불러오기 · 전원 적용" Command="{Binding RestoreLightSlotCommand}" Style="{StaticResource Primary}" ToolTip="{Binding RestoreLightSlotHint}" ToolTipService.ShowOnDisabled="True" Margin="0,0,8,0"/>
+    <Button x:Name="DeleteLightSlotButton" Content="슬롯 삭제" Command="{Binding DeleteLightSlotCommand}" Margin="0,0,8,0"/>
+    <Button x:Name="ReadSlotStatesButton" Content="전체 상태 확인" Command="{Binding ReadSlotStatesCommand}" Margin="0"/>
+   </WrapPanel>
+   <TextBlock Text="{Binding LightSlotHint}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="3,7,0,0"/>
+  </StackPanel>
+ </Border>
+</UserControl>

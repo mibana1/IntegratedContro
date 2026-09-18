@@ -15,7 +15,7 @@ public enum LeaseMode { Free, Held, RecoveryRequired }
 public enum DeviceOperation { Power, Brightness, Volume, Mute, Input, Lift, Stop }
 public enum VirtualFault { None, Failure, Disconnected, NoResponse, ResponseLost }
 public enum FailurePolicy { Stop, Continue }
-public enum JobKind { Manual, Scenario, LightBatch }
+public enum JobKind { Manual, Scenario, LightBatch, LightSlot }
 public enum JobStatus { Queued, Running, StopRequested, Completed, Cancelled, Interrupted, NeedsReview }
 public enum StepStatus { Pending, Dispatching, Simulated, Failed, Unknown, Skipped, Waiting, ConditionMet, Acknowledged, Sent, Observed }
 public enum ScenarioStepKind { DeviceCommand, WaitUntil, DisplayLayout }
@@ -117,6 +117,7 @@ public sealed class Job
     public required ExecutionSnapshot Snapshot { get; set; }
     public JobKind Kind { get; set; }
     [JsonIgnore] public bool IsLightBatch => Kind == JobKind.LightBatch;
+    [JsonIgnore] public bool IsDeviceBatch => Kind is JobKind.LightBatch or JobKind.LightSlot;
     public JobStatus Status { get; set; } = JobStatus.Queued;
     public List<StepRun> Steps { get; set; } = [];
     public DateTimeOffset ReadyAt { get; set; }
@@ -179,6 +180,7 @@ public sealed class HostState
     public List<SavedHiperwallLayout> HiperwallLayouts { get; set; } = [];
     public List<HiperwallDisplayJob> HiperwallDisplays { get; set; } = [];
     public LightLayout LightLayout { get; set; } = new(0, []);
+    public List<LightSlot> LightSlots { get; set; } = [];
     public Dictionary<Guid, DeviceState> DeviceStates { get; set; } = [];
     public List<RoleBinding> Roles { get; set; } = [];
     public List<RoleBinding> UnassignedRoles { get; set; } = [];
@@ -221,6 +223,8 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public SavedHiperwallLayout[] SavedHiperwallLayouts { get; init; } = [];
     public bool LightGroupsSupported { get; init; }
     public bool LightBatchSupported { get; init; }
+    public bool LightSlotsSupported { get; init; }
+    public LightSlot[] LightSlots { get; init; } = [];
     public Guid[] ControllableDeviceIds { get; init; } = [];
     public RoleBinding[] UnassignedRoles { get; init; } = [];
     public bool DeviceConfigurationSupported { get; init; }

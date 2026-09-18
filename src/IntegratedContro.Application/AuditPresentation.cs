@@ -39,6 +39,7 @@ public static class AuditPresentation
             "HiperwallLayoutSaved" => "영상벽 배치 저장", "HiperwallLayoutDeleted" => "영상벽 배치 삭제",
             "HiperwallDisplayAccepted" => "영상벽 표시 접수", "HiperwallDisplayStop" => "영상벽 표시 종료 요청",
             "HiperwallDisplayCleanup" => "영상벽 인스턴스 정리",
+            "LightSlotSaved" => "장비 슬롯 저장", "LightSlotDeleted" => "장비 슬롯 삭제", "LightSlotRestored" => "장비 슬롯 불러오기",
             "LightOrderSaved" => "조명 배치 저장", "LightBatchAccepted" => "조명 일괄 명령 접수",
             "JobAccepted" => "작업 접수", "JobCancellation" => "작업 취소 요청",
             "VirtualStateReconciled" => "가상 상태 대조", "DeviceStateReconciled" => "장비 상태 대조", "DispatchIntent" => "전송 준비",
@@ -49,7 +50,7 @@ public static class AuditPresentation
         var deviceName = device is null ? $"장비 {Short(Id("device"))}" : $"{device.Name} / {device.PcName}";
         string Step(StepSnapshot s) => $"{s.KindLabel} · {s.TargetLabel}" + (s.Kind == ScenarioStepKind.DisplayLayout ? "" : $": {Operation(s.Operation, s.Value, s.Unit)}");
         var work = job is null ? $"작업 {Short(Id("job"))}" :
-            $"{job.Snapshot.RequesterName} 요청 · " + (job.IsLightBatch || job.Kind == JobKind.Scenario
+            $"{job.Snapshot.RequesterName} 요청 · " + (job.IsDeviceBatch || job.Kind == JobKind.Scenario
                 ? $"{job.Snapshot.Name} · {job.Snapshot.Steps.Length}단계"
                 : Step(job.Snapshot.Steps[0]));
         var step = int.TryParse(Field("step"), out var index) && job is not null &&
@@ -92,6 +93,9 @@ public static class AuditPresentation
             "ScenarioSaved" => $"{scenario?.Name ?? Short(Id("scenario"))} 시나리오를 저장했습니다. 버전 {Field("v")}.",
             "ScenarioDeleted" => $"{scenario?.Name ?? Short(Id("scenario"))} 시나리오 정의를 삭제했습니다. 버전 {Field("v")}. 실행 이력은 보존합니다.",
             "LightOrderSaved" => $"조명 {Field("count")}개의 그룹·표시 순서를 저장했습니다. 배치 버전 {Field("version")}.",
+            "LightSlotSaved" => $"슬롯 {Field("slot")}에 장비 {Field("count")}개의 그룹·순서·ON/OFF를 저장했습니다. 현재 장비는 유지됩니다.",
+            "LightSlotDeleted" => $"슬롯 {Field("slot")}의 저장 정보만 삭제했습니다.",
+            "LightSlotRestored" => $"{work} · 그룹·순서 복원 및 전원 적용 접수. 장비별 실행 결과는 작업 탭에서 확인하세요.",
             "LightBatchAccepted" or "JobAccepted" => $"{work} · 접수 완료, 실행 결과는 별도로 확인하세요.",
             "JobCancellation" => $"{work} · 미전송 부분 취소 요청. 이미 전송한 동작의 정지·롤백은 아닙니다.",
             "VirtualStateReconciled" or "DeviceStateReconciled" => $"{deviceName}의 상태를 대조했습니다. 과거 작업 결과는 변경하지 않았습니다.",
