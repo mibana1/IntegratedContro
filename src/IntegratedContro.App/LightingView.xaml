@@ -90,6 +90,7 @@
             <Button x:Name="LightPowerButton" Command="{Binding PowerCommand}" Style="{StaticResource LightPower}" ToolTip="{Binding TargetDetail}" AutomationProperties.Name="{Binding Name}" MinHeight="158">
              <StackPanel>
               <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding RoleText}" FontSize="12" Foreground="{DynamicResource MutedInk}" TextTrimming="CharacterEllipsis" ToolTip="{Binding RoleText}" Margin="0,3,0,0"/>
               <TextBlock Text="{Binding PcName}" FontSize="12" Foreground="{DynamicResource MutedInk}" TextTrimming="CharacterEllipsis" Margin="0,3,0,6"/>
               <Viewbox Width="34" Height="42" Margin="0,2,0,6"><Canvas Width="64" Height="76">
                <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"

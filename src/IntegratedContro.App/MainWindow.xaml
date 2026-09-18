@@ -148,7 +148,14 @@
     </Grid>
    </TabItem>
    <TabItem x:Name="HandoverTab" Header="작업 · 교대" DataContext="{Binding JobManagement}">
-    <Grid Margin="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MaxHeight="120"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MaxHeight="150"/></Grid.RowDefinitions>
+    <ScrollViewer x:Name="HandoverScroll" Margin="16" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Grid MinHeight="820" Height="{Binding ViewportHeight, ElementName=HandoverScroll}">
+     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/><RowDefinition Height="2*" MinHeight="220"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="64" MaxHeight="120"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="2*" MinHeight="220"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="64" MaxHeight="150"/>
+     </Grid.RowDefinitions>
      <StackPanel><TextBlock Text="{Binding PreviousSummary}" Style="{StaticResource SectionTitle}"/><TextBlock Text="원 요청자·세션·snapshot을 유지합니다. 다음 사용권자는 자신의 권한 범위에서 이전 작업을 선택 취소할 수 있습니다." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="0,0,0,12"/></StackPanel>
      <DataGrid Grid.Row="1" ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}" AutomationProperties.AutomationId="JobGrid"><DataGrid.Columns>
       <DataGridCheckBoxColumn Header="이전 세션" Binding="{Binding PreviousSession}" Width="75"/><DataGridTextColumn Header="접수 시각" Binding="{Binding AcceptedAt}" Width="120"/><DataGridTextColumn Header="원 요청자 / PC" Binding="{Binding Requester}" Width="220"/><DataGridTextColumn Header="종류" Binding="{Binding Kind}" Width="85"/><DataGridTextColumn Header="작업" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="대상 / PC" Binding="{Binding Targets}" Width="250"/><DataGridTextColumn Header="단계" Binding="{Binding Progress}" Width="60"/><DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="150"/>
@@ -168,7 +175,7 @@
      </DataGrid.Columns></DataGrid>
      <WrapPanel Grid.Row="6" Margin="0,8"><Button x:Name="CancelHiperwallJob" Content="{Binding HiperwallCancelLabel}" Command="{Binding CancelHiperwallJobCommand}"/><TextBlock Text="표시 종료는 열린 인스턴스 정리를 요청합니다. 불확실 결과와 정리 결과를 확인하세요." VerticalAlignment="Center" Foreground="{DynamicResource WarningInk}"/></WrapPanel>
      <TextBox Grid.Row="7" Text="{Binding HiperwallJobDetails, Mode=OneWay}" IsReadOnly="True" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0"/>
-    </Grid>
+    </Grid></ScrollViewer>
    </TabItem>
    <TabItem x:Name="AdminTab" Header="관리자 설정" Visibility="{Binding IsAdmin, Converter={StaticResource BoolVisibility}}">
     <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

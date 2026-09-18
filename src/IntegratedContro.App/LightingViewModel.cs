@@ -8,6 +8,7 @@ public sealed class LightCard(DeviceConfig device) : Bindable
     public DeviceConfig Device { get; internal set; } = device;
     public Guid Id => Device.Id;
     public string Name => Device.Name;
+    public string RoleText { get; internal set; } = "역할 미배정";
     public string PcName => Device.PcName;
     public string TargetDetail => $"PC: {PcName} / PC ID: {Device.PcId} / 장비 ID: {Id}";
     public int Position { get; internal set; }
@@ -30,7 +31,7 @@ public sealed class LightCard(DeviceConfig device) : Bindable
     public AsyncCommand LaterCommand { get; internal set; } = null!;
     internal void Refresh()
     {
-        foreach (var name in new[] { nameof(Name), nameof(PcName), nameof(TargetDetail), nameof(Position), nameof(Power), nameof(IsOn),
+        foreach (var name in new[] { nameof(Name), nameof(RoleText), nameof(PcName), nameof(TargetDetail), nameof(Position), nameof(Power), nameof(IsOn),
             nameof(NeedsCheck), nameof(IsEditing), nameof(StateText), nameof(Hint), nameof(ActionText), nameof(LastChecked) }) Changed(name);
     }
 }
@@ -277,6 +278,8 @@ public sealed class LightingViewModel : FeatureViewModel
             foreach (var card in Lights)
             {
                 if (State.Devices.SingleOrDefault(d => d.Id == card.Id) is { } device) card.Device = device;
+                var roles = State.Roles.Where(r => r.DeviceId == card.Id).Select(r => r.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+                card.RoleText = roles.Length == 0 ? "역할 미배정" : $"역할: {string.Join(", ", roles)}";
                 var power = LightPower(card.Id);
                 card.Power = power?.Value is 0 or 1 ? power.Value : null;
                 card.NeedsCheck = !Context.Connected || State.UncertainDevices.Contains(card.Id);
