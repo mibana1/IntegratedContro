@@ -62,6 +62,15 @@ public static partial class Program
             Require(button.ActualHeight >= 48 && position.X > window.ActualWidth / 2 &&
                 position.X + button.ActualWidth < window.ActualWidth && position.Y < 110, "Account theme action clipped or misplaced");
             Capture(window, Path.Combine(output, "theme-dark-lighting.png"));
+            tabs.SelectedItem = window.FindName("MyInfoTab"); window.UpdateLayout();
+            var identity = (Expander)window.FindName("AccountIdentityExpander");
+            identity.IsExpanded = true; window.UpdateLayout();
+            var identityHeader = FindAll<ToggleButton>(identity).Single();
+            Require(Contrast(ColorOf(identityHeader.Foreground), Palette("SubtleSurface")) >= 4.5 &&
+                FindAll<TextBlock>(identity).Where(t => t.IsVisible).All(t =>
+                    Contrast(ColorOf(t.Foreground), Palette("Surface")) >= 4.5),
+                "Account/session identity header or details are unreadable in dark mode");
+            Capture(window, Path.Combine(output, "theme-dark-account-identity.png"));
             for (var i = 0; i < tabs.Items.Count; i++)
             {
                 tabs.SelectedIndex = i; window.UpdateLayout();
@@ -89,6 +98,12 @@ public static partial class Program
             await Click(vm, button); window.UpdateLayout();
             Require(!window.Appearance.IsDark && !AppearancePreferences.Load().IsDark && ColorOf(window.Background) == light,
                 "Round trip did not restore light mode");
+            tabs.SelectedItem = window.FindName("MyInfoTab"); window.UpdateLayout();
+            Require(ColorOf(identityHeader.Foreground) == Palette("Ink") &&
+                FindAll<TextBlock>(identity).Where(t => t.IsVisible).All(t =>
+                    Contrast(ColorOf(t.Foreground), Palette("Surface")) >= 4.5),
+                "Account/session identity did not restore readable light-mode text");
+            tabs.SelectedIndex = 0; window.UpdateLayout();
             Capture(window, Path.Combine(output, "theme-light-restored.png"));
             await Click(vm, button);
             // Save failure must leave connection data intact and clearly describe session-only appearance.

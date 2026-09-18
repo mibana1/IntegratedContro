@@ -138,8 +138,7 @@ public static partial class Program
             await Execute(vm, vm.AcquireCommand);
             vm.AccountManagement.NewAccountName = "operator"; vm.AccountManagement.NewAccountRole = AccountRole.Operator; vm.AccountManagement.ReadNewPassword = () => host.Password;
             await Execute(vm, vm.AccountManagement.CreateAccountCommand);
-            ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("AdminTab");
-            await Click(vm, (Button)window.FindName("OpenMyInfoButton")); window.UpdateLayout();
+            ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("MyInfoTab"); window.UpdateLayout();
             Require(((TabControl)window.FindName("MainTabs")).SelectedItem == window.FindName("MyInfoTab") &&
                 ((TextBlock)window.FindName("MyAccountNameText")).Text == "admin" && vm.MyAccountRole == "관리자" &&
                 vm.MyControlStatus == "사용 중" && vm.MySlotSupport == "지원됨", "My information did not reflect the logged-in account/host");
@@ -148,7 +147,7 @@ public static partial class Program
             Capture(window, Path.Combine(output, "my-info-small.png"));
             await Click(vm, (Button)window.FindName("AccountSettingsButton"));
             Require(((TabControl)window.FindName("MainTabs")).SelectedItem == window.FindName("AdminTab"), "Account management link did not open settings");
-            await Click(vm, (Button)window.FindName("OpenMyInfoButton"));
+            ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("MyInfoTab"); window.UpdateLayout();
             await Click(vm, (Button)window.FindName("HeaderLogout"));
             await Wait(() => window.LoginDialog?.IsVisible == true);
             Require(((TabItem)window.FindName("AdminTab")).Visibility == Visibility.Collapsed &&

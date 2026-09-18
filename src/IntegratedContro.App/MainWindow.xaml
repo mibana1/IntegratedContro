@@ -34,7 +34,7 @@
      <Border Width="40" Height="40" Background="{DynamicResource AccentFill}" CornerRadius="10" Margin="0,0,12,0">
       <TextBlock Text="IC" Foreground="{DynamicResource OnAccent}" FontWeight="Bold" FontSize="17" VerticalAlignment="Center" HorizontalAlignment="Center"/>
      </Border>
-     <StackPanel><TextBlock Text="통합 제어" FontSize="20" FontWeight="Bold"/><TextBlock Text="장비와 공간을 한곳에서" FontSize="12" Foreground="{DynamicResource MutedInk}"/></StackPanel>
+     <TextBlock Text="통합 제어" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
     </StackPanel>
    </DockPanel>
   </Border>
@@ -183,7 +183,7 @@
      <TextBox Grid.Row="7" Text="{Binding HiperwallJobDetails, Mode=OneWay}" IsReadOnly="True" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0"/>
     </Grid></ScrollViewer>
    </TabItem>
-   <TabItem x:Name="AdminTab" Header="관리자 설정" Visibility="{Binding IsAdmin, Converter={StaticResource BoolVisibility}}">
+   <TabItem x:Name="AdminTab" Header="관리자 설정" Visibility="{Binding DataContext.IsAdmin, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}">
     <ScrollViewer x:Name="AdminSettingsScroll" VerticalScrollBarVisibility="Auto"><Grid Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
      <Border Style="{StaticResource Card}" DataContext="{Binding DeviceSettings}"><StackPanel>
       <Expander x:Name="RoleManagementExpander" Header="역할 관리 · 장비 교체" IsExpanded="True" Margin="0,0,0,12">
@@ -312,7 +312,7 @@
       <TextBlock Text="{Binding ConnectionSummary}" TextWrapping="Wrap" Margin="0,6,0,16"/>
       <TextBlock Text="저장 슬롯 지원" FontWeight="SemiBold"/>
       <TextBlock Text="{Binding MySlotSupport}" TextWrapping="Wrap" Margin="0,6,0,16"/>
-      <Expander Header="계정 · 세션 식별 정보">
+      <Expander x:Name="AccountIdentityExpander" Header="계정 · 세션 식별 정보">
        <StackPanel Margin="0,8,0,0">
         <TextBlock Text="계정 ID" FontWeight="SemiBold"/><TextBlock Text="{Binding MyAccountId}" TextWrapping="Wrap" Margin="0,4,0,12"/>
         <TextBlock Text="PC ID" FontWeight="SemiBold"/><TextBlock Text="{Binding MyPcId}" TextWrapping="Wrap" Margin="0,4,0,12"/>
@@ -326,7 +326,6 @@
   <Border Grid.Row="2" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="18,10"><StackPanel>
    <DockPanel>
     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-     <TextBlock Text="{Binding DeviceSettings.DeviceModeSummary}" FontSize="12" Foreground="{DynamicResource Accent}" Margin="0,0,16,0"/>
      <TextBlock Text="{Binding ConnectionSummary}" FontSize="12" Foreground="{DynamicResource MutedInk}"/>
     </StackPanel>
     <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,18,0" AutomationProperties.AutomationId="StatusMessage"/>
@@ -339,8 +338,7 @@
     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
      <Button Content="사용 시작" Command="{Binding AcquireCommand}" Style="{StaticResource Primary}" Padding="12,5" Margin="0,0,8,0" AutomationProperties.AutomationId="AcquireButton"/>
      <Button Content="사용 종료 · 작업 유지" Command="{Binding ReleaseCommand}" Padding="12,5" Margin="0,0,8,0" AutomationProperties.AutomationId="ReleaseButton"/>
-     <Button Content="새로 고침" Command="{Binding RefreshCommand}" Padding="12,5" Margin="0,0,8,0"/>
-     <Button x:Name="OpenMyInfoButton" Content="내 정보" Click="OpenMyInfo" Padding="12,5" Margin="0"/>
+     <Button Content="새로 고침" Command="{Binding RefreshCommand}" Padding="12,5" Margin="0"/>
     </StackPanel>
    </Grid>
   </StackPanel></Border>

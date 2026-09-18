@@ -223,6 +223,7 @@
  </Style>
 
  <Style x:Key="ExpanderToggle" TargetType="ToggleButton">
+  <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
   <Setter Property="MinHeight" Value="48"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
   <Setter Property="FocusVisualStyle" Value="{StaticResource ControlFocus}"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton">
@@ -235,6 +236,7 @@
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType="Expander">
+  <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
    <StackPanel>
     <ToggleButton Style="{StaticResource ExpanderToggle}" Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
