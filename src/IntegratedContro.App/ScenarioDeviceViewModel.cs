@@ -13,7 +13,7 @@ public sealed partial class ScenarioEditorViewModel
         get => _scenarioTarget;
         set { if (Set(ref _scenarioTarget, value)) RefreshScenarioSettings(reset: true); }
     }
-    public string ScenarioSettingsHint => SelectedScenarioTarget is null ? "역할이 배정된 장비를 선택하세요. 역할은 관리자 설정에서 배정합니다." :
+    public string ScenarioSettingsHint => SelectedScenarioTarget is null ? "등록된 장비를 선택하세요. 신규 장비에는 기본 역할이 자동으로 배정됩니다." :
         "추가할 설정을 체크하세요. ON/OFF 버튼이나 값을 바꾸면 자동 선택됩니다. 위에서부터 각각 한 단계로 추가합니다.";
     private void RefreshScenarioTargets(StateView state)
     {

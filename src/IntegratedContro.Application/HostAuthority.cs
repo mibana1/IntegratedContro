@@ -32,6 +32,7 @@ internal sealed partial class HostAuthority
         _store = store; _passwords = passwords; _time = time ?? TimeProvider.System;
         _heartbeatTimeout = TimeSpan.FromSeconds(heartbeatTimeoutSeconds);
         _state = store.Load();
+        DeviceConfigurationStorage.Materialize(_state);
         Require(_state.Initialized && _state.Accounts.Any(a => a.Role == AccountRole.Administrator),
             "setup_required", "로컬 최초 설정을 완료하세요.", 503);
     }

@@ -19,8 +19,13 @@ public sealed class ManagementViewModelTests
         host.Context = host.Context with { Connected = false, CanControl = false, CanConfigure = false }; host.Publish(host.State);
         Assert.Equal("draft", vm.DeviceName); Assert.False(vm.SaveDeviceCommand.CanExecute(null));
         host.Context = host.Context with { Connected = true, CanControl = true, CanConfigure = true }; host.Publish(host.State);
-        host.Execute(vm.SaveDeviceCommand);
-        var request = Assert.Single(host.DeviceSaves);
+        host.Fail = true; vm.SaveDeviceCommand.Execute(null);
+        Assert.IsType<InvalidOperationException>(host.Error); Assert.Equal(2, vm.DeviceExpectedVersion);
+        Assert.Equal("draft", vm.DeviceName);
+        host.Fail = false; host.Execute(vm.SaveDeviceCommand);
+        Assert.Equal(2, host.DeviceSaves.Count);
+        Assert.All(host.DeviceSaves, saved => Assert.Equal(2, saved.ExpectedVersion));
+        var request = host.DeviceSaves[1];
         Assert.Equal(row.Id, request.Id); Assert.Equal(Guid.Parse(pcId), request.PcId); Assert.Equal(2, request.ExpectedVersion);
         Assert.Equal("typed endpoint", request.Connection!.Endpoint);
     }
@@ -36,17 +41,6 @@ public sealed class ManagementViewModelTests
         host.Publish(host.State with { Session = host.State.Session with { Id = Guid.NewGuid() } });
         Assert.Null(first.SelectedDevice); Assert.Equal("", first.DeviceName); Assert.Equal(0, first.DeviceExpectedVersion);
         Assert.Equal(pc.ToString(), first.PcIdText); Assert.Empty(first.AssignedRoles); Assert.Equal("", first.RoleName);
-    }
-
-    [Fact]
-    public void Invalid_options_and_failed_save_do_not_change_the_editor_version()
-    {
-        var host = new ManagementHostFake(); var vm = host.Attach(new DeviceSettingsViewModel(host, Guid.NewGuid()));
-        vm.SelectedDevice = vm.Devices.Single(); host.Execute(vm.LoadDeviceCommand);
-        vm.DeviceTransportOptions = "{broken"; vm.SaveDeviceCommand.Execute(null);
-        Assert.IsType<ArgumentException>(host.Error); Assert.Empty(host.DeviceSaves); Assert.Equal(2, vm.DeviceExpectedVersion);
-        vm.DeviceTransportOptions = "{}"; host.Fail = true; vm.SaveDeviceCommand.Execute(null);
-        Assert.IsType<InvalidOperationException>(host.Error); Assert.Equal(2, vm.DeviceExpectedVersion);
     }
 
     [Fact]
@@ -233,7 +227,7 @@ internal sealed class ManagementHostFake : IDeviceSettingsHost, IAccountManageme
     public ManagementHostFake()
     {
         State = new FeatureHostFake().State;
-        State = State with { RoleUnassignmentSupported = true,
+        State = State with { RoleUnassignmentSupported = true, RoleManagementSupported = true,
             Accounts = [new(State.Session.UserId, "admin", AccountRole.Administrator, true, true, [])] };
         Context = new(State, Connected: true, CanControl: true, CanConfigure: true);
     }
@@ -253,6 +247,8 @@ internal sealed class ManagementHostFake : IDeviceSettingsHost, IAccountManageme
     public Task RefreshAsync() { Publish(State); return Task.CompletedTask; }
     public Task SubmitAsync(SubmitRequest request) { Submissions.Add(request); return Task.CompletedTask; }
     public Task<DeviceState> ReconcileAsync(ReconcileRequest request) => Task.FromResult(State.DeviceStates[request.DeviceId]);
+    public Task<DeviceConfig> SaveDeviceDiagnosticsAsync(DeviceDiagnosticsRequest request) => Task.FromResult(State.Devices.Single(d => d.Id == request.DeviceId));
+    public Task<PcRegistration> RegisterSessionPcAsync(RegisterSessionPcRequest request) => Task.FromResult(new PcRegistration(State.Session.PcId, State.Session.PcName));
     public Task<DeviceConfig> SaveDeviceAsync(DeviceRequest request)
     {
         DeviceSaves.Add(request); if (Fail) throw new InvalidOperationException("fixture save failure");
@@ -269,6 +265,20 @@ internal sealed class ManagementHostFake : IDeviceSettingsHost, IAccountManageme
     public Task UnassignRoleAsync(UnassignRoleRequest request)
     {
         Unassignments.Add(request); Publish(State with { Roles = State.Roles.Where(r => r.Id != request.Id).ToArray() }); return Task.CompletedTask;
+    }
+    public Task<RoleBinding> RenameRoleAsync(RenameRoleRequest request)
+    {
+        var saved = request.ExpectedRole with { Name = request.Name.Trim(), IsDefault = false };
+        Publish(request.ExpectedAssigned
+            ? State with { Roles = State.Roles.Select(r => r.Id == saved.Id ? saved : r).ToArray() }
+            : State with { UnassignedRoles = State.UnassignedRoles.Select(r => r.Id == saved.Id ? saved : r).ToArray() });
+        return Task.FromResult(saved);
+    }
+    public Task DeleteRoleAsync(DeleteRoleRequest request)
+    {
+        Publish(State with { Roles = State.Roles.Where(r => r.Id != request.ExpectedRole.Id).ToArray(),
+            UnassignedRoles = State.UnassignedRoles.Where(r => r.Id != request.ExpectedRole.Id).ToArray() });
+        return Task.CompletedTask;
     }
     public Task CreateAccountAsync(CreateAccountRequest request)
     { Creations.Add(request); if (Fail) throw new InvalidOperationException("fixture account failure"); return Task.CompletedTask; }

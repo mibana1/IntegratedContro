@@ -7,18 +7,19 @@ public sealed class RoleAssignmentRow(RoleBinding binding, AsyncCommand unassign
 {
     public RoleBinding Binding { get; } = binding;
     public string Id => Binding.Id;
+    public string Label { get; set; } = "";
     public AsyncCommand UnassignCommand { get; } = unassignCommand;
     public string Hint => hint();
-    public void Refresh() { Changed(nameof(Hint)); UnassignCommand.Raise(); }
+    public void Refresh() { Changed(nameof(Hint)); Changed(nameof(Label)); UnassignCommand.Raise(); }
 }
 
 public sealed partial class DeviceSettingsViewModel
 {
     public ObservableCollection<RoleAssignmentRow> AssignedRoles { get; } = [];
     private bool _roleNameEdited;
-    public string AssignedRoleSummary => SelectedDevice is null ? "등록된 역할 ID: 장비를 선택하세요." :
-        "등록된 역할 ID: " + (Roles.Any(r => r.DeviceId == SelectedDevice.Id)
-            ? string.Join(", ", Roles.Where(r => r.DeviceId == SelectedDevice.Id).Select(r => r.Id)) : "없음");
+    public string AssignedRoleSummary => SelectedDevice is null ? "등록된 역할: 장비를 선택하세요." :
+        "등록된 역할: " + (Roles.Any(r => r.DeviceId == SelectedDevice.Id)
+            ? string.Join(", ", Roles.Where(r => r.DeviceId == SelectedDevice.Id).Select(r => RoleChoice.From(r, State?.Devices ?? []).Label)) : "없음");
     private void LoadAssignedRoleName()
     {
         _roleNameEdited = false;
@@ -55,13 +56,14 @@ public sealed partial class DeviceSettingsViewModel
                     CanConfigure && State?.RoleUnassignmentSupported == true &&
                     SelectedDevice?.Id == role.DeviceId && Roles.Contains(role) && !RoleInUse(role), register: false),
                     () => RoleUnassignmentHint(role)));
-        foreach (var row in AssignedRoles) row.Refresh();
+        foreach (var row in AssignedRoles) { row.Label = RoleChoice.From(row.Binding, State?.Devices ?? []).Label; row.Refresh(); }
     }
     private async Task UnassignRole(RoleBinding role)
     {
         await _host.UnassignRoleAsync(new UnassignRoleRequest(Generation, role.Id, role.DeviceId, role.Version));
         await _host.RefreshAsync();
         if (SelectedDevice?.Id == role.DeviceId && RoleName.Trim() == role.Id) LoadAssignedRoleName();
-        ReportStatus($"역할 배정 해제 완료: {role.Id}. 장비와 저장된 시나리오 정의는 유지됩니다.");
+        if (ManagedRole?.Id == role.Id) LoadRoleEditor();
+        ReportStatus("역할 배정을 해제했습니다. 장비와 저장된 시나리오 정의는 유지됩니다.");
     }
 }

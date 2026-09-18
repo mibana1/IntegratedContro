@@ -44,10 +44,27 @@ public sealed class DeviceDriverRegistry
             "invalid_connection", "연결 주소·장비 주소를 확인하세요.", 400);
         ValidateOptions(device.Connection.Options);
         ValidateOptions(device.DriverOptions);
+
+        Require(!model.RequiresTargetPc || device.PcId != Guid.Empty, "target_required", "대상 PC를 선택하세요.", 400);
+        Require(!model.ExecutionPcTransportIds.Contains(device.Connection.TransportId) || device.Connection.ExecutionPcId is not null,
+            "execution_pc_required", "통신 실행 PC를 선택하세요.", 400);
+        foreach (var field in model.Settings.Where(f => f.TransportId is null || f.TransportId == device.Connection.TransportId))
+        {
+            var value = field.Target switch
+            {
+                DeviceSettingTarget.Endpoint => device.Connection.Endpoint,
+                DeviceSettingTarget.Address => device.Connection.Address,
+                DeviceSettingTarget.ConnectionOption => device.Connection.Options.GetValueOrDefault(field.Key, ""),
+                _ => device.DriverOptions.GetValueOrDefault(field.Key, "")
+            };
+            Require(value is not null && field.Accepts(value), "invalid_setting", $"{field.Label}: 필수값·허용 범위를 확인하세요.", 400);
+        }
         var driver = _drivers[device.DriverId];
-        driver.ValidateConfiguration(JsonDefaults.Copy(device));
+        driver.ValidateConfiguration(ForDriver(device));
         return driver;
     }
+
+    public DeviceConfig ForDriver(DeviceConfig device) => JsonDefaults.Copy(Model(device.ModelId).IsSimulation ? device : device with { Fault = VirtualFault.None, LatencyMs = 0 });
 
     private static void ValidateOptions(Dictionary<string, string>? options) => Require(options is not null &&
         options.Count <= 32 && options.All(p => !string.IsNullOrWhiteSpace(p.Key) && p.Key.Length <= 80 &&
@@ -57,5 +74,7 @@ public sealed class DeviceDriverRegistry
     public static bool SameDefinition(DeviceModel left, DeviceModel right) => left.Id == right.Id &&
         left.DriverId == right.DriverId && left.DriverVersion == right.DriverVersion && left.IsSimulation == right.IsSimulation &&
         left.Capabilities.Length == right.Capabilities.Length && left.Capabilities.All(right.Capabilities.Contains) &&
-        left.TransportIds.Order().SequenceEqual(right.TransportIds.Order());
+        left.TransportIds.Order().SequenceEqual(right.TransportIds.Order()) && left.RequiresTargetPc == right.RequiresTargetPc &&
+        left.ExecutionPcTransportIds.Order().SequenceEqual(right.ExecutionPcTransportIds.Order()) &&
+        System.Text.Json.JsonSerializer.Serialize(left.Settings, JsonDefaults.Options) == System.Text.Json.JsonSerializer.Serialize(right.Settings, JsonDefaults.Options);
 }

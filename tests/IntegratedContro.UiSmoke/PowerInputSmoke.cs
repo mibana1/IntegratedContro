@@ -37,7 +37,7 @@ public static partial class Program
             var tabs = (TabControl)window.FindName("MainTabs");
             tabs.SelectedIndex = 0; vm.DeviceViewIndex = 1; window.UpdateLayout();
             var rolePicker = (ComboBox)window.FindName("ControlRolePicker");
-            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.Roles.Single(r => r.Id == "light"));
+            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.RoleChoices.Single(r => r.Id == "light"));
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             var power = (PowerButtons)window.FindName("ManualPowerButtons");
             var numeric = (TextBox)window.FindName("ManualNumericValue");
@@ -62,7 +62,7 @@ public static partial class Program
             capability.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.Capabilities.Single(c => c.Operation == DeviceOperation.Power));
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Click(vm, on); await Execute(vm, vm.DeviceControl.SubmitCommand); await Wait(() => vm.JobManagement.Jobs.All(j => !j.Job.Active));
-            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.Roles.Single(r => r.Id == "projector"));
+            rolePicker.SetCurrentValue(ComboBox.SelectedItemProperty, vm.DeviceControl.RoleChoices.Single(r => r.Id == "projector"));
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Require(power.IsVisible && !numeric.IsVisible, "Another power-capable model retained numeric input");
             await Click(vm, on); await Execute(vm, vm.RefreshCommand);

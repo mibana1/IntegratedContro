@@ -8,6 +8,10 @@ public sealed partial class ScenarioEditorViewModel : FeatureViewModel
     private readonly IScenarioHost _host;
     public ObservableCollection<ScenarioDefinition> Scenarios { get; } = [];
     public ObservableCollection<ScenarioStep> DraftSteps { get; } = [];
+    public IReadOnlyDictionary<string, string> TargetNames => (State?.Roles ?? []).ToDictionary(r => r.Id,
+        r => RoleChoice.From(r, State?.Devices ?? []).Label)
+        .Concat((State?.SavedHiperwallLayouts ?? []).Select(l => new KeyValuePair<string, string>($"layout:{l.Id}", l.Name)))
+        .ToDictionary(p => p.Key, p => p.Value);
     public IEnumerable<FailurePolicy> FailurePolicies => Enum.GetValues<FailurePolicy>();
     public FailurePolicy DraftFailurePolicy { get; set; }
     private string _scenarioName = "";
@@ -64,7 +68,7 @@ public sealed partial class ScenarioEditorViewModel : FeatureViewModel
                 ScenarioTargets.Clear(); SelectedScenarioTarget = null;
             }
         }
-        NotifyScenarioEditor();
+        Changed(nameof(TargetNames)); NotifyScenarioEditor();
     }
 
     private Task RunScenario()

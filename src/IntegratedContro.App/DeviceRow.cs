@@ -10,13 +10,16 @@ public sealed class DeviceRow(DeviceConfig config, string state, string desired,
     public string Connection { get; private set; } = connection;
     public string Result { get; private set; } = result;
     public string Restriction { get; private set; } = restriction;
-    public string Label => $"{Name} / {PcName} · {Id.ToString()[..8]}";
+    public string Label => $"{Name}" + (Config.Location.Length > 0 ? $" · {Config.Location}" : "") +
+        (Config.Connection.Endpoint.Length > 0 ? $" · {Config.Connection.Endpoint}" : "");
+    public bool IsSimulation { get; set; }
+    public string Diagnostics => IsSimulation && Config.Fault != VirtualFault.None ? $"장애 주입 중: {Config.Fault} · 지연 {Config.LatencyMs}ms" : "";
     public void Update(DeviceRow current)
     {
-        Config = current.Config; State = current.State; Desired = current.Desired;
+        Config = current.Config; IsSimulation = current.IsSimulation; State = current.State; Desired = current.Desired;
         Connection = current.Connection; Result = current.Result; Restriction = current.Restriction;
         foreach (var name in new[] { nameof(Config), nameof(Name), nameof(PcName), nameof(Label),
-            nameof(State), nameof(Desired), nameof(Connection), nameof(Result), nameof(Restriction) }) Changed(name);
+            nameof(Diagnostics), nameof(State), nameof(Desired), nameof(Connection), nameof(Result), nameof(Restriction) }) Changed(name);
     }
     public Guid Id => Config.Id;
     public string Name => Config.Name;

@@ -41,7 +41,7 @@ public static partial class Program
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("ScenarioTab"); window.UpdateLayout();
             var kind = (ComboBox)window.FindName("ScenarioKindPicker"); var add = (Button)window.FindName("AddScenarioStep");
             vm.ScenarioEditor.ScenarioName = "조명 → 조건 확인 → 배치 표시 → 밝기";
-            SetScenarioValue(vm, vm.DeviceControl.Roles.Single().Id, DeviceOperation.Power, 1); vm.ScenarioEditor.DelayMs = 0; vm.ScenarioEditor.TimeoutMs = 10000;
+            SetScenarioValue(vm, vm.DeviceControl.Roles.Single(r => !r.IsDefault).Id, DeviceOperation.Power, 1); vm.ScenarioEditor.DelayMs = 0; vm.ScenarioEditor.TimeoutMs = 10000;
             await Click(vm, add);
             kind.SetCurrentValue(ComboBox.SelectedValueProperty, ScenarioStepKind.WaitUntil); window.UpdateLayout();
             Require(vm.ScenarioEditor.DraftStepKind == ScenarioStepKind.WaitUntil && vm.ScenarioEditor.IsDeviceScenarioStep, "Wait kind binding failed");
@@ -52,7 +52,7 @@ public static partial class Program
             Require(vm.ScenarioEditor.SelectedScenarioLayout is not null && layouts.IsVisible, "Saved layout binding missing");
             await Click(vm, add);
             kind.SetCurrentValue(ComboBox.SelectedValueProperty, ScenarioStepKind.DeviceCommand);
-            SetScenarioValue(vm, vm.DeviceControl.Roles.Single().Id, DeviceOperation.Brightness, 60);
+            SetScenarioValue(vm, vm.DeviceControl.Roles.Single(r => !r.IsDefault).Id, DeviceOperation.Brightness, 60);
             await Click(vm, add);
             Require(vm.ScenarioEditor.DraftSteps.Select(s => s.Kind).SequenceEqual(new[] { ScenarioStepKind.DeviceCommand,
                 ScenarioStepKind.WaitUntil, ScenarioStepKind.DisplayLayout, ScenarioStepKind.DeviceCommand }), "Mixed draft order lost");
@@ -76,7 +76,7 @@ public static partial class Program
                 vm.JobManagement.HiperwallJobs.Any(j => j.Display?.Outstanding == true), "Definition deletion removed completed history or scheduled display cleanup");
 
             await Execute(vm, vm.ScenarioEditor.NewScenarioCommand); vm.ScenarioEditor.ScenarioName = "교대 중 조건 대기"; vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.WaitUntil;
-            SetScenarioValue(vm, vm.DeviceControl.Roles.Single().Id, DeviceOperation.Power, 0); vm.ScenarioEditor.TimeoutMs = 60000;
+            SetScenarioValue(vm, vm.DeviceControl.Roles.Single(r => !r.IsDefault).Id, DeviceOperation.Power, 0); vm.ScenarioEditor.TimeoutMs = 60000;
             await Execute(vm, vm.ScenarioEditor.AddStepCommand); vm.ScenarioEditor.DraftStepKind = ScenarioStepKind.DisplayLayout;
             await Execute(vm, vm.ScenarioEditor.AddStepCommand); await Execute(vm, vm.ScenarioEditor.SaveScenarioCommand);
             vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single(s => s.Name == "교대 중 조건 대기"); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);

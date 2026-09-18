@@ -8,7 +8,7 @@
 
 | 기능 | 주입 계약 | 변경 가능한 상태 | 다른 기능에서 필요한 조회 |
 |---|---|---|---|
-| 장비 | `IDeviceStateAccess` | 장비 설정·상태, 역할·삭제 버전, 조명 배치, 불확실 장비 | 작업, 시나리오 정의, 계정 권한 복사본 |
+| 장비 | `IDeviceStateAccess` | 장비·공유 연결·PC 등록·상태, 역할·미배정 역할·삭제 버전, 조명 배치, 불확실 장비 | 작업, 시나리오 정의, 계정 권한 복사본 |
 | 시나리오·일반 작업 | `IScenarioStateAccess` | 시나리오 정의·삭제 버전, 접수 작업·실행 결과 | 장비 상태, 불확실 장비, 조명 배치, 현재 요청자 권한 복사본 |
 | 영상벽 | `IHiperwallStateAccess` | Hiperwall 설정·편집·표시·저장 배치·슬롯 | 부모 작업, 시나리오 정의, 원 요청자 권한·세션 차단 여부 |
 | 카메라 | `ICameraStateAccess` | MediaMTX 설정, 카메라, 경로 정리·보호 참조 삭제 큐 | 현장 ID와 인증·사용권·관리자 판정 |
@@ -61,8 +61,10 @@
 ## 검증
 
 `FeatureStateBoundaryTests`는 기능별 변경 범위, 중첩 조회 객체와 장비 해석 결과의 격리,
-문맥의 타입·호스트·수명·버전 경계, 계정 권한 복사, 여러 기능의 단일 커밋·저장 실패 취소,
+문맥의 호스트·수명·버전 경계, 계정 권한 복사, 여러 기능의 단일 커밋·저장 실패 취소,
 재시작 복구의 원자성, 영상벽 복구 검토 유효성을 검사한다.
+`ServiceSeparationTests`는 카메라 작업과 진행 중 장비 작업의 간섭 여부, 저장 실패 후 전송 차단을 검증한다.
+내부 필드 목록이나 메서드 모양만 고정하는 테스트는 두지 않는다.
 
 ```powershell
 dotnet test tests/IntegratedContro.Tests/IntegratedContro.Tests.csproj --filter "FullyQualifiedName~FeatureStateBoundaryTests|FullyQualifiedName~ServiceSeparationTests"
@@ -71,4 +73,4 @@ dotnet test tests/IntegratedContro.Tests/IntegratedContro.Tests.csproj --filter 
 ```
 
 통신 중 설정 변경·취소·사용권 반납, 저장 실패 후 전송 차단, 재시작·교대와 화면 바인딩 회귀도 전체 검증에 포함한다.
-공개 HTTP 요청·응답과 SQLite 상태 스키마는 변경하지 않는다. 격리된 로컬 호스트·가짜 장비 검증이며 실장비 검수와 구분한다.
+기존 HTTP 계약을 보존하며 장비 등록에 공유 연결·PC 목록·가상 진단 계약을 추가한다. SQLite 테이블 형식은 유지하고 연결을 정규화한 payload로 이관한다. [장비 설정](DEVICE_CONFIGURATION.md)을 따른다. 격리된 로컬 호스트·가짜 장비 검증이며 실장비 검수와 구분한다.

@@ -12,7 +12,7 @@
 | 명령·결과 계약 | Application의 `DeviceCommand`, `DriverResult`/`DriverStatus` | 대상·기능·값·단위와 장비 결과만 전달. 단계 상태 변환은 `DeviceExecutionService`가 담당 |
 | 장비 프로토콜 | `IDeviceDriver`, `VirtualDeviceDriver` | 모델 선언, 설정 검사, 기능 명령 변환, 응답 해석, 장비 제약 |
 | 입출력 | `IVirtualDeviceTransport`, `SqliteVirtualDeviceTransport` | 가상 값 저장·조회. 드라이버가 SQLite를 직접 호출하지 않음 |
-| 현장 설정 | `DeviceConfig`, `DeviceConnection`, 관리자 장비 설정 화면 | 드라이버, 모델, 연결 ID, 통신 방식, 연결 주소, 장비 주소·채널, 통신/드라이버 옵션 |
+| 현장 설정 | DeviceConfig, SharedDeviceConnection, DeviceSettingDefinition | 공유 통신과 장비별 주소·채널 분리, 드라이버가 선언한 입력·기본값·범위 |
 
 ## 장비 교체
 
@@ -25,13 +25,13 @@
 접수 시 모델 기능과 드라이버 버전도 고정하며, 전송 직전에 다시 비교한다. 호스트를 재시작하면서 드라이버 버전이나 기능이 바뀌어도 이전 명령을 그대로 실행하지 않는다.
 전송 중 교체한 장비의 늦은 결과는 원래 작업에 남기고 새 대상 상태에 적용하지 않는다.
 
-기존 가상 장비 JSON은 `virtual` 드라이버와 통신 방식으로 읽는다. 기존 연결 ID, 장비 ID, 역할, 시나리오를 유지하며 별도 DB 이동은 필요하지 않다.
+기존 장비는 공유 연결 목록으로 이관한다. 장비·PC 식별 정보·상태·역할·시나리오는 보존한다. 연결 ID가 같지만 설정이 충돌하면 기존 ID를 진단 정보로 보관하고 연결을 분리한다. [장비 설정과 이관 안내](DEVICE_CONFIGURATION.md)를 따른다.
 새 설정을 저장한 뒤 구버전 호스트로 되돌리는 동작은 지원하지 않는다. App과 ControlHost를 함께 갱신한다.
 
 ## 새 제조사 드라이버 추가
 
 1. Infrastructure에 `IDeviceDriver` 구현을 추가한다. `Id`, `Version`, 모델별 기능과 `TransportIds`, `IsSimulation`을 선언한다. 프로토콜이나 실행 의미가 바뀌면 드라이버 버전을 올린다.
-2. `ValidateConfiguration`에서 해당 제조사가 허용하는 주소·채널·옵션·조합만 허용한다. 이 검사는 입출력 없이 실행해야 한다. 임의 설정을 장비 명령으로 그대로 실행하지 않는다.
+2. DeviceModel.Settings로 필요한 항목·기본값·범위·고정값을 선언한다. PC 장치는 RequiresTargetPc, 특정 PC에서 실행할 통신은 ExecutionPcTransportIds를 선언한다. ValidateConfiguration에서 해당 제조사가 허용하는 주소·채널·옵션·조합만 허용한다. 이 검사는 입출력 없이 실행해야 한다. 임의 설정을 장비 명령으로 그대로 실행하지 않는다.
 3. 드라이버에는 생성자로 전용 통신 구현을 주입한다. Serial/TCP의 스트림·프레이밍과 HTTP 요청을 하나의 가상 바이트 API로 합치지 않는다. 연결 수명·공유 연결 직렬화·제한시간·취소는 해당 통신 구현에서 책임진다. 현재 호스트는 장비 쓰기 전체를 순차 실행하며 자동 재전송하지 않는다.
 4. `ExecuteAsync(DeviceCommand, CancellationToken)`에서 대상·기능·값·단위를 해당 프로토콜로 변환하고 `DriverResult`를 반환한다. 예열·냉각 등 장비 제약도 드라이버가 처리한다. 조회할 수 없는 기능에는 `CanRead = false`를 선언한다.
 5. ControlHost의 `DeviceDriverRegistry` 생성 지점에 드라이버·통신 구현을 등록한다. 동적 DLL 로딩이나 플러그인 검색은 없다.

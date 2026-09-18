@@ -27,9 +27,13 @@ public sealed record DeviceModel(string Id, string Name, Capability[] Capabiliti
     public string DriverVersion { get; init; } = "1";
     public string[] TransportIds { get; init; } = ["virtual"];
     public bool IsSimulation { get; init; } = true;
+    public bool RequiresTargetPc { get; init; }
+    public string[] ExecutionPcTransportIds { get; init; } = [];
+    public DeviceSettingDefinition[] Settings { get; init; } = [];
     public bool Equals(DeviceModel? other) => other is not null && Id == other.Id && Name == other.Name &&
         Category == other.Category && DriverId == other.DriverId && DriverVersion == other.DriverVersion && IsSimulation == other.IsSimulation &&
-        Capabilities.SequenceEqual(other.Capabilities) && TransportIds.SequenceEqual(other.TransportIds);
+        Capabilities.SequenceEqual(other.Capabilities) && TransportIds.SequenceEqual(other.TransportIds) && RequiresTargetPc == other.RequiresTargetPc &&
+        ExecutionPcTransportIds.SequenceEqual(other.ExecutionPcTransportIds) && JsonSerializer.Serialize(Settings, JsonDefaults.Options) == JsonSerializer.Serialize(other.Settings, JsonDefaults.Options);
     public override int GetHashCode() => HashCode.Combine(Id, Name, Category, DriverId, IsSimulation);
 }
 public sealed record LightGroup(Guid Id, string Name, Guid[] DeviceIds);
@@ -45,17 +49,23 @@ public sealed record DeviceConfig(Guid Id, Guid PcId, string PcName, string Name
     public string DriverId { get; init; } = "virtual";
     public DeviceConnection Connection { get; init; } = new();
     public Dictionary<string, string> DriverOptions { get; init; } = [];
+    public string Location { get; init; } = "";
+    public string? LegacyConnectionId { get; init; }
     public bool HasSameExecutionSettings(DeviceConfig other) => Id == other.Id && PcId == other.PcId &&
         ConnectionId == other.ConnectionId && ModelId == other.ModelId && Enabled == other.Enabled &&
         Fault == other.Fault && LatencyMs == other.LatencyMs && DriverId == other.DriverId &&
         Connection.HasSameSettings(other.Connection) && DeviceConnection.SameOptions(DriverOptions, other.DriverOptions);
     public bool Equals(DeviceConfig? other) => other is not null && Version == other.Version &&
-        ExecutionVersion == other.ExecutionVersion && Name == other.Name && PcName == other.PcName && HasSameExecutionSettings(other);
+        ExecutionVersion == other.ExecutionVersion && Name == other.Name && PcName == other.PcName && Location == other.Location && HasSameExecutionSettings(other);
     public override int GetHashCode() => HashCode.Combine(Id, Version, ExecutionVersion, Name, PcName);
     public bool MatchesExecutionTarget(DeviceConfig other) => ExecutionVersion == other.ExecutionVersion &&
         HasSameExecutionSettings(other);
 }
-public sealed record RoleBinding(string Id, Guid DeviceId, int Version);
+public sealed record RoleBinding(string Id, Guid DeviceId, int Version)
+{
+    public string Name { get; init; } = "";
+    public bool IsDefault { get; init; }
+}
 public sealed record StateValue(int Value, DateTimeOffset At, string Evidence = "가상 상태");
 public sealed class DeviceState
 {
@@ -84,7 +94,7 @@ public sealed record StepSnapshot(RoleBinding? Role, DeviceConfig? Target, Devic
     public ScenarioStepKind Kind { get; init; }
     public ScenarioDisplaySnapshot? Display { get; init; }
     public DeviceModel? ModelDefinition { get; init; }
-    [JsonIgnore] public string TargetLabel => Display is { } d ? $"{d.Layout.Name} / {d.Endpoint}" : $"{Target?.Name} ({Target?.PcName})";
+    [JsonIgnore] public string TargetLabel => Display is { } d ? $"{d.Layout.Name} / {d.Endpoint}" : $"{Target?.Name}" + (ModelDefinition?.RequiresTargetPc == true ? $" ({Target?.PcName})" : "");
     [JsonIgnore] public string KindLabel => Kind switch { ScenarioStepKind.WaitUntil => "조건 충족까지 대기", ScenarioStepKind.DisplayLayout => "저장 배치 표시", _ => "장비 명령" };
 }
 public sealed record ExecutionSnapshot(Guid SiteId, string Mode, Guid RequestId, Guid RequestedBy,
@@ -157,6 +167,9 @@ public sealed class HostState
     public List<Guid> FencedSessions { get; set; } = [];
     public List<Account> Accounts { get; set; } = [];
     public List<DeviceConfig> Devices { get; set; } = [];
+    public int DeviceConfigurationVersion { get; set; }
+    public List<SharedDeviceConnection> DeviceConnections { get; set; } = [];
+    public List<PcRegistration> Pcs { get; set; } = [];
     public HiperwallConfiguration? Hiperwall { get; set; }
     public MediaConfiguration? Media { get; set; }
     public List<CameraRegistration> Cameras { get; set; } = [];
@@ -168,6 +181,8 @@ public sealed class HostState
     public LightLayout LightLayout { get; set; } = new(0, []);
     public Dictionary<Guid, DeviceState> DeviceStates { get; set; } = [];
     public List<RoleBinding> Roles { get; set; } = [];
+    public List<RoleBinding> UnassignedRoles { get; set; } = [];
+    public HashSet<string> RemovedRoleIds { get; set; } = [];
     // Keep removed versions so recreating an ID cannot validate an old request again.
     public Dictionary<string, int> DeletedRoleVersions { get; set; } = [];
     public List<HiperwallSlot> HiperwallSlots { get; set; } = [];
@@ -201,10 +216,15 @@ public sealed record StateView(Guid SiteId, string SiteName, long Revision, Leas
     public bool ScenarioExtensionsSupported { get; init; }
     public bool ScenarioDeletionSupported { get; init; }
     public bool RoleUnassignmentSupported { get; init; }
+    public bool RoleManagementSupported { get; init; }
     public SavedHiperwallLayout[] SavedHiperwallLayouts { get; init; } = [];
     public bool LightGroupsSupported { get; init; }
     public bool LightBatchSupported { get; init; }
     public Guid[] ControllableDeviceIds { get; init; } = [];
+    public RoleBinding[] UnassignedRoles { get; init; } = [];
+    public bool DeviceConfigurationSupported { get; init; }
+    public SharedDeviceConnection[] DeviceConnections { get; init; } = [];
+    public PcRegistration[] Pcs { get; init; } = [];
 }
 public sealed record RecoveryReview(Guid ReviewId, long Generation, DateTimeOffset ReviewedAt, Job[] Jobs, Guid[] UncertainDevices)
 {

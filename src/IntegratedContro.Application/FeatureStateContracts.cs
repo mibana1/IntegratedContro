@@ -43,8 +43,12 @@ internal abstract class DeviceStateScope : FeatureStateScope
 {
     private protected DeviceStateScope(StateContext context) : base(context) { }
     public abstract List<DeviceConfig> Devices { get; set; }
+    public abstract List<SharedDeviceConnection> Connections { get; set; }
+    public abstract List<PcRegistration> Pcs { get; set; }
     public abstract Dictionary<Guid, DeviceState> DeviceStates { get; set; }
     public abstract List<RoleBinding> Roles { get; set; }
+    public abstract List<RoleBinding> UnassignedRoles { get; set; }
+    public abstract HashSet<string> RemovedRoleIds { get; set; }
     public abstract Dictionary<string, int> DeletedRoleVersions { get; set; }
     public abstract List<Guid> UncertainDevices { get; set; }
     public abstract LightLayout LightLayout { get; set; }

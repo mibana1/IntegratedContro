@@ -12,13 +12,15 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
         get => _selectedModel;
         set
         {
+            if (Equals(_selectedModel, value)) return;
             var previous = _selectedModel?.Id;
             _selectedModel = value;
             if (value is not null && previous != value.Id && !DeviceTransports.Contains(DeviceTransportId))
                 DeviceTransportId = DeviceTransports.FirstOrDefault() ?? "";
             Changed(nameof(SelectedModel)); Changed(nameof(DeviceDriverId));
             Changed(nameof(DeviceTransports)); Changed(nameof(DeviceIsSimulation));
-            if (previous != value?.Id) Changed(nameof(DeviceTransportId));
+            Changed(nameof(DeviceTransportId));
+            ModelSettingsChanged();
         }
     }
     public string DeviceModeSummary => State is null || State.Devices.Length == 0 ? "등록된 장비 없음" :
@@ -34,7 +36,11 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
         set
         {
             // ComboBox clears SelectedItem while replacing its catalog. Keep the draft selection.
-            if (!string.IsNullOrWhiteSpace(value)) Set(ref _deviceTransportId, value);
+            if (!string.IsNullOrWhiteSpace(value) && _deviceTransportId != value)
+            {
+                if (!_loadingConnection) CaptureFieldDrafts(validate: false);
+                Set(ref _deviceTransportId, value); TransportSettingsChanged();
+            }
         }
     }
     public string DeviceEndpoint { get; set; } = "";
@@ -64,6 +70,7 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
         foreach (var name in new[] { nameof(SelectedModel), nameof(DeviceDriverId), nameof(DeviceTransports),
             nameof(DeviceIsSimulation), nameof(DeviceTransportId), nameof(DeviceEndpoint), nameof(DeviceAddress),
             nameof(DeviceTransportOptions), nameof(DeviceDriverOptions) }) Changed(name);
+        RebuildFields();
     }
     private readonly IDeviceSettingsHost _host;
     private Guid _defaultPcId;
@@ -76,7 +83,7 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
     public DeviceRow? SelectedDevice
     {
         get => _selectedDevice;
-        set { var previous = _selectedDevice?.Id; Set(ref _selectedDevice, value); if (previous != value?.Id) LoadAssignedRoleName(); NotifyRoleAssignment(); }
+        set { var previous = _selectedDevice?.Id; Set(ref _selectedDevice, value); if (previous != value?.Id) LoadAssignedRoleName(); NotifyRoleAssignment(); Changed(nameof(DiagnosticsSummary)); RefreshDiagnostics(); }
     }
     public AsyncCommand ReconcileCommand { get; }
     public AsyncCommand SaveDeviceCommand { get; }
@@ -89,7 +96,9 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
         ReconcileCommand = Command(async () => { await _host.ReconcileAsync(new ReconcileRequest(Generation, SelectedDevice!.Id)); ReportStatus("상태 대조 완료. 과거 불확실 명령의 이력은 그대로 유지됩니다."); }, () => CanControl && SelectedDevice is not null);
         SaveDeviceCommand = Command(SaveDevice, () => CanConfigure);
         LoadDeviceCommand = Command(() => { LoadDevice(); return Task.CompletedTask; }, () => SelectedDevice is not null);
-        NewDeviceCommand = Command(() => { DeviceIdText = Guid.NewGuid().ToString(); DeviceExpectedVersion = 0; DeviceName = ""; NotifyEditors(); return Task.CompletedTask; });
+        NewDeviceCommand = Command(() => { NewDevice(); return Task.CompletedTask; });
+        InitializeConfiguration();
+        InitializeRoleManagement();
         SaveRoleCommand = Command(async () =>
         {
             var sessionId = State?.Session.Id;
@@ -101,7 +110,7 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
             if (State?.Session.Id != sessionId || Context.Closing) return;
             RoleAssigned?.Invoke(saved.Id);
             _roleNameEdited = false; Set(ref _roleName, saved.Id, nameof(RoleName));
-            ReportStatus($"역할 배정 완료: {saved.Id} → {target.Name} / {target.PcName}. 장비 제어에서 기능·값을 선택해 명령을 접수하세요.");
+            ReportStatus($"역할 배정 완료: {target.Name}. 장비 제어에서 기능·값을 선택해 명령을 접수하세요.");
         }, () => CanConfigure && SelectedDevice is not null && !string.IsNullOrWhiteSpace(RoleName));
     }
     public void SetDefaultPc(Guid pcId)
@@ -113,7 +122,7 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
         if (previous.State?.Session.Id != State?.Session.Id)
         {
             SelectedDevice = null; _selectedModel = null;
-            DeviceIdText = Guid.NewGuid().ToString(); DeviceExpectedVersion = 0; DeviceName = "";
+            DeviceIdText = Guid.NewGuid().ToString(); DeviceExpectedVersion = 0; DeviceName = ""; _editingDeviceId = Guid.Parse(DeviceIdText); ResetConfiguration();
             PcIdText = _defaultPcId.ToString(); PcName = Environment.MachineName; ConnectionId = "";
             DeviceEnabled = true; DeviceFault = VirtualFault.None; DeviceLatencyMs = 50;
             DeviceTransportId = "virtual"; DeviceEndpoint = ""; DeviceAddress = "";
@@ -137,7 +146,8 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
                     var reserved = state.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(x => x.Target?.Id == d.Id));
                     var row = new DeviceRow(d, string.Join(" / ", value.Values.Select(x => $"{x.Key}={x.Value.Value} ({x.Value.Evidence} · {x.Value.At.ToLocalTime():HH:mm:ss})")),
                         string.Join(" / ", value.Desired.Select(x => $"{x.Key}={x.Value}")), value.Connection, value.LastResult,
-                        state.UncertainDevices.Contains(d.Id) ? "대조 필요" : reserved ? "시나리오 예약" : "사용 가능");
+                        state.UncertainDevices.Contains(d.Id) ? "대조 필요" : reserved ? "시나리오 예약" : "사용 가능")
+                        { IsSimulation = state.Models.Any(m => m.Id == d.ModelId && m.IsSimulation) };
                     var existing = Devices.SingleOrDefault(x => x.Id == d.Id);
                     if (existing is null) Devices.Add(row); else existing.Update(row);
                 }
@@ -146,7 +156,8 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
                 Replace(Models, state.Models); SelectedModel = Models.FirstOrDefault(x => x.Id == modelId) ?? Models.FirstOrDefault();
                 RefreshRoleAssignments();
             }
-            Changed(nameof(SelectedDevice)); Changed(nameof(DeviceModeSummary));
+            RefreshConfigurationCatalog();
+            Changed(nameof(SelectedDevice)); Changed(nameof(DeviceModeSummary)); Changed(nameof(DiagnosticsSummary));
         }
         NotifyRoleAssignment();
     }
@@ -158,7 +169,7 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
     private void NotifyRoleAssignment()
     {
         Changed(nameof(RoleTargetSummary)); Changed(nameof(RoleAssignmentHint));
-        RefreshAssignedRoleRows(); RefreshCommands();
+        RefreshAssignedRoleRows(); RefreshRoleManagement(); RefreshCommands();
     }
     public string DeviceIdText { get; set; } = Guid.NewGuid().ToString();
     public string PcIdText { get; set; } = "";
@@ -171,32 +182,40 @@ public sealed partial class DeviceSettingsViewModel : FeatureViewModel
     public int DeviceExpectedVersion { get; private set; }
     private string _roleName = "";
     public string RoleName { get => _roleName; set { if (Set(ref _roleName, value)) { _roleNameEdited = true; NotifyRoleAssignment(); } } }
-    public string RoleTargetSummary => SelectedDevice is null ? "배정 대상: 장비를 선택하세요." :
-        $"배정 대상: {SelectedDevice.Name} / {SelectedDevice.PcName}\n장비 ID: {SelectedDevice.Id}";
-    public string RoleAssignmentHint => !IsLoggedIn ? "호스트에 접속한 뒤 관리자 계정으로 사용 시작을 누르세요." :
-        !IsAdmin ? "역할 배정은 관리자만 할 수 있습니다." : !CanControl ? "역할 배정에는 사용권이 필요합니다. 사용 시작을 누르세요." :
-        SelectedDevice is null ? "목록에서 배정할 장비를 먼저 선택하세요." : string.IsNullOrWhiteSpace(RoleName) ?
-        "역할 ID를 입력하세요. 예: room.light" : "배정 후 장비 제어의 역할로 조작에서 기능과 값을 선택하세요. 동일 역할 ID는 선택 장비로 재배정됩니다.";
+    public string RoleTargetSummary => SelectedDevice is null ? "배정 대상: 장비를 선택하세요." : $"배정 대상: {SelectedDevice.Name}";
+    public string RoleAssignmentHint => !CanConfigure ? "역할 변경에는 관리자 사용권이 필요합니다." :
+        SelectedDevice is null ? "배정할 장비를 선택하세요." : "기존 역할을 선택해 이어받을 수 있습니다. 역할 하나는 장비 한 대를 가리킵니다. 일괄 조작은 그룹을 사용하세요.";
     private async Task SaveDevice()
     {
         if (SelectedModel is null) throw new ArgumentException("장비 모델을 선택하세요.");
         var sessionId = State?.Session.Id;
-        var device = await _host.SaveDeviceAsync(new DeviceRequest(Generation, Guid.Parse(DeviceIdText),
-            Guid.Parse(PcIdText), PcName, DeviceName, ConnectionId, SelectedModel.Id, DeviceEnabled,
-            DeviceIsSimulation ? DeviceFault : VirtualFault.None, DeviceIsSimulation ? DeviceLatencyMs : 0, DeviceExpectedVersion)
+        var modern = State?.DeviceConfigurationSupported == true;
+        var connection = ReadConnectionFields();
+        var request = new DeviceRequest(Generation, modern ? _editingDeviceId : Guid.Parse(DeviceIdText),
+            RequiresTargetPc ? SelectedTargetPc?.Id ?? Guid.Empty : Guid.Parse(PcIdText), PcName, DeviceName,
+            modern ? SelectedConnection?.Id ?? "" : ConnectionId, SelectedModel.Id, DeviceEnabled,
+            DeviceFault, DeviceLatencyMs, DeviceExpectedVersion)
         {
-            DriverId = DeviceDriverId,
-            Connection = new(DeviceTransportId, DeviceEndpoint.Trim(), DeviceAddress.Trim()) { Options = ParseDeviceOptions(DeviceTransportOptions) },
-            DriverOptions = ParseDeviceOptions(DeviceDriverOptions)
-        });
+            DriverId = DeviceDriverId, Connection = connection, DriverOptions = ReadDriverFields(),
+            ConnectionMode = modern ? ConnectionMode : null,
+            ConnectionName = string.IsNullOrWhiteSpace(ConnectionName) ? $"{DeviceName.Trim()} 연결" : ConnectionName,
+            ExpectedConnectionVersion = _connectionExpectedVersion, Location = DeviceLocation
+        };
+        if (modern && ConnectionMode == ConnectionSaveMode.Existing && HasSharedDraftChanges(connection))
+            throw new ArgumentException("공유 설정을 변경하려면 ‘공유 연결 수정’ 또는 ‘이 장비용 새 연결로 저장’을 선택하세요.");
+        var device = await _host.SaveDeviceAsync(request);
         if (State?.Session.Id != sessionId) return;
-        DeviceExpectedVersion = device.Version; ReportStatus("장비 설정을 저장했습니다."); NotifyEditors();
+        _editingDeviceId = device.Id; DeviceIdText = device.Id.ToString();
+        DeviceExpectedVersion = device.Version;
+        if (modern) { await _host.RefreshAsync(); if (State?.Session.Id != sessionId) return; LoadConnection(device); }
+        ReportStatus("장비 설정을 저장했습니다. 새 장비는 기본 역할로 바로 조작할 수 있습니다."); NotifyEditors();
     }
     private void LoadDevice()
     {
         var d = SelectedDevice!.Config;
+        _editingDeviceId = d.Id; DeviceLocation = d.Location;
         DeviceIdText = d.Id.ToString(); PcIdText = d.PcId.ToString(); PcName = d.PcName; DeviceName = d.Name;
         ConnectionId = d.ConnectionId; SelectedModel = Models.Single(x => x.Id == d.ModelId); DeviceEnabled = d.Enabled;
-        DeviceFault = d.Fault; DeviceLatencyMs = d.LatencyMs; DeviceExpectedVersion = d.Version; LoadDeviceSettings(d); NotifyEditors();
+        DeviceFault = d.Fault; DeviceLatencyMs = d.LatencyMs; DeviceExpectedVersion = d.Version; LoadDeviceSettings(d); LoadConnection(d); NotifyEditors();
     }
 }

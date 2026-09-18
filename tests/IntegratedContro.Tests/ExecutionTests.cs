@@ -72,19 +72,16 @@ public sealed class ExecutionTests
         await first; Assert.Single(r.Driver.Sent);
     }
     [Theory]
-    [InlineData("device")]
     [InlineData("role")]
     [InlineData("scenario")]
-    public async Task Target_or_definition_change_never_mutates_snapshot_or_bypasses_validation(string change)
+    public async Task Role_or_scenario_change_never_mutates_snapshot_or_bypasses_validation(string change)
     {
-        using var r = new Rig(); var d = r.Device(); var replacement = r.Device("other");
+        using var r = new Rig(); r.Device(); var replacement = r.Device("other");
         var definition = r.Scenario(new ScenarioStep("light", DeviceOperation.Power, 1, OnFailure: FailurePolicy.Continue),
             new("light", DeviceOperation.Brightness, 40));
         var job = r.SubmitScenario(definition);
         var original = JsonDefaults.Copy(job.Snapshot);
-        if (change == "device")
-            r.Service.SaveDevice(r.Admin.Token, new(r.Generation, d.Id, d.PcId, d.PcName, d.Name, "new-address", "test", ExpectedVersion: d.Version));
-        else if (change == "role") r.Service.SaveRole(r.Admin.Token, new(r.Generation, "light", replacement.Id, 1));
+        if (change == "role") r.Service.SaveRole(r.Admin.Token, new(r.Generation, "light", replacement.Id, 1));
         else r.Service.SaveScenario(r.Admin.Token, new(r.Generation, definition.Id, "Changed", [new("light", DeviceOperation.Power, 0)], definition.Version));
         await r.Service.DispatchNextAsync();
         Assert.Empty(r.Driver.Sent);

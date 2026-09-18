@@ -76,7 +76,7 @@ public sealed class ScenarioTarget : Bindable
     public RoleBinding Role { get; private set; }
     public DeviceConfig Device { get; private set; }
     public Capability[] Capabilities { get; private set; }
-    public string Label => $"{Device.Name} · {Role.Id} / {Device.PcName}";
+    public string Label => RoleChoice.From(Role, [Device]).Label + (Device.Location.Length > 0 ? $" · {Device.Location}" : "");
     public ScenarioTarget(RoleBinding role, DeviceConfig device, Capability[] capabilities)
     { Role = role; Device = device; Capabilities = capabilities; }
     public void Update(RoleBinding role, DeviceConfig device, Capability[] capabilities)

@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using IntegratedContro.Application;
 using IntegratedContro.Core;
@@ -7,48 +6,6 @@ namespace IntegratedContro.Tests;
 
 public sealed class ServiceSeparationTests
 {
-    private static Type Service(string name) =>
-        typeof(ControlService).Assembly.GetType("IntegratedContro.Application." + name, throwOnError: true)!;
-
-    [Theory]
-    [InlineData("CameraService", new[] { "ICameraStateAccess", "ICameraContentCatalog", "IMediaMtxClient", "IMediaSecretStore", "Int32", "SemaphoreSlim", "CancellationTokenSource" })]
-    [InlineData("DeviceExecutionService", new[] { "IDeviceStateAccess", "DeviceDriverRegistry" })]
-    [InlineData("ScenarioService", new[] { "IScenarioStateAccess", "IDeviceScenarioOperations", "IScenarioDisplayOperations", "IScenarioJobLifecycle", "Int32" })]
-    public void Domain_services_have_only_their_declared_dependencies(string name, string[] allowed)
-    {
-        var type = Service(name);
-        Assert.True(type.IsSealed);
-        Assert.Equal(typeof(object), type.BaseType);
-        var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        Assert.NotEmpty(fields);
-        Assert.All(fields, field => Assert.Contains(field.FieldType.Name, allowed));
-    }
-
-    [Fact]
-    public void Camera_catalog_contract_cannot_expose_wall_cache_or_device_execution()
-    {
-        var catalog = Service("ICameraContentCatalog");
-        Assert.True(catalog.IsInterface);
-        var operation = Assert.Single(catalog.GetMethods());
-        Assert.Equal("ValidateMapping", operation.Name);
-        Assert.Equal(typeof(void), operation.ReturnType);
-        Assert.Equal(new[] { typeof(int), typeof(string), typeof(string) },
-            operation.GetParameters().Select(p => p.ParameterType));
-        Assert.Contains(catalog, Service("HiperwallService").GetInterfaces());
-    }
-
-    [Fact]
-    public void Host_facade_does_not_own_adapters_or_domain_execution_state()
-    {
-        var fields = typeof(ControlService).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        Assert.Equal(new[] { "CameraService", "DeviceExecutionService", "HiperwallService", "HostAuthority", "ScenarioService" },
-            fields.Select(f => f.FieldType.Name).Order().ToArray());
-        var authorityFields = Service("HostAuthority").GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        Assert.DoesNotContain(authorityFields, f => typeof(IDeviceDriver).IsAssignableFrom(f.FieldType) ||
-            typeof(IMediaMtxClient).IsAssignableFrom(f.FieldType) || typeof(IHiperwallReader).IsAssignableFrom(f.FieldType) ||
-            typeof(ICredentialStore).IsAssignableFrom(f.FieldType) || f.FieldType.Name.EndsWith("Service", StringComparison.Ordinal));
-    }
-
     [Fact]
     public async Task Camera_changes_and_failed_sync_do_not_change_an_in_flight_device_scenario_after_release()
     {

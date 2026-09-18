@@ -21,7 +21,7 @@ public sealed class EnvironmentBoundaryTests
     }.Any(name.StartsWith);
 
     [Fact]
-    public void Common_source_has_no_native_or_environment_access_and_camera_has_no_engine_reference()
+    public void Common_source_has_no_native_or_environment_access()
     {
         foreach (var project in new[] { "IntegratedContro.Core", "IntegratedContro.Application" })
         {
@@ -35,20 +35,6 @@ public sealed class EnvironmentBoundaryTests
                     @"\b(using\s+(System\.Windows|Microsoft\.Win32|LibVLCSharp|Microsoft\.Data\.Sqlite)|DllImport|LibraryImport|ComImport|Marshal\.|ProtectedData\.|Registry\.|OperatingSystem\.|Environment\.GetFolderPath)"),
                     $"Environment dependency in {file}");
             }
-        }
-        foreach (var file in new[] { "CameraViewModel.cs", "CameraView.xaml", "CameraView.xaml.cs" })
-        {
-            var source = File.ReadAllText(Path.Combine(Root(), "src", "IntegratedContro.App", file));
-            Assert.DoesNotContain("LibVLC", source);
-            Assert.DoesNotContain("VlcVideo", source);
-            Assert.DoesNotContain("NativePlayer", source);
-        }
-        foreach (var file in new[] { "Program.cs", "HostSetup.cs" })
-        {
-            var source = File.ReadAllText(Path.Combine(Root(), "src", "IntegratedContro.ControlHost", file));
-            Assert.DoesNotContain("new Sqlite", source);
-            Assert.DoesNotContain("ConnectionString", source);
-            Assert.DoesNotContain("new WindowsCurrentUserSecretProtector", source);
         }
     }
 

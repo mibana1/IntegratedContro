@@ -7,6 +7,12 @@ public sealed partial class DeviceControlViewModel : FeatureViewModel
 {
     private readonly IFeatureSession _host;
     public ObservableCollection<RoleBinding> Roles { get; } = [];
+    public ObservableCollection<RoleChoice> RoleChoices { get; } = [];
+    public RoleChoice? SelectedRoleChoice
+    {
+        get => RoleChoices.FirstOrDefault(c => c.Id == SelectedRole?.Id);
+        set { if (value is not null) SelectedRole = Roles.FirstOrDefault(r => r.Id == value.Id); }
+    }
     public AsyncCommand SubmitCommand { get; }
     public DeviceControlViewModel(IFeatureSession host) : base(host)
     {
@@ -24,16 +30,17 @@ public sealed partial class DeviceControlViewModel : FeatureViewModel
         {
             var roleId = _selectedRole?.Id; var operation = _selectedCapability?.Operation;
             Replace(Roles, State?.Roles ?? []);
+            Replace(RoleChoices, Roles.Select(r => RoleChoice.From(r, State?.Devices ?? [])));
             _selectedRole = Roles.FirstOrDefault(r => r.Id == roleId);
             _selectedCapability = Capabilities.FirstOrDefault(c => c.Operation == operation);
-            Changed(nameof(SelectedRole)); Changed(nameof(SelectedCapability)); Changed(nameof(Capabilities)); NotifyCommandInput();
+            Changed(nameof(SelectedRole)); Changed(nameof(SelectedRoleChoice)); Changed(nameof(SelectedCapability)); Changed(nameof(Capabilities)); NotifyCommandInput();
         }
     }
     private RoleBinding? _selectedRole;
     public RoleBinding? SelectedRole
     {
         get => _selectedRole;
-        set { Set(ref _selectedRole, value); Changed(nameof(Capabilities)); SelectedCapability = Capabilities.FirstOrDefault(); }
+        set { Set(ref _selectedRole, value); Changed(nameof(SelectedRoleChoice)); Changed(nameof(Capabilities)); SelectedCapability = Capabilities.FirstOrDefault(); }
     }
     public IEnumerable<Capability> Capabilities => State?.Models.FirstOrDefault(m =>
         m.Id == State.Devices.FirstOrDefault(d => d.Id == SelectedRole?.DeviceId)?.ModelId)?.Capabilities ?? [];

@@ -5,9 +5,9 @@
 
 | 담당 | 파일 | 소유하는 책임 |
 |---|---|---|
-| 장비 설정·역할 | `DeviceSettingsViewModel.cs`, `RoleAssignmentViewModel.cs`, `DeviceRow.cs` | 등록 목록·선택, PC/장비 ID, 설정 초안·기준 버전, 모델·드라이버·통신 옵션, 상태 대조, 역할 배정·해제 |
+| 장비 설정·역할 | DeviceSettingsViewModel.cs, DeviceConfigurationViewModel.cs, DeviceConfigurationFields.cs, RoleAssignmentViewModel.cs, RoleManagementViewModel.cs, DeviceRow.cs | 자동 ID·기본 역할, 공유 연결 선택·수정·복제, PC 선택, 선언된 입력·진단, 역할 배정·해제·복구·이름 수정·미배정 삭제 |
 | 수동 장비 조작 | `DeviceControlViewModel.cs`, `CommandInputViewModel.cs`, `PowerInputViewModel.cs` | 역할·기능 선택, 값·대기·제한시간 입력·검증, 일반 명령 요청 작성 |
-| 계정 관리 | `AccountManagementViewModel.cs` | 계정 목록·선택, 등록·권한 초안, 비밀번호 읽기/정리 콜백, 등록·권한 변경 요청 |
+| 계정 관리 | AccountManagementViewModel.cs | 계정 등록·권한 초안, 장비 선택 목록·전체/제한 범위, Hiperwall 정책 표시, 비밀번호 읽기/정리 |
 | 작업·교대 | `JobManagementViewModel.cs`, `HandoverViewModel.cs` | 일반/Hiperwall 작업 목록·선택·상세, 이전 세션 표시, 선택 취소·수동 전환·표시 정리 |
 | 복구·진단 | `RecoveryViewModel.cs`, `AuditRow.cs` | 감사 목록·선택, 복구 확인 결과·승인 ID·세대, 확인·승인 명령 |
 | 조명 | `src/IntegratedContro.App/LightingViewModel.cs` | 카드 관측값·조작 가능 여부, 그룹·순서 초안, 대상과 관측을 고정한 전원/일괄 요청 |
@@ -57,6 +57,7 @@ dotnet run --project tests/IntegratedContro.UiSmoke --no-build --no-restore -- -
 ```
 
 이 검증은 격리된 프로필·별도 가상 HTTPS 호스트와 실제 WPF 바인딩을 사용한다.
+등록·공유 연결·진단·권한 목록은 --device-drivers-only와 DeviceConfigurationViewModelTests로 검증한다.
 시나리오 장비별 입력은 `--scenario-settings-only`, 확장 단계는 `--scenarios-only`로 추가 검증한다.
 전체 회귀·배포는 기존 `scripts/verify.ps1`, `scripts/publish.ps1`을 따른다.
 물리 장비와 물리 포인터 검수를 대신하지 않는다.

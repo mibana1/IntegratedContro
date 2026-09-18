@@ -10,7 +10,9 @@ public sealed class LightCard(DeviceConfig device) : Bindable
     public string Name => Device.Name;
     public string RoleText { get; internal set; } = "역할 미배정";
     public string PcName => Device.PcName;
-    public string TargetDetail => $"PC: {PcName} / PC ID: {Device.PcId} / 장비 ID: {Id}";
+    public string TargetDetail => $"{Name} · {Device.Location} · {Device.Connection.Endpoint}";
+    public string Diagnostics { get; internal set; } = "";
+    public string Location => Device.Location;
     public int Position { get; internal set; }
     public int? Power { get; internal set; }
     public bool IsOn => Power == 1 && !NeedsCheck;
@@ -32,7 +34,7 @@ public sealed class LightCard(DeviceConfig device) : Bindable
     internal void Refresh()
     {
         foreach (var name in new[] { nameof(Name), nameof(RoleText), nameof(PcName), nameof(TargetDetail), nameof(Position), nameof(Power), nameof(IsOn),
-            nameof(NeedsCheck), nameof(IsEditing), nameof(StateText), nameof(Hint), nameof(ActionText), nameof(LastChecked) }) Changed(name);
+            nameof(Diagnostics), nameof(Location), nameof(NeedsCheck), nameof(IsEditing), nameof(StateText), nameof(Hint), nameof(ActionText), nameof(LastChecked) }) Changed(name);
     }
 }
 
@@ -214,7 +216,7 @@ public sealed class LightingViewModel : FeatureViewModel
         if (State.Jobs.Any(j => j.Active && j.Kind == JobKind.Scenario && j.Snapshot.Steps.Any(s => s.Target?.Id == id))) return "시나리오 예약 · 작업 탭에서 수동 전환";
         if (LightHasWork(id)) return "명령 처리 중 · 결과 대기";
         if (State.UncertainDevices.Contains(id)) return "상태 대조 필요";
-        if (LightRole(id) is null) return "상세 설정에서 역할 배정 필요";
+        if (LightRole(id) is null) return "역할 미배정";
         if (LightPower(id)?.Value is not (0 or 1)) return "상태 확인을 먼저 누르세요";
         return null;
     }
@@ -278,13 +280,16 @@ public sealed class LightingViewModel : FeatureViewModel
             foreach (var card in Lights)
             {
                 if (State.Devices.SingleOrDefault(d => d.Id == card.Id) is { } device) card.Device = device;
-                var roles = State.Roles.Where(r => r.DeviceId == card.Id).Select(r => r.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
-                card.RoleText = roles.Length == 0 ? "역할 미배정" : $"역할: {string.Join(", ", roles)}";
+                var roles = State.Roles.Where(r => r.DeviceId == card.Id).ToArray();
+                card.RoleText = roles.Length == 0 ? "역할 미배정" : string.Join(" / ", roles.Select(r => RoleChoice.From(r, State.Devices).Label));
+                card.Diagnostics = State.Models.Any(m => m.Id == card.Device.ModelId && m.IsSimulation) &&
+                    card.Device.Fault != VirtualFault.None ? $"장애 주입 중: {card.Device.Fault}" : "";
                 var power = LightPower(card.Id);
                 card.Power = power?.Value is 0 or 1 ? power.Value : null;
                 card.NeedsCheck = !Context.Connected || State.UncertainDevices.Contains(card.Id);
                 card.Position = Lights.IndexOf(card) + 1; card.IsEditing = _editingLightOrder;
-                card.Hint = LightBlockReason(card.Id) ?? card.ActionText;
+                var reason = LightBlockReason(card.Id);
+                card.Hint = reason == "역할 미배정" ? "" : reason ?? card.ActionText;
                 card.LastChecked = power is null ? "상태 · 조회 전" : $"{power.Evidence} · {power.At.ToLocalTime():HH:mm:ss} 확인";
                 card.Refresh();
                 card.PowerCommand.Raise(); card.ReadCommand.Raise(); card.DetailsCommand.Raise();

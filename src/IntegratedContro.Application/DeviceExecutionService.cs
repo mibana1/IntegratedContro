@@ -12,48 +12,29 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
     internal DeviceExecutionService(IDeviceStateAccess host, DeviceDriverRegistry drivers)
     { _host = host; _drivers = drivers; }
     internal DeviceModel[] Models => _drivers.Models;
-    public DeviceConfig SaveDevice(string token, DeviceRequest request) => _host.Change(s =>
-    {
-        var session = _host.Owner(s, token, request.Generation); _host.Admin(s, token);
-        Require(request.Id != Guid.Empty && request.PcId != Guid.Empty, "target_required", "PC ID와 장비 ID를 명시하세요.", 400);
-        Text(request.PcName, "대상 PC 이름"); Text(request.Name, "장비 이름"); Text(request.ConnectionId, "연결 ID");
-        var model = _drivers.Model(request.ModelId);
-        var old = s.Devices.SingleOrDefault(d => d.Id == request.Id);
-        Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "장비 설정을 다시 조회하세요.");
-        var device = new DeviceConfig(request.Id, request.PcId, request.PcName.Trim(), request.Name.Trim(),
-            request.ConnectionId.Trim(), request.ModelId, (old?.Version ?? 0) + 1, request.Enabled, request.Fault, request.LatencyMs)
-        {
-            DriverId = request.DriverId ?? model.DriverId,
-            Connection = JsonDefaults.Copy(request.Connection ?? old?.Connection ?? new DeviceConnection()),
-            DriverOptions = JsonDefaults.Copy(request.DriverOptions ?? old?.DriverOptions ?? new Dictionary<string, string>())
-        };
-        _drivers.Resolve(device);
-        var executionChanged = old is null || !old.HasSameExecutionSettings(device);
-        device = device with { ExecutionVersion = old is null ? device.Version :
-            executionChanged ? old.ExecutionVersion + 1 : old.ExecutionVersion };
-        s.Devices.RemoveAll(d => d.Id == device.Id); s.Devices.Add(device);
-        if (executionChanged)
-            s.DeviceStates[device.Id] = new DeviceState { Connection = "장비 설정 저장 / 새 상태 조회 필요" };
-        // Replacing a model in-place must satisfy the same role requirements as assigning a new device.
-        if (device.Enabled)
-            foreach (var role in s.Roles.Where(r => r.DeviceId == device.Id))
-                foreach (var step in s.Scenarios.SelectMany(x => x.Steps).Where(x => x.RoleId == role.Id))
-                    Resolve(s, _host.User(s, session), step);
-        _host.Audit(s, session.Info.UserId, "DeviceSaved", $"pc={device.PcId}; device={device.Id}; v={device.Version}");
-        return device;
-    });
     public RoleBinding SaveRole(string token, RoleRequest request) => _host.Change(s =>
     {
         var session = _host.Owner(s, token, request.Generation); _host.Admin(s, token);
-        Text(request.Id, "역할 ID");
+        var roleId = string.IsNullOrWhiteSpace(request.Id) ? Guid.NewGuid().ToString("N") : request.Id.Trim();
+        Text(roleId, "역할 ID");
+        Require(!s.RemovedRoleIds.Contains(roleId), "role_deleted", "삭제된 역할입니다. 새 역할을 만드세요.");
+        if (request.Name is not null) Text(request.Name, "역할 이름");
         Require(s.Devices.Any(d => d.Id == request.DeviceId && d.Enabled), "target_missing", "활성 장비를 선택하세요.", 400);
-        var old = s.Roles.SingleOrDefault(r => r.Id == request.Id.Trim());
+        var old = s.Roles.SingleOrDefault(r => r.Id == roleId);
         Require((old?.Version ?? 0) == request.ExpectedVersion, "version_conflict", "역할 설정을 다시 조회하세요.");
-        var role = new RoleBinding(request.Id.Trim(), request.DeviceId,
-            checked(Math.Max(old?.Version ?? 0, s.DeletedRoleVersions.GetValueOrDefault(request.Id.Trim())) + 1));
+        var previousAssignment = old ?? s.UnassignedRoles.SingleOrDefault(r => r.Id == roleId);
+        var targetName = s.Devices.Single(d => d.Id == request.DeviceId).Name;
+        var inheritedDefault = previousAssignment is { IsDefault: true } && previousAssignment.DeviceId != request.DeviceId;
+        var role = new RoleBinding(roleId, request.DeviceId,
+            checked(Math.Max(old?.Version ?? 0, s.DeletedRoleVersions.GetValueOrDefault(roleId)) + 1))
+            { Name = request.Name?.Trim() ?? (inheritedDefault
+                ? $"{s.Devices.FirstOrDefault(d => d.Id == previousAssignment!.DeviceId)?.Name ?? "기존 장비"} 역할"
+                : previousAssignment?.Name ?? $"{targetName} 역할 {s.Roles.Count(r => r.DeviceId == request.DeviceId && !r.IsDefault) + 1}"),
+                IsDefault = !inheritedDefault && (previousAssignment?.IsDefault ?? false) };
         // Existing scenarios declare the required capabilities of this role.
         foreach (var step in s.Scenarios.SelectMany(x => x.Steps).Where(x => x.RoleId == role.Id))
             Resolve(s, _host.User(s, session), step with { RoleId = role.Id }, role);
+        s.UnassignedRoles.RemoveAll(r => r.Id == role.Id);
         s.Roles.RemoveAll(r => r.Id == role.Id); s.Roles.Add(role);
         _host.Audit(s, session.Info.UserId, "RoleAssigned", $"role={role.Id}; device={role.DeviceId}; v={role.Version}");
         return role;
@@ -69,6 +50,7 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
         Require(!s.Jobs.Any(j => j.Active && j.Snapshot.Steps.Any(step => step.Role?.Id == role!.Id)),
             "role_in_use", "이 역할을 사용하는 작업이 진행 중입니다. 작업·교대에서 완료를 확인하거나 취소한 뒤 해제하세요.");
         s.DeletedRoleVersions[role!.Id] = role.Version;
+        s.UnassignedRoles.RemoveAll(r => r.Id == role.Id); s.UnassignedRoles.Add(role);
         s.Roles.Remove(role);
         _host.Audit(s, session.Info.UserId, "RoleUnassigned", $"role={role.Id}; device={role.DeviceId}; v={role.Version}");
         return true;
@@ -119,7 +101,7 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
         DriverReading reading;
-        try { reading = await _drivers.Resolve(target).ReadAsync(JsonDefaults.Copy(target), timeout.Token); }
+        try { reading = await _drivers.Resolve(target).ReadAsync(_drivers.ForDriver(target), timeout.Token); }
         catch (OperationCanceledException) { throw new DomainException("read_timeout", "상태 조회 제한시간 초과"); }
         return _host.Change(s =>
         {
@@ -168,7 +150,7 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
     {
         if (step.Kind != ScenarioStepKind.DeviceCommand || step.Target is not { } target)
             throw new InvalidOperationException("장비 명령 snapshot이 필요합니다.");
-        var command = new DeviceCommand(JsonDefaults.Copy(target), step.Operation, step.Value, step.Unit);
+        var command = new DeviceCommand(_drivers.ForDriver(target), step.Operation, step.Value, step.Unit);
         var result = await _drivers.Resolve(target).ExecuteAsync(command, ct).ConfigureAwait(false);
         var status = result.Status switch
         {
@@ -183,7 +165,7 @@ internal sealed partial class DeviceExecutionService : IDeviceScenarioOperations
         return NormalizeResult(step, new(status, result.Detail, result.Values, result.Evidence));
     }
     public Task<DriverReading> ReadAsync(DeviceConfig target, CancellationToken ct) =>
-        _drivers.Resolve(target).ReadAsync(JsonDefaults.Copy(target), ct);
+        _drivers.Resolve(target).ReadAsync(_drivers.ForDriver(target), ct);
     private StepExecutionResult NormalizeResult(StepSnapshot snapshot, StepExecutionResult result)
     {
         if (snapshot.Target is { } resultTarget &&

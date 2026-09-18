@@ -50,13 +50,13 @@ public sealed partial class ControlService
                 s.UncertainDevices.ToArray(), _host.User(s, session).Role == AccountRole.Administrator
                     ? s.Accounts.Select(a => new AccountView(a.Id, a.Name, a.Role, a.Enabled, a.AllDevices, a.DeviceIds.ToArray())).ToArray() : [],
                 s.Audit.TakeLast(200).Select(a => AuditPresentation.Enrich(a, s)).ToArray(), _devices.Models, _host.HeartbeatTimeoutSeconds)
-                { HiperwallWriteSupported = _wall.WriteSupported, CanControlHiperwall = HiperwallPermission(_host.User(s, session)), HiperwallReadSupported = _wall.ReadSupported, HiperwallConfigurationVersion = s.Hiperwall?.Version ?? 0,
+                { UnassignedRoles = s.UnassignedRoles.ToArray(), DeviceConfigurationSupported = true, DeviceConnections = s.DeviceConnections.ToArray(), Pcs = s.Pcs.ToArray(), HiperwallWriteSupported = _wall.WriteSupported, CanControlHiperwall = HiperwallPermission(_host.User(s, session)), HiperwallReadSupported = _wall.ReadSupported, HiperwallConfigurationVersion = s.Hiperwall?.Version ?? 0,
                     OutstandingHiperwallEdits = s.HiperwallEdits.Where(r => r.NeedsAttention).OrderByDescending(r => r.AcceptedAt).ToArray(),
                     OutstandingHiperwallDisplays = s.HiperwallDisplays.Where(j => j.Outstanding).ToArray(),
                     HiperwallDisplayJobs = s.HiperwallDisplays.Where(j => j.Outstanding).Union(s.HiperwallDisplays.TakeLast(100)).Reverse().ToArray(),
                     HiperwallLayoutsSupported = _wall.WriteSupported,
                     HiperwallSlotsSupported = _wall.WriteSupported, HiperwallSlots = s.HiperwallSlots.ToArray(),
-                    ScenarioExtensionsSupported = true, ScenarioDeletionSupported = true, RoleUnassignmentSupported = true, SavedHiperwallLayouts = s.HiperwallLayouts.ToArray(),
+                    ScenarioExtensionsSupported = true, ScenarioDeletionSupported = true, RoleUnassignmentSupported = true, RoleManagementSupported = true, SavedHiperwallLayouts = s.HiperwallLayouts.ToArray(),
                     CameraSupported = _cameras.Supported, MediaConfigurationVersion = s.Media?.Version ?? 0,
                     LightCardsSupported = true, LightGroupsSupported = true, LightBatchSupported = true, LightLayout = _devices.CurrentLightLayout(_host.ReadContext),
                     ControllableDeviceIds = s.Devices.Where(d => CanControl(_host.User(s, session), d.Id)).Select(d => d.Id).ToArray() });

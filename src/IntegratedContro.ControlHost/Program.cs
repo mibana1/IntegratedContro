@@ -125,9 +125,13 @@ try
     app.MapPost("/api/logout", (HttpContext c) => service.Logout(Token(c)));
     app.MapPost("/api/accounts", (HttpContext c, CreateAccountRequest r) => service.CreateAccount(Token(c), r));
     app.MapPost("/api/accounts/permissions", (HttpContext c, UpdateAccountRequest r) => service.UpdateAccount(Token(c), r));
+    app.MapPost("/api/devices/diagnostics", (HttpContext c, DeviceDiagnosticsRequest r) => service.SaveDeviceDiagnostics(Token(c), r));
+    app.MapPost("/api/pcs/register-session", (HttpContext c, RegisterSessionPcRequest r) => service.RegisterSessionPc(Token(c), r));
     app.MapPost("/api/devices", (HttpContext c, DeviceRequest r) => service.SaveDevice(Token(c), r));
     app.MapPost("/api/layout/lights", (HttpContext c, LightOrderRequest r) => service.SaveLightOrder(Token(c), r));
     app.MapPost("/api/roles", (HttpContext c, RoleRequest r) => service.SaveRole(Token(c), r));
+    app.MapPost("/api/roles/rename", (HttpContext c, RenameRoleRequest r) => service.RenameRole(Token(c), r));
+    app.MapPost("/api/roles/delete", (HttpContext c, DeleteRoleRequest r) => service.DeleteRole(Token(c), r));
     app.MapPost("/api/roles/unassign", (HttpContext c, UnassignRoleRequest r) => service.UnassignRole(Token(c), r));
     app.MapPost("/api/scenarios", (HttpContext c, ScenarioRequest r) => service.SaveScenario(Token(c), r));
     app.MapPost("/api/scenarios/delete", (HttpContext c, DeleteScenarioRequest r) => service.DeleteScenario(Token(c), r));

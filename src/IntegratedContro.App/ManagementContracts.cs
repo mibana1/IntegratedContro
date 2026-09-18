@@ -5,8 +5,12 @@ namespace IntegratedContro.App;
 public interface IDeviceSettingsHost : IFeatureSession
 {
     Task<DeviceConfig> SaveDeviceAsync(DeviceRequest request);
+    Task<DeviceConfig> SaveDeviceDiagnosticsAsync(DeviceDiagnosticsRequest request);
+    Task<PcRegistration> RegisterSessionPcAsync(RegisterSessionPcRequest request);
     Task<RoleBinding> SaveRoleAsync(RoleRequest request);
     Task UnassignRoleAsync(UnassignRoleRequest request);
+    Task<RoleBinding> RenameRoleAsync(RenameRoleRequest request);
+    Task DeleteRoleAsync(DeleteRoleRequest request);
     Task<DeviceState> ReconcileAsync(ReconcileRequest request);
     Task RefreshAsync();
 }

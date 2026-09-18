@@ -52,29 +52,19 @@ public static partial class Program
             var tabs = (TabControl)window.FindName("MainTabs");
             tabs.SelectedItem = window.FindName("AdminTab"); window.UpdateLayout();
             var roleTarget = (ComboBox)window.FindName("RoleDevicePicker");
-            var roleId = (TextBox)window.FindName("RoleIdInput");
+            ((Expander)window.FindName("RoleManagementExpander")).IsExpanded = true;
             roleTarget.SetCurrentValue(ComboBox.SelectedItemProperty, audio);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(vm.DeviceSettings.RoleName == "room.audio" && roleId.Text == "room.audio" &&
-                FindAll<TextBlock>((RoleAssignmentsView)window.FindName("AssignedRoleIds")).Any(t => t.Text == "room.audio"), "Assigned role ID did not populate admin fields");
-            roleId.SetCurrentValue(TextBox.TextProperty, "room.audio.secondary");
-            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            Require(vm.DeviceSettings.AssignedRoles.All(r => r.Label.Contains(audio.Name)), "Role manager omitted device name");
+            vm.DeviceSettings.NewRoleDisplayName = "음향 보조";
             await Execute(vm, vm.RefreshCommand);
-            Require(vm.DeviceSettings.RoleName == "room.audio.secondary", "Refresh overwrote edited role ID");
-            await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
-            Require(vm.DeviceSettings.RoleName == "room.audio.secondary" && vm.DeviceSettings.AssignedRoleSummary.Contains("room.audio") && vm.DeviceSettings.AssignedRoleSummary.Contains("room.audio.secondary"),
-                "Multiple assigned IDs not shown");
-            roleId.SetCurrentValue(TextBox.TextProperty, "");
-            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            await Execute(vm, vm.RefreshCommand);
-            Require(vm.DeviceSettings.RoleName == "" && !vm.DeviceSettings.SaveRoleCommand.CanExecute(null), "Refresh overwrote intentionally cleared role ID");
+            Require(vm.DeviceSettings.NewRoleDisplayName == "음향 보조", "Refresh overwrote role name draft");
+            await Execute(vm, vm.DeviceSettings.CreateRoleCommand);
+            Require(vm.DeviceSettings.AssignedRoles.Any(r => r.Label.Contains("음향 보조")), "Named role was not displayed");
             roleTarget.SetCurrentValue(ComboBox.SelectedItemProperty, basic);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            Require(vm.DeviceSettings.RoleName == "room.basic", "Changing target retained another device's role ID");
-            roleTarget.SetCurrentValue(ComboBox.SelectedItemProperty, audio);
-            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-            FindAll<Button>(window).Single(b => b.IsVisible && ReferenceEquals(b.Command, vm.DeviceSettings.SaveRoleCommand)).BringIntoView(); window.UpdateLayout();
-            Capture(window, Path.Combine(output, "registered-role-ids.png"));
+            Require(vm.DeviceSettings.AssignedRoles.All(r => r.Label.Contains(basic.Name)), "Role manager retained another device");
+            Capture(window, Path.Combine(output, "registered-role-names.png"));
 
             tabs.SelectedItem = window.FindName("ScenarioTab"); window.UpdateLayout();
             var picker = (ComboBox)window.FindName("ScenarioTargetPicker");
@@ -169,7 +159,7 @@ public static partial class Program
             listener.Flush(); Require(string.IsNullOrWhiteSpace(bindingLog.ToString()), "Settings binding warnings: " + bindingLog);
             await File.WriteAllTextAsync(Path.Combine(output, "scenario-device-settings-result.txt"),
                 "PASS: real WPF target picker, ON/OFF and mute buttons, volume slider/text, inclusion checkbox; per-model capabilities and input/direction choices; STOP excluded from waits; roles populate and preserve edits across polling; no edit-time dispatch; invalid/empty selections append nothing; grouped step order and first-only delay; save/load; actual virtual-audio power/volume/mute execution via isolated HTTPS host; compact/full renders; no binding warnings. Code-driven WPF, no physical device control.");
-            Console.WriteLine("Scenario settings and role IDs WPF smoke PASS.");
+            Console.WriteLine("Scenario settings and role names WPF smoke PASS.");
         }
         finally { PresentationTraceSources.DataBindingSource.Listeners.Remove(listener); await vm.CloseAsync(); window.Close(); }
     }

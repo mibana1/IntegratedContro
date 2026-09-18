@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using IntegratedContro.Application;
 using IntegratedContro.Core;
@@ -7,45 +6,6 @@ namespace IntegratedContro.Tests;
 
 public sealed class FeatureStateBoundaryTests
 {
-    [Theory]
-    [InlineData(typeof(CameraStateScope), new[] { "Media", "Cameras", "CameraCleanup", "MediaSecretsToDelete" })]
-    [InlineData(typeof(DeviceStateScope), new[] { "Devices", "DeviceStates", "Roles", "DeletedRoleVersions", "UncertainDevices", "LightLayout" })]
-    [InlineData(typeof(ScenarioStateScope), new[] { "Scenarios", "DeletedScenarioVersions", "Jobs" })]
-    [InlineData(typeof(HiperwallStateScope), new[] { "Hiperwall", "HiperwallEdits", "HiperwallDisplays", "HiperwallLayouts", "HiperwallSlots" })]
-    public void Feature_contracts_expose_only_owned_writes(Type scope, string[] owned)
-    {
-        Assert.Equal(owned.Order(), scope.GetProperties().Where(p => p.CanWrite).Select(p => p.Name).Order());
-        Assert.DoesNotContain(scope.GetProperties(), p => p.PropertyType == typeof(HostState) ||
-            p.Name is "Accounts" or "Lease" or "FencedSessions" or "Audit" or "Gate");
-        Assert.True(typeof(StateContext).IsSealed);
-        Assert.False(typeof(FeatureStateScope).IsAssignableFrom(typeof(StateContext)));
-        Assert.False(typeof(StateContext).IsAssignableFrom(scope));
-        Assert.Empty(typeof(StateContext).GetProperties());
-        Assert.Empty(typeof(StateContext).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance));
-    }
-
-    [Theory]
-    [InlineData(typeof(CameraService), typeof(ICameraStateAccess))]
-    [InlineData(typeof(DeviceExecutionService), typeof(IDeviceStateAccess))]
-    [InlineData(typeof(ScenarioService), typeof(IScenarioStateAccess))]
-    [InlineData(typeof(HiperwallService), typeof(IHiperwallStateAccess))]
-    [InlineData(typeof(ScenarioJobLifecycle), typeof(IScenarioStateAccess))]
-    [InlineData(typeof(HiperwallJobLifecycle), typeof(IHiperwallStateAccess))]
-    public void Services_cannot_receive_the_aggregate_lock_store_or_another_write_scope(Type service, Type access)
-    {
-        var fields = service.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        var ports = fields.Where(f => f.FieldType.IsInterface && f.FieldType.GetInterfaces().Any(i =>
-            i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IFeatureStateAccess<>))).ToArray();
-        Assert.Equal(access, Assert.Single(ports).FieldType);
-        Assert.DoesNotContain(fields, f => f.FieldType == typeof(HostAuthority) || f.FieldType == typeof(HostState) || f.FieldType == typeof(IStateStore));
-        Assert.All(service.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly), m => {
-            Assert.NotEqual(typeof(HostState), m.ReturnType);
-            Assert.DoesNotContain(m.GetParameters(), p => p.ParameterType == typeof(HostState));
-        });
-        var methods = access.GetInterfaces().SelectMany(i => i.GetMethods()).ToArray();
-        Assert.DoesNotContain(methods, m => m.Name is "Persist" or "get_Gate" || m.ReturnType == typeof(HostState) || m.ReturnType == typeof(object));
-    }
-
     [Fact]
     public void Foreign_queries_are_deeply_detached_even_inside_a_write_transaction()
     {

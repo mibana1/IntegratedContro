@@ -22,7 +22,7 @@ public sealed class VirtualDeviceDriver(IVirtualDeviceTransport transport) : IDe
         Require(device.DriverId == Id && Models.Any(m => m.Id == device.ModelId),
             "unsupported_model", "가상 드라이버 모델을 확인하세요.", 400);
         Require(device.Connection is { TransportId: "virtual", Endpoint.Length: 0, Address.Length: 0 } &&
-            device.Connection.Options.Count == 0 && device.DriverOptions.Count == 0,
+            device.Connection.Options.Count == 0 && device.Connection.ExecutionPcId is null && device.DriverOptions.Count == 0,
             "invalid_connection", "가상 장비에는 물리 통신 주소나 옵션을 지정할 수 없습니다.", 400);
         Require(Enum.IsDefined(device.Fault) && device.LatencyMs is >= 0 and <= 30000,
             "invalid_device", "가상 지연은 0~30000ms입니다.", 400);

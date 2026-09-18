@@ -26,14 +26,17 @@ public static partial class Program
             vm.DeviceSettings.SelectedModel = vm.DeviceSettings.Models.Single(m => m.Id == "virtual-light");
             vm.DeviceSettings.DeviceName = "입구 조명"; vm.DeviceSettings.ConnectionId = "unassign-test";
             await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
-            var first = vm.DeviceSettings.Devices.Single(); vm.DeviceSettings.SelectedDevice = first; vm.DeviceSettings.RoleName = "room.main";
+            var first = vm.DeviceSettings.Devices.Single(); vm.DeviceSettings.SelectedDevice = first;
+            await Execute(vm, vm.DeviceSettings.AssignedRoles.Single().UnassignCommand); vm.DeviceSettings.RoleName = "room.main";
             await Execute(vm, vm.DeviceSettings.SaveRoleCommand); vm.DeviceSettings.RoleName = "room.alias"; await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
             await Execute(vm, vm.DeviceSettings.NewDeviceCommand); vm.DeviceSettings.DeviceName = "복도 조명";
             await Execute(vm, vm.DeviceSettings.SaveDeviceCommand);
-            var other = vm.DeviceSettings.Devices.Single(d => d.Id != first.Id); vm.DeviceSettings.SelectedDevice = other; vm.DeviceSettings.RoleName = "room.other";
+            var other = vm.DeviceSettings.Devices.Single(d => d.Id != first.Id); vm.DeviceSettings.SelectedDevice = other;
+            await Execute(vm, vm.DeviceSettings.AssignedRoles.Single().UnassignCommand); vm.DeviceSettings.RoleName = "room.other";
             await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
             var tabs = (TabControl)window.FindName("MainTabs");
-            tabs.SelectedItem = window.FindName("AdminTab"); window.UpdateLayout();
+            tabs.SelectedItem = window.FindName("AdminTab");
+            ((Expander)window.FindName("RoleManagementExpander")).IsExpanded = true; window.UpdateLayout();
             ((ComboBox)window.FindName("RoleDevicePicker")).SetCurrentValue(ComboBox.SelectedItemProperty, first);
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Require(vm.DeviceSettings.AssignedRoles.Select(r => r.Id).Order().SequenceEqual(new[] { "room.alias", "room.main" }),
@@ -70,7 +73,7 @@ public static partial class Program
             await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(!ButtonFor(mainRow).IsEnabled && mainRow.Hint.Contains("진행 중"), "Active scenario did not disable used binding");
             Require(ButtonFor(aliasRow).IsEnabled, "Unrelated alias was blocked by another role's work");
-            ((TextBox)window.FindName("RoleIdInput")).SetCurrentValue(TextBox.TextProperty, "draft.unrelated");
+            vm.DeviceSettings.RoleName = "draft.unrelated";
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             await Click(vm, ButtonFor(aliasRow));
             Require(!vm.DeviceControl.Roles.Any(r => r.Id == "room.alias") && vm.DeviceControl.Roles.Any(r => r.Id == "room.main") &&
@@ -87,7 +90,8 @@ public static partial class Program
             var count = vm.JobManagement.Jobs.Count;
             vm.ScenarioEditor.SelectedScenario = vm.ScenarioEditor.Scenarios.Single(); await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
             Require(vm.JobManagement.Jobs.Count == count && vm.Message.Contains("역할을 찾을 수 없습니다"), "Definition with missing role accepted");
-            vm.DeviceSettings.RoleName = "room.main"; await Execute(vm, vm.DeviceSettings.SaveRoleCommand);
+            vm.DeviceSettings.SelectedRoleToInherit = vm.DeviceSettings.RoleChoices.Single(r => r.Id == "room.main");
+            await Execute(vm, vm.DeviceSettings.InheritRoleCommand);
             Require(vm.DeviceControl.Roles.Single(r => r.Id == "room.main").Version > mainRow.Binding.Version &&
                 !mainRow.UnassignCommand.CanExecute(null), "Recreation revived stale binding command");
             await Execute(vm, vm.ScenarioEditor.RunScenarioCommand);
@@ -108,7 +112,7 @@ public static partial class Program
             using (observer)
             {
                 var state = await HostProcess.State(observer);
-                Require(state.Audit.Count(a => a.Action == "RoleUnassigned" && a.EventName == "역할 배정 해제") == 3 &&
+                Require(state.Audit.Count(a => a.Action == "RoleUnassigned" && a.EventName == "역할 배정 해제") == 5 &&
                     state.Jobs.All(j => j.Status == JobStatus.Cancelled), "HTTP persistence/audit changed work history");
             }
             listener.Flush(); Require(string.IsNullOrWhiteSpace(bindingLog.ToString()), "Role unassignment binding warnings: " + bindingLog);

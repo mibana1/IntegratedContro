@@ -12,9 +12,20 @@ public sealed record DeviceRequest(long Generation, Guid Id, Guid PcId, string P
     public string? DriverId { get; init; }
     public DeviceConnection? Connection { get; init; }
     public Dictionary<string, string>? DriverOptions { get; init; }
+    public ConnectionSaveMode? ConnectionMode { get; init; }
+    public string ConnectionName { get; init; } = "";
+    public int ExpectedConnectionVersion { get; init; }
+    public string? Location { get; init; }
 }
-public sealed record RoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion = 0);
+public sealed record DeviceDiagnosticsRequest(long Generation, Guid DeviceId, int ExpectedVersion, VirtualFault Fault, int LatencyMs);
+public sealed record RegisterSessionPcRequest(long Generation);
+public sealed record RoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion = 0)
+{
+    public string? Name { get; init; }
+}
 public sealed record UnassignRoleRequest(long Generation, string Id, Guid DeviceId, int ExpectedVersion);
+public sealed record RenameRoleRequest(long Generation, RoleBinding ExpectedRole, bool ExpectedAssigned, string Name);
+public sealed record DeleteRoleRequest(long Generation, RoleBinding ExpectedRole, bool ExpectedAssigned);
 public sealed record ScenarioRequest(long Generation, Guid Id, string Name, ScenarioStep[] Steps, int ExpectedVersion = 0);
 public sealed record DeleteScenarioRequest(long Generation, Guid Id, int ExpectedVersion);
 public sealed record SubmitRequest(Guid RequestId, long Generation, string? RoleId,

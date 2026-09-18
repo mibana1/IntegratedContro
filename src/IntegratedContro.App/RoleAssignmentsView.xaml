@@ -6,16 +6,16 @@
     <StackPanel>
      <DockPanel><Button x:Name="UnassignRoleButton" DockPanel.Dock="Right" Content="배정 해제" Command="{Binding UnassignCommand}"
       Padding="12,6" Margin="12,0,0,0" ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True"
-      AutomationProperties.Name="{Binding Id, StringFormat={}{0} 역할 배정 해제}" Style="{StaticResource Danger}"/>
-      <TextBlock Text="{Binding Id}" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel>
+      AutomationProperties.Name="{Binding Label, StringFormat={}{0} 역할 배정 해제}" Style="{StaticResource Danger}"/>
+      <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel>
      <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" FontSize="12" Margin="0,5,0,0"/>
     </StackPanel>
    </Border>
   </DataTemplate>
   <DataTemplate x:Key="CompactRole">
    <Button x:Name="UnassignRoleButton" Command="{Binding UnassignCommand}"
-    ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{Binding Id, StringFormat={}{0} 역할 배정 해제}" Style="{StaticResource Danger}">
-    <TextBlock Text="{Binding Id, StringFormat={}{0} · 배정 해제}"/>
+    ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{Binding Label, StringFormat={}{0} 역할 배정 해제}" Style="{StaticResource Danger}">
+    <TextBlock Text="{Binding Label, StringFormat={}{0} · 배정 해제}"/>
    </Button>
   </DataTemplate>
   <ItemsPanelTemplate x:Key="CompactRolesPanel"><WrapPanel/></ItemsPanelTemplate>

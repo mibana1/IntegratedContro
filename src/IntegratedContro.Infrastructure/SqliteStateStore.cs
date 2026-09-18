@@ -57,11 +57,12 @@ public sealed class SqliteStateStore : IStateStore
         var json = command.ExecuteScalar() as string ?? throw new InvalidDataException("초기화 완료 DB가 아닙니다. 자동 초기화하지 않습니다.");
         var state = JsonSerializer.Deserialize<HostState>(json, JsonDefaults.Options) ?? throw new InvalidDataException("DB 상태 오류");
         if (state.SchemaVersion != 1 || !state.Initialized) throw new InvalidDataException("지원하지 않는 상태 또는 미완료 초기화입니다.");
+        DeviceConfigurationStorage.Materialize(state);
         return state;
     }
     public void Save(HostState state)
     {
-        var json = JsonSerializer.Serialize(state, JsonDefaults.Options);
+        var json = JsonSerializer.Serialize(DeviceConfigurationStorage.ForStorage(state), JsonDefaults.Options);
         using var transaction = _connection.BeginTransaction();
         using var command = _connection.CreateCommand(); command.Transaction = transaction;
         command.CommandText = """

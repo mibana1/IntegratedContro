@@ -146,18 +146,6 @@ public sealed class DeviceDriverSeparationTests
         Assert.Equal(StepStatus.Observed, s.State.Jobs.Single().Steps.Single().Status);
     }
 
-    [Theory]
-    [InlineData(DriverStatus.Acknowledged, DeviceEvidence.Acknowledged)]
-    [InlineData(DriverStatus.Sent, DeviceEvidence.Sent)]
-    [InlineData(DriverStatus.Acknowledged, DeviceEvidence.Observed)]
-    public async Task Transmission_and_ack_do_not_turn_returned_values_into_observation(DriverStatus status, DeviceEvidence evidence)
-    {
-        using var s = new Setup(); var d = s.Register(); s.First.Status = status; s.First.Evidence = evidence;
-        s.Submit(); await s.Service.DispatchNextAsync();
-        Assert.Empty(s.State.DeviceStates[d.Id].Observed); Assert.Empty(s.State.DeviceStates[d.Id].Simulated);
-        Assert.Equal(1, s.State.DeviceStates[d.Id].Desired[DeviceOperation.Power]);
-    }
-
     [Fact]
     public async Task Physical_driver_cannot_report_simulation_or_use_ack_to_satisfy_a_condition()
     {
@@ -246,6 +234,7 @@ public sealed class DeviceDriverSeparationTests
     [Theory]
     [InlineData(DriverStatus.Sent, DeviceEvidence.Sent, StepStatus.Sent, false, false)]
     [InlineData(DriverStatus.Acknowledged, DeviceEvidence.Acknowledged, StepStatus.Acknowledged, false, false)]
+    [InlineData(DriverStatus.Acknowledged, DeviceEvidence.Observed, StepStatus.Acknowledged, false, false)]
     [InlineData(DriverStatus.Observed, DeviceEvidence.Observed, StepStatus.Observed, true, false)]
     [InlineData(DriverStatus.Failed, DeviceEvidence.Observed, StepStatus.Failed, false, false)]
     [InlineData(DriverStatus.Unknown, DeviceEvidence.Observed, StepStatus.Unknown, false, true)]

@@ -122,8 +122,12 @@ internal sealed partial class HostAuthority
     private sealed class DeviceProjection(HostState state, StateContext context) : DeviceStateScope(context)
     {
         public override List<DeviceConfig> Devices { get => state.Devices; set => state.Devices = value; }
+        public override List<SharedDeviceConnection> Connections { get => state.DeviceConnections; set => state.DeviceConnections = value; }
+        public override List<PcRegistration> Pcs { get => state.Pcs; set => state.Pcs = value; }
         public override Dictionary<Guid, DeviceState> DeviceStates { get => state.DeviceStates; set => state.DeviceStates = value; }
         public override List<RoleBinding> Roles { get => state.Roles; set => state.Roles = value; }
+        public override List<RoleBinding> UnassignedRoles { get => state.UnassignedRoles; set => state.UnassignedRoles = value; }
+        public override HashSet<string> RemovedRoleIds { get => state.RemovedRoleIds; set => state.RemovedRoleIds = value; }
         public override Dictionary<string, int> DeletedRoleVersions { get => state.DeletedRoleVersions; set => state.DeletedRoleVersions = value; }
         public override List<Guid> UncertainDevices { get => state.UncertainDevices; set => state.UncertainDevices = value; }
         public override LightLayout LightLayout { get => state.LightLayout; set => state.LightLayout = value; }

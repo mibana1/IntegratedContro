@@ -90,14 +90,19 @@
             <Button x:Name="LightPowerButton" Command="{Binding PowerCommand}" Style="{StaticResource LightPower}" ToolTip="{Binding TargetDetail}" AutomationProperties.Name="{Binding Name}" MinHeight="158">
              <StackPanel>
               <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding Diagnostics}" FontSize="12" Foreground="{DynamicResource WarningInk}" TextWrapping="Wrap"/>
               <TextBlock Text="{Binding RoleText}" FontSize="12" Foreground="{DynamicResource MutedInk}" TextTrimming="CharacterEllipsis" ToolTip="{Binding RoleText}" Margin="0,3,0,0"/>
-              <TextBlock Text="{Binding PcName}" FontSize="12" Foreground="{DynamicResource MutedInk}" TextTrimming="CharacterEllipsis" Margin="0,3,0,6"/>
+              <TextBlock Text="{Binding Location}" FontSize="12" Foreground="{DynamicResource MutedInk}" TextTrimming="CharacterEllipsis" Margin="0,3,0,6"/>
               <Viewbox Width="34" Height="42" Margin="0,2,0,6"><Canvas Width="64" Height="76">
                <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
                 Data="M 23,53 C 23,44 12,39 12,27 C 12,0 52,0 52,27 C 52,39 41,44 41,53 Z M 24,60 L 40,60 M 27,67 L 37,67 M 27,34 L 32,40 L 37,34 M 32,40 L 32,52"/>
               </Canvas></Viewbox>
               <TextBlock Text="{Binding StateText}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
-              <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12" Margin="0,4,0,0"/>
+              <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12" Margin="0,4,0,0">
+               <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                <DataTrigger Binding="{Binding Hint}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+               </Style.Triggers></Style></TextBlock.Style>
+              </TextBlock>
              </StackPanel>
             </Button>
             <Grid>

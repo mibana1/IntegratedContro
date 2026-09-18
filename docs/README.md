@@ -9,6 +9,7 @@
 | 화면·공통 입력·테마 | [화면 디자인](UI_DESIGN.md) |
 | 기능별 화면 상태·계약 | [ViewModel 안내](FEATURE_VIEWMODELS.md) |
 | 서비스 상태·공통 트랜잭션 | [상태 접근 안내](SERVICE_STATE_BOUNDARIES.md) |
+| 장비 등록·공유 연결·PC·역할·권한 | [장비 설정 안내](DEVICE_CONFIGURATION.md) |
 | 장비 모델·드라이버·통신 | [드라이버 안내](DEVICE_DRIVERS.md) |
 | OS·보호 저장·저장소·영상 어댑터 | [환경 어댑터 안내](ENVIRONMENT_ADAPTERS.md) |
 | Hiperwall 조회·편집 요청 근거 | [프로토콜 기록](HIPERWALL_PROTOCOL.md) |
