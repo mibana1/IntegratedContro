@@ -13,6 +13,7 @@ public sealed record LocalServerStartupSettings(string HostDataPath, string Medi
     string MediaMtxConfigurationPath, string MediaMtxApiEndpoint)
 {
     public bool Enabled { get; init; } = true;
+    public bool MediaMtxEnabled { get; init; } = true;
     public string ControlHostExecutablePath { get; init; } = "../ControlHost/IntegratedContro.ControlHost.exe";
 }
 
@@ -23,11 +24,14 @@ public static class LocalServerStartup
 
     public static Task<string> StartForAppAsync(Func<IReadOnlyList<string>, Task<bool>> confirmStart, LocalServerLifetime lifetime) => Task.Run(async () =>
     {
-        var args = Environment.GetCommandLineArgs();
-        var index = Array.IndexOf(args, "--server-startup");
-        var path = index >= 0 && index + 1 < args.Length ? Path.GetFullPath(args[index + 1]) :
-            Path.Combine(AppContext.BaseDirectory, FileName);
-        return await StartAsync(path, AppContext.BaseDirectory, ClientPreferences.ReadForStartup(), confirmStart, lifetime);
+        try
+        {
+            var configuration = StartupConfiguration.ForApp();
+            _ = configuration.Read();
+            return await StartAsync(configuration.SettingsPath, AppContext.BaseDirectory, ClientPreferences.ReadForStartup(), confirmStart, lifetime);
+        }
+        catch (Exception error) when (StartupConfiguration.IsConfigurationFailure(error))
+        { return "서버 설정 오류: " + StartupConfiguration.FriendlyError(error) + " 초기 설정 · 저장 위치에서 확인하세요."; }
     });
 
     public static async Task<string> StartAsync(string settingsPath, string appDirectory,
@@ -56,7 +60,7 @@ public static class LocalServerStartup
             var stopped = new List<string>();
             using (await WindowsServerProcesses.AcquireStartupLock(data, wait))
             {
-                if (Uri.TryCreate(settings.MediaMtxApiEndpoint, UriKind.Absolute, out var mediaCheck) &&
+                if (settings.MediaMtxEnabled && Uri.TryCreate(settings.MediaMtxApiEndpoint, UriKind.Absolute, out var mediaCheck) &&
                     mediaCheck.Scheme == "http" && mediaCheck.IsLoopback &&
                     WindowsServerProcesses.ListenerProcess(mediaCheck) is null)
                     stopped.Add("MediaMTX (카메라 영상 서버)");
@@ -69,9 +73,9 @@ public static class LocalServerStartup
             // Recheck under a cross-process/cross-session lock after approval: another app may have started them.
             using var startupLock = await WindowsServerProcesses.AcquireStartupLock(data, wait);
             var messages = new List<string>();
-            try
+            if (settings.MediaMtxEnabled) try
             {
-                var mediaExe = AbsoluteLocalPath(settings.MediaMtxExecutablePath);
+                var mediaExe = Path.GetFullPath(settings.MediaMtxExecutablePath, appDirectory);
                 var mediaConfig = AbsoluteLocalPath(settings.MediaMtxConfigurationPath);
                 if (!Uri.TryCreate(settings.MediaMtxApiEndpoint, UriKind.Absolute, out var mediaUri) ||
                     mediaUri.Scheme != "http" || !mediaUri.IsLoopback || mediaUri.AbsolutePath != "/" ||
@@ -169,7 +173,7 @@ public static class LocalServerStartup
         catch (Exception e) when (e is HttpRequestException or OperationCanceledException) { return false; }
     }
 
-    private static bool IsLocal(Uri uri) => uri.IsLoopback || IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address) &&
+    internal static bool IsLocal(Uri uri) => uri.IsLoopback || IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address) &&
         NetworkInterface.GetAllNetworkInterfaces().SelectMany(n => n.GetIPProperties().UnicastAddresses).Any(a => a.Address.Equals(address));
     private static T Read<T>(string path)
     {

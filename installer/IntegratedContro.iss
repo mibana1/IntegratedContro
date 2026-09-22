@@ -105,7 +105,7 @@ begin
   ServerMode.SelectedValueIndex := 0;
   if ExpandConstant('{param:CONNECTLOCAL|0}') = '1' then ServerMode.SelectedValueIndex := 1;
   DataPage := CreateInputDirPage(ServerMode.ID, '기존 제어 서버 데이터', '이미 사용 중인 데이터 폴더를 선택하세요.',
-    'host.json과 control.sqlite가 있는 폴더를 선택합니다. 데이터는 복사하거나 초기화하지 않습니다. 새 서버는 설치 안내의 최초 설정 절차를 사용하세요.', False, '');
+    'host.json과 control.sqlite가 있는 폴더를 선택합니다. 데이터는 복사하거나 초기화하지 않습니다. 새 서버는 앱의 초기 설정 · 저장 위치에서 만드세요.', False, '');
   DataPage.Add('기존 데이터 폴더:');
   DataPage.Values[0] := ExpandConstant('{param:HOSTDATA|}');
   MediaPage := CreateInputFilePage(DataPage.ID, '기존 영상 서버 설정', '사용할 MediaMTX 설정 파일을 선택하세요.',
@@ -162,18 +162,21 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  Settings, SettingsPath: String;
+  Settings, SettingsPath, ProfileDirectory: String;
 begin
   if (CurStep = ssPostInstall) and (ServerMode.SelectedValueIndex = 1) then begin
-    SettingsPath := ExpandConstant('{app}\App\server-startup.json');
+    ProfileDirectory := ExpandConstant('{param:PROFILEDIR|}');
+    if ProfileDirectory = '' then ProfileDirectory := ExpandConstant('{localappdata}\IntegratedContro');
+    if not ForceDirectories(ProfileDirectory) then RaiseException('사용자 설정 폴더를 만들 수 없습니다.');
+    SettingsPath := AddBackslash(ProfileDirectory) + 'server-startup.json';
     Settings := '{' + #13#10 + '  "enabled": true,' + #13#10 +
       '  "hostDataPath": ' + JsonString(DataPage.Values[0]) + ',' + #13#10 +
       '  "controlHostExecutablePath": "../ControlHost/IntegratedContro.ControlHost.exe",' + #13#10 +
-      '  "mediaMtxExecutablePath": ' + JsonString(ExpandConstant('{app}\MediaMTX\mediamtx.exe')) + ',' + #13#10 +
+      '  "mediaMtxExecutablePath": ' + JsonString('../MediaMTX/mediamtx.exe') + ',' + #13#10 +
       '  "mediaMtxConfigurationPath": ' + JsonString(MediaPage.Values[0]) + ',' + #13#10 +
       '  "mediaMtxApiEndpoint": "http://127.0.0.1:' + IntToStr(StrToInt(ApiPage.Values[0])) + '"' + #13#10 + '}';
     if FileExists(SettingsPath) then
-      if not FileCopy(SettingsPath, SettingsPath + '.previous', False) then
+      if not FileCopy(SettingsPath, SettingsPath + '.bak', False) then
         RaiseException('기존 서버 시작 설정을 백업할 수 없습니다.');
     if not SaveStringToFile(SettingsPath, UTF8Encode(Settings), False) then
       RaiseException('서버 시작 설정을 저장할 수 없습니다.');

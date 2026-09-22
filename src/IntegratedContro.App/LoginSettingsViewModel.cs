@@ -5,8 +5,25 @@ namespace IntegratedContro.App;
 
 public sealed partial class MainViewModel
 {
-    internal void ReportServerStartup(string message) => Message = HasPreferencesRecovery ? PreferencesRecoveryMessage :
-        string.IsNullOrWhiteSpace(message) ? "앱 계정으로 로그인하세요." : message;
+    public InitialSetupStatus InitialSetup { get; private set; } = new(InitialSetupState.NewInstallation, "초기 설정 필요", "");
+    public void RefreshInitialSetup()
+    {
+        try { InitialSetup = StartupConfiguration.ForApp().Inspect(ClientPreferences.ReadForStartup()); }
+        catch (Exception e) when (StartupConfiguration.IsConfigurationFailure(e))
+        { InitialSetup = new(InitialSetupState.ConfigurationError, "설정 오류 · 확인 필요", StartupConfiguration.FriendlyError(e)); }
+        Changed(nameof(InitialSetup));
+    }
+    internal void ReportServerStartup(string message)
+    {
+        Message = HasPreferencesRecovery ? PreferencesRecoveryMessage :
+            string.IsNullOrWhiteSpace(message) ? "앱 계정으로 로그인하세요." : message;
+        if (message.StartsWith("서버 설정 오류:", StringComparison.Ordinal) ||
+            message.StartsWith("서버 시작 확인:", StringComparison.Ordinal) || message.Contains("ControlHost:", StringComparison.Ordinal))
+        {
+            InitialSetup = new(InitialSetupState.ConfigurationError, "서버 준비 실패 · 확인 필요", message);
+            Changed(nameof(InitialSetup));
+        }
+    }
     private bool _editingConnectionSettings;
     private ClientPreferencesLoadResult? _preferencesLoad;
     private string _connectionEndpoint = "", _connectionFingerprint = "", _connectionSettingsMessage = "";
@@ -70,7 +87,7 @@ public sealed partial class MainViewModel
                 preferences.Save();
                 _preferences = preferences; Endpoint = endpoint; Fingerprint = fingerprint;
                 UpdatePreferencesRecovery(new(preferences));
-                Changed(nameof(Endpoint)); Changed(nameof(Fingerprint)); Changed(nameof(LoginHostSummary)); NotifyMyInfo();
+                Changed(nameof(Endpoint)); Changed(nameof(Fingerprint)); Changed(nameof(LoginHostSummary)); NotifyMyInfo(); RefreshInitialSetup();
                 IsEditingConnectionSettings = false;
                 Message = "접속 설정을 저장했습니다. 앱 계정으로 로그인하세요.";
             }
@@ -97,6 +114,7 @@ public sealed partial class MainViewModel
             return Task.CompletedTask;
         }, () => !IsLoggedIn);
         ApplyClientPreferences(initial);
+        RefreshInitialSetup();
     }
     private void ApplyClientPreferences(ClientPreferencesLoadResult result)
     {
@@ -109,6 +127,7 @@ public sealed partial class MainViewModel
         if (result.RecoveryRequired) Message = result.Message;
         foreach (var name in new[] { nameof(Endpoint), nameof(Fingerprint), nameof(LoginName), nameof(LoginHostSummary) }) Changed(name);
         NotifyMyInfo();
+        RefreshInitialSetup();
     }
     private void UpdatePreferencesRecovery(ClientPreferencesLoadResult result)
     {

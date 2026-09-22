@@ -19,6 +19,10 @@ public static class HostSetup
     [SupportedOSPlatform("windows")]
     public static void Initialize(string[] args, string directory)
     {
+        // A failed setup or arbitrary existing files require inspection, never a second initialization.
+        var target = Path.GetFullPath(directory);
+        if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
+            throw new InvalidOperationException("새 서버는 빈 데이터 폴더에만 만들 수 있습니다. 기존 데이터는 inspect 또는 run으로 확인하세요.");
         var bind = Option(args, "--bind") ?? "127.0.0.1";
         var port = int.Parse(Option(args, "--port") ?? "7443");
         var seconds = int.Parse(Option(args, "--heartbeat-timeout") ?? "15");

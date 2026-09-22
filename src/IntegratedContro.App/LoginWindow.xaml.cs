@@ -8,9 +8,11 @@ public partial class LoginWindow : Window
     private readonly MainViewModel _viewModel;
     private readonly Func<string> _previousRead;
     private readonly Action _previousClear;
-    public LoginWindow(MainViewModel viewModel)
+    private readonly Func<Task<string>>? _prepareServers;
+    public LoginWindow(MainViewModel viewModel, Func<Task<string>>? prepareServers = null)
     {
         InitializeComponent();
+        _prepareServers = prepareServers;
         _viewModel = viewModel; DataContext = viewModel;
         _previousRead = viewModel.ReadLoginPassword; _previousClear = viewModel.ClearLoginPassword;
         viewModel.ReadLoginPassword = () => LoginPassword.Password;
@@ -23,6 +25,21 @@ public partial class LoginWindow : Window
             viewModel.ReadLoginPassword = _previousRead; viewModel.ClearLoginPassword = _previousClear;
         };
         Loaded += (_, _) => FocusPage();
+    }
+    private async void OpenSetup(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var setup = new InitialSetupWindow { Owner = this };
+            if (setup.ShowDialog() == true)
+            {
+                _viewModel.ReloadPreferencesCommand.Execute(null);
+                if (_prepareServers is not null) _viewModel.ReportServerStartup(await _prepareServers());
+            }
+            else _viewModel.RefreshInitialSetup();
+        }
+        catch (Exception error) when (StartupConfiguration.IsConfigurationFailure(error))
+        { _viewModel.ReportServerStartup(StartupConfiguration.FriendlyError(error)); }
     }
     private void FocusPage()
     {

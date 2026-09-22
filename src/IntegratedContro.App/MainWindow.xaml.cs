@@ -9,12 +9,14 @@ public partial class MainWindow : Window
     private bool _closed, _closing, _wasLoggedIn, _preparingServers;
     private readonly bool _showLoginPrompts;
     private readonly Func<Task>? _stopServers;
+    private readonly Func<Task<string>>? _prepareServers;
     public LoginWindow? LoginDialog { get; private set; }
     public ThemeManager Appearance { get; } = ThemeManager.Current;
     public MainWindow(bool showLoginOnStart = true, Func<Task<string>>? prepareServers = null, Func<Task>? stopServers = null)
     {
         _showLoginPrompts = showLoginOnStart;
         _stopServers = stopServers;
+        _prepareServers = prepareServers;
         InitializeComponent();
         _viewModel = new MainViewModel();
         _viewModel.AccountManagement.ReadNewPassword = () => NewAccountPassword.Password;
@@ -55,7 +57,7 @@ public partial class MainWindow : Window
     private void ShowLogin()
     {
         if (_closed || _closing || _preparingServers || _viewModel.IsLoggedIn || LoginDialog is not null) return;
-        LoginDialog = new LoginWindow(_viewModel) { Owner = this };
+        LoginDialog = new LoginWindow(_viewModel, _prepareServers) { Owner = this };
         bool authenticated;
         try { authenticated = LoginDialog.ShowDialog() == true; }
         finally { LoginDialog = null; }

@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Path $taskTest,$taskProfile -Force | Out-Null
 function Assert-Check([bool]$Condition,[string]$Message) { if (-not $Condition) { throw $Message } }
 function Run-Setup([string[]]$Extra=@(),[int]$Expected=0) {
     $log = Join-Path $taskTest ('setup-' + [guid]::NewGuid().ToString('N') + '.log')
-    $arguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/TASKS=',('/DIR="{0}"' -f $taskInstall),('/LOG="{0}"' -f $log)) + $Extra
+    $arguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/TASKS=',('/DIR="{0}"' -f $taskInstall),('/PROFILEDIR="{0}"' -f $taskProfile),('/LOG="{0}"' -f $log)) + $Extra
     $process = Start-Process -FilePath $InstallerPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
     Assert-Check ($process.ExitCode -eq $Expected) "Installer exit $($process.ExitCode), expected $Expected. See $log"
 }
@@ -94,10 +94,10 @@ try {
     Copy-Item -LiteralPath (Join-Path $taskInstall 'Examples/mediamtx.example.yml') -Destination $taskMediaConfig
     $taskDataHashes = @(Get-ChildItem -LiteralPath $taskData -Recurse -File | ForEach-Object { @{path=$_.FullName;hash=(Get-FileHash -LiteralPath $_.FullName).Hash} })
     Run-Setup -Extra @('/CONNECTLOCAL=1',('/HOSTDATA="{0}"' -f $taskData),('/MEDIACONFIG="{0}"' -f $taskMediaConfig),'/MEDIAPORT=19997')
-    $taskStartupPath = Join-Path $taskInstall 'App/server-startup.json'
+    $taskStartupPath = Join-Path $taskProfile 'server-startup.json'
     $taskStartup = Get-Content -LiteralPath $taskStartupPath -Raw | ConvertFrom-Json
     Assert-Check ($taskStartup.hostDataPath -eq $taskData) 'Korean/space data path did not round trip'
-    Assert-Check ($taskStartup.mediaMtxExecutablePath -eq (Join-Path $taskInstall 'MediaMTX/mediamtx.exe')) 'Media binary path incorrect'
+    Assert-Check ($taskStartup.mediaMtxExecutablePath -eq '../MediaMTX/mediamtx.exe') 'Media binary path incorrect'
     Assert-Check ($taskStartup.mediaMtxConfigurationPath -eq $taskMediaConfig -and $taskStartup.mediaMtxApiEndpoint -eq 'http://127.0.0.1:19997') 'Media configuration incorrect'
     $taskSettingsHash = (Get-FileHash -LiteralPath $taskStartupPath).Hash
     Run-Setup

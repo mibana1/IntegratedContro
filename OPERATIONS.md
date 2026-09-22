@@ -9,6 +9,12 @@ Windows 11 25H2 Pro·Enterprise / x64가 지원 대상이며 실제 확인 환�
 앱·서버·영상 엔진·런타임을 함께 설치하고 운영 데이터는 별도 폴더에 유지한다.
 기존 서버 연결과 새 서버 최초 설정, 업데이트·제거는 [설치 배포 안내](docs/INSTALLER.md)를 따른다.
 
+## 초기 설정과 저장 위치 (2026-09-22)
+
+로그인 화면의 **초기 설정 · 저장 위치**에서 새 로컬 서버 생성, 기존 데이터 연결/경로 변경, 원격 서버 접속을 선택한다.
+설정 오류는 별도로 표시하며 기존 데이터를 다시 초기화하지 않는다. 기본 데이터 위치는 %LOCALAPPDATA%\IntegratedContro\HostData를 제안하고 사용자가 변경할 수 있다.
+서버 시작 설정과 접속 설정은 %LOCALAPPDATA%\IntegratedContro에 보존한다. 상세 절차·경로 변경 조건·업데이트/복구는 [초기 설정 안내](docs/INITIAL_SETUP.md)를 따른다.
+
 ## 앱 시작 시 서버 실행 확인 (2026-09-18)
 
 앱을 열면 **ControlHost(제어 서버)**와 **MediaMTX(카메라 영상 서버)**의 상태를 먼저 확인한다.
@@ -28,11 +34,12 @@ Windows 11 25H2 Pro·Enterprise / x64가 지원 대상이며 실제 확인 환�
 - 포트 충돌·실행 파일 누락·설정 오류·응답 지연은 로그인 화면에 표시한다. 운영 데이터를 새로 초기화하지 않는다.
 - 설치할 PC에서 [설정 예제](config/server-startup.example.json)를 `config/server-startup.local.json`으로 복사하고
   **기존** 데이터 폴더·MediaMTX 실행 파일·설정 파일·loopback API 주소를 지정한다. 비밀번호는 넣지 않는다.
-  `scripts/publish.ps1`은 이 파일을 새 App 폴더의 `server-startup.json`으로 복사하여 배포마다 유지한다.
+  개발 배포의 `scripts/publish.ps1`은 이 파일을 최초 가져오기용으로 새 App 폴더에 복사한다.
+  앱은 사용자 프로필의 `server-startup.json`을 우선하며, 한 번 저장한 경로를 이전 배포 설정으로 덮어쓰지 않는다.
   ControlHost는 기본적으로 같은 배포 폴더의 `../ControlHost/IntegratedContro.ControlHost.exe`를 사용한다.
 - 설정은 특정 PC 이름에 고정하지 않는다. 각 설치의 경로를 사용하며 기존 `host.json`의 포트·인증서 지문과
   클라이언트 접속 설정이 일치하는지 확인한다. 다른 호스트 프로필이나 원격 서버 접속을 로컬 실행으로 대체하지 않는다.
-  원격 서버를 사용하는 클라이언트 전용 설치에는 시작 설정을 배포하지 않는다.
+  원격 서버를 선택하면 로컬 서버 시작 설정을 비활성화한다.
 - `enabled: false`로 시작 확인을 끌 수 있다. 검증용 `--server-startup <JSON 절대 경로>`로 별도 설정을 지정할 수 있다.
 - MediaMTX API는 인증된 API의 응답과 포트를 소유한 실행 파일을 확인한다. API/HLS 비밀번호나 카메라 RTSP 정보를 읽어 복제하지 않는다.
 

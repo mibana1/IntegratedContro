@@ -40,7 +40,8 @@ public static partial class Program
         {
             try
             {
-                if (args.Contains("--server-startup-only")) await RunServerStartup();
+                if (args.Contains("--initial-setup-only")) await RunInitialSetup();
+                else if (args.Contains("--server-startup-only")) await RunServerStartup();
                 else if (args.Contains("--theme-only")) await RunThemeSwitching();
                 else if (args.Contains("--design-only")) await RunDesignControls();
                 else if (args.Contains("--login-only")) { await RunLogin(); await RunLoginClose(); }
@@ -71,7 +72,7 @@ public static partial class Program
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await RunPreferencesRecovery(); await Run(); await RunLighting(); await RunLightSlots(); await RunCameraInput(); await RunCameraStatus(); await RunDraftRecovery(); }
-                    await RunThemeSwitching(); await RunDesignControls(); await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunRoleCreation(); await RunRoleManagement(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
+                    await RunInitialSetup(); await RunThemeSwitching(); await RunDesignControls(); await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunRoleCreation(); await RunRoleManagement(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }

@@ -13,7 +13,7 @@ if (!OperatingSystem.IsWindows())
 var dataPath = HostSetup.Option(args, "--data");
 if (string.IsNullOrWhiteSpace(dataPath))
 {
-    Console.Error.WriteLine("사용법: IntegratedContro.ControlHost.exe setup|run --data <로컬 절대 폴더>");
+    Console.Error.WriteLine("사용법: IntegratedContro.ControlHost.exe setup|inspect|run --data <로컬 절대 폴더>");
     Console.Error.WriteLine("setup 옵션: --site <현장> --admin <계정> --bind <수신 IP> --port <포트> --heartbeat-timeout <초>");
     return 2;
 }
@@ -23,7 +23,7 @@ try
     {
         HostSetup.Initialize(args, dataPath); return 0;
     }
-    if (args.FirstOrDefault() != "run") throw new ArgumentException("setup 또는 run을 명시하세요.");
+    if (args.FirstOrDefault() is not ("run" or "inspect")) throw new ArgumentException("setup, inspect 또는 run을 명시하세요.");
     using var store = HostAdapters.OpenStorage(dataPath);
     var config = JsonSerializer.Deserialize<HostConfiguration>(
         File.ReadAllText(Path.Combine(store.DataPath, "host.json")), JsonDefaults.Options)
@@ -32,8 +32,14 @@ try
         throw new InvalidDataException("호스트 IP/포트 설정 오류");
     using var certificate = HostAdapters.Certificates.Load(store.DataPath);
     if (certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256) != config.CertificateSha256 ||
-        DateTime.UtcNow > certificate.NotAfter.ToUniversalTime())
+        DateTime.UtcNow > certificate.NotAfter.ToUniversalTime() || DateTime.UtcNow < certificate.NotBefore.ToUniversalTime())
         throw new InvalidDataException("인증서 지문 또는 유효기간을 확인하세요.");
+    if (args.FirstOrDefault() == "inspect")
+    {
+        _ = store.State.Load();
+        Console.WriteLine("기존 데이터·계정·보호 인증서 확인 완료");
+        return 0;
+    }
     using var hiperwallReader = new HiperwallHttpReader();
     using var media = new MediaMtxHttpClient();
     var service = new ControlService(store.State, new Pbkdf2PasswordHasher(), new DeviceDriverRegistry(new VirtualDeviceDriver(store.VirtualDevices)),
