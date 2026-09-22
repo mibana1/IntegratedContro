@@ -2,7 +2,7 @@
 
 Windows 11 25H2 Pro·Enterprise / x64용 현재 사용자 설치다. 기본 경로는
 `%LOCALAPPDATA%\Programs\IntegratedContro`이며 설치 화면에서 바꿀 수 있다.
-관리자 권한을 요청하지 않고, 한국어 설치 화면·시작 메뉴·선택 가능한 바탕 화면 바로가기·Windows 앱 제거 항목을 제공한다.
+관리자 권한을 요청하지 않고, 한국어 설치 화면·선택 가능한 시작 메뉴/바탕 화면 바로가기·Windows 앱 제거 항목을 제공한다.
 
 ## 사용자 설치
 
@@ -10,13 +10,14 @@ Windows 11 25H2 Pro·Enterprise / x64용 현재 사용자 설치다. 기본 경�
 포함하므로 설치 중 다운로드가 없다. 자세한 새 서버 최초 설정과 기존 서버 연결 방법은
 [동봉 설치 안내](../installer/INSTALL.txt)를 따른다. 서버를 이미 운영하는 PC는 기존 Windows 계정으로 설치한다.
 
-- 원격 서버 또는 신규 설치는 기본 '기존 설정 유지 / 원격 서버 사용 / 새 서버는 설치 후 설정'을 선택한다.
-- 이 PC의 기존 서버 연결은 데이터 폴더, 기존 MediaMTX 설정 파일과 API 포트를 직접 지정한다.
-  데이터 폴더의 존재와 설치 폴더와의 분리를 검사한다. 실제 설정 내용·주소·인증서는 앱의 기존 검증을 따른다.
-- 연결 설정은 %LOCALAPPDATA%\IntegratedContro\server-startup.json에 저장한다. 기본 재설치는 이를 덮어쓰지 않는다.
-  연결 경로를 다시 지정하면 이전 파일은 .bak으로 남긴다. 과거 App/server-startup.json은 앱 최초 실행 때 가져온다.
-- 로그인 화면의 **초기 설정 · 저장 위치**에서 신규 서버 생성·기존 데이터 연결·원격 접속을 선택한다.
-  기본 데이터 위치, 경로 변경과 오류 복구는 [초기 설정 안내](INITIAL_SETUP.md)를 따른다.
+- 설치 프로그램에서는 **설치 위치·시작 메뉴/바탕 화면 바로가기**만 설정한다. 서버 연결·데이터 폴더·MediaMTX 설정은 앱에서 진행한다.
+- 완료 화면의 **IntegratedContro 실행**은 기본 선택되어 있다. 첫 실행에는 **새로 시작 / 기존 서버 접속 / 기존 데이터 사용**을 선택하며, 저장된 접속 설정이 있으면 로그인으로 이어진다.
+  실행을 해제한 경우에는 나중에 바로가기 또는 설치 폴더의 App/IntegratedContro.App.exe로 실행한다. 무인 설치는 앱을 실행하지 않는다.
+- 데이터 연결이나 위치 변경은 로그인 화면의 **초기 설정 · 저장 위치**에서 진행한다. 이를 위해 재설치할 필요가 없다.
+  기존 폴더의 DB·인증서 검증, 경로 변경과 오류 복구는 [초기 설정 안내](INITIAL_SETUP.md)를 따른다.
+- 설치 프로그램은 사용자 설정을 생성하거나 덮어쓰지 않는다. 앱이 %LOCALAPPDATA%\IntegratedContro의 client.json·server-startup.json을 관리하며 업데이트·제거에도 유지한다.
+  과거 App/server-startup.json은 사용자 설정이 없을 때 앱에서 한 번 가져온다.
+- 설치 프로그램의 과거 연결 인수(/CONNECTLOCAL, /HOSTDATA, /MEDIACONFIG, /MEDIAPORT, /PROFILEDIR)는 더 이상 사용하지 않는다. 설치 후 앱에서 연결을 저장한다.
 - 기존 DB, 계정, 인증서 개인 키, DPAPI 파일, 현장 MediaMTX 비밀번호는 설치물에 포함하지 않는다.
   새 서버의 계정 초기 설정은 앱에서 실행하며 기존 ControlHost setup 명령도 유지한다.
 - 설치/제거는 실행 중인 해당 설치 폴더의 앱·서버를 종료하지 않고 작업을 중단한다.
@@ -26,7 +27,7 @@ Windows 11 25H2 Pro·Enterprise / x64용 현재 사용자 설치다. 기본 경�
 
 ## 빌드
 
-PowerShell 7에서 저장소 루트를 기준으로 실행한다.
+PowerShell 7에서 저장소 루트를 기준으로 실행한다. SDK 10.0.401과 런타임 10.0.12를 사용한다. 검증·배포 스크립트는 scripts/use-dotnet.ps1로 설치된 SDK 또는 artifacts/dotnet-sdk-10.0.401의 휴대형 SDK를 선택한다.
 
 ~~~powershell
 # 검증을 마친 최신 기존 배포본을 설치 EXE로 묶기
@@ -51,7 +52,12 @@ FFmpeg와 테스트/운영 설정은 넣지 않는다. LibVLC는 교체 가능�
 
 ## 검증
 
+현재 실행 결과와 설치 EXE 식별자는 [배포 검증 기록](RELEASE_VALIDATION.md)을 따른다.
+
+tests/InstallerSmoke.ps1은 설치된 ControlHost·MediaMTX와 앱의 초기 설정 화면을 사용한다. 먼저 전체 검증을 실행한 후 같은 배포본으로 제품 설치물과 별도 AppId의 검증 설치물을 만든다.
+
 ~~~powershell
+.\scripts\verify.ps1 -IncludeMediaSmoke
 .\scripts\build-installer.ps1 -VerificationPackage -OutputDirectory "$PWD\artifacts\installer-verification"
 .\tests\InstallerSmoke.ps1 -InstallerPath "$PWD\artifacts\installer-verification\IntegratedContro-Setup-<빌드 시각>-verification.exe"
 ~~~
@@ -59,9 +65,10 @@ FFmpeg와 테스트/운영 설정은 넣지 않는다. LibVLC는 교체 가능�
 테스트 설치본은 제품 설치본과 같은 스크립트/페이로드에 별도 AppId를 사용한다.
 테스트는 artifacts/installer-smoke 아래의 한글·공백 경로, 전용 앱 프로필과 새 호스트 DB에서 실행한다.
 바로가기를 만들지 않고 테스트용 제거 등록만 만들었다가 정상 제거한다.
-파일 해시, WPF 실행, 제어 서버 초기화·HTTPS·정상 종료, MediaMTX 실행,
-실행 중 업데이트/제거 차단, 기존 데이터 연결, 재설치, 잘못된 설정 거부, 제거 후 DB/보호 파일/프로필/설정 보존을 확인한다.
+검사는 모든 설치 파일 해시, 설치된 WPF 실행, 앱 설정의 신규·기존·원격 연결·서버 실행 거절·접속 실패·손상 설정을 확인한다.
+MediaMTX 자동 설정·재시도·외부 파일 보존, 비밀번호 변경·파일 일부 저장 실패·호스트 재시작·이전 설정 복구와 API/HLS 재인증도 포함한다.
+실행 중 앱/호스트의 업데이트·제거 차단, 재설치/제거 후 DB·인증서·보호 파일·프로필의 해시 보존을 확인한다.
+이전 검증 EXE를 -PreviousInstallerPath로 주면 이전 버전에서 만든 데이터·계정을 새 버전 설치 직후에도 대조하고 새 호스트로 다시 연다. 영상 실패 유도는 신규 설치 경로에서 수행하며, 이전 버전 경로에서는 첫 실행·업데이트·기존 데이터 재열기·재설치·제거 보존에 집중한다. 실제 두 PC·Enterprise·설치 마법사 물리 입력 검수는 별도다.
 실패한 테스트 설치의 등록이 남으면 해당 테스트 경로를 확인하고 그 설치의 unins000.exe로 제거한 뒤 다시 실행한다.
 
 운영 DB·현장 장비에는 테스트 명령을 보내지 않는다. 깨끗한 다른 PC와 Enterprise의 설치 검수는 별도다.
-

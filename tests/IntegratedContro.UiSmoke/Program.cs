@@ -19,6 +19,8 @@ public static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+        Console.InputEncoding = new System.Text.UTF8Encoding(false);
         var profileIndex = Array.IndexOf(args, "--profile-dir");
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "IntegratedContro.sln"))) root = root.Parent;
@@ -40,7 +42,21 @@ public static partial class Program
         {
             try
             {
-                if (args.Contains("--initial-setup-only")) await RunInitialSetup();
+                if (args.Contains("--setup-lifecycle-child"))
+                {
+                    var scenario = args[Array.IndexOf(args, "--scenario") + 1];
+                    if (scenario == "media-setup") await MediaSetupLifecycle.Run();
+                    else if (scenario == "local-media") await LocalMediaLifecycle.Run();
+                    else await FirstRunLifecycle.Run(scenario);
+                }
+                else if (args.Contains("--setup-lifecycle-only"))
+                {
+                    var installIndex = Array.IndexOf(args, "--installed-root");
+                    var installed = installIndex < 0 ? null : args[installIndex + 1];
+                    await RunSetupLifecycle(installedRoot: installed);
+                    if (args.Contains("--include-setup-media")) await RunSetupLifecycle(true, installed);
+                }
+                else if (args.Contains("--initial-setup-only")) await RunInitialSetup();
                 else if (args.Contains("--server-startup-only")) await RunServerStartup();
                 else if (args.Contains("--theme-only")) await RunThemeSwitching();
                 else if (args.Contains("--design-only")) await RunDesignControls();
@@ -51,7 +67,7 @@ public static partial class Program
                 else if (args.Contains("--camera-content-lookup-only")) await RunCameraContentLookup();
                 else if (args.Contains("--camera-status-only")) await RunCameraStatus();
                 else if (args.Contains("--camera-input-only")) await RunCameraInput();
-                else if (args.Contains("--media-only")) { await RunRelay(); await RunMedia(); await RunPreview(); }
+                else if (args.Contains("--media-only")) { await RunSetupLifecycle(true); await RunServerStartup(); await RunRelay(); await RunMedia(); await RunPreview(); }
                 else if (args.Contains("--preview-only")) { await RunRelay(); await RunPreview(); }
                 else if (args.Contains("--editor-only")) { await RunHiperwallEditing(); await RunHiperwallDeletion(); }
                 else if (args.Contains("--deletion-only")) await RunHiperwallDeletion();
@@ -72,7 +88,7 @@ public static partial class Program
                 else
                 {
                     if (!args.Contains("--hiperwall-only")) { await RunLogin(); await RunLoginClose(); await RunPreferencesRecovery(); await Run(); await RunLighting(); await RunLightSlots(); await RunCameraInput(); await RunCameraStatus(); await RunDraftRecovery(); }
-                    await RunInitialSetup(); await RunThemeSwitching(); await RunDesignControls(); await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunRoleCreation(); await RunRoleManagement(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
+                    await RunInitialSetup(); await RunSetupLifecycle(); await RunThemeSwitching(); await RunDesignControls(); await RunHiperwall(); await RunHiperwallEditing(); await RunHiperwallDeletion(); await RunHiperwallLayouts(); await RunHiperwallSlots(); await RunScenarioExtensions(); await RunScenarioSettings(); await RunRoleUnassignment(); await RunRoleCreation(); await RunRoleManagement(); await RunPowerInputs(); await RunDeviceDriverSettings(); await RunNumericInputs(); await RunScenarioEditor(); await RunHandover(); await RunEnvironmentAdapters(); await RunManagement(); await RunCameraContentLookup(); await RunRelay(); await RunPreview();
                 }
                 result = 0;
             }

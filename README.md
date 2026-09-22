@@ -25,10 +25,12 @@ Hiperwall 기본 조회·추가·변경·닫기의 실제 연동은 사용자가
 
 ## 빌드와 검증
 
-.NET SDK **10.0.400**이 필요합니다. `global.json`, 중앙 패키지 버전과 각 프로젝트의
-`packages.lock.json`으로 의존성을 고정합니다.
+.NET SDK **10.0.401**이 필요합니다. `global.json`, 중앙 패키지 버전과 각 프로젝트의
+`packages.lock.json`으로 의존성을 고정합니다. 런타임·Microsoft SQLite/보호 저장 패키지는 **10.0.12**입니다.
+`scripts/use-dotnet.ps1`은 설치된 SDK 또는 공식 SHA-512를 검증해 `artifacts/dotnet-sdk-10.0.401`에 푼 휴대형 SDK를 선택합니다.
 
 ```powershell
+.\scripts\use-dotnet.ps1
 dotnet restore IntegratedContro.sln --locked-mode
 dotnet build IntegratedContro.sln --no-restore
 .\scripts\verify.ps1
@@ -44,7 +46,7 @@ WPF 스모크 검증에는 로그인된 Windows 데스크톱이 필요하며 테
 EXE/DLL 복사본과 별도 Current 복사본은 만들지 않습니다.
 
 네이티브 영상 검증은 별도 도구를 준비한 뒤 실행합니다. 생성 영상과 격리된 호스트만 사용하며,
-도구는 제품 배포물에 포함하지 않습니다. 처음 준비할 때만 다운로드가 필요합니다.
+FFmpeg는 검증 전용이며 설치물에 포함하지 않습니다. MediaMTX는 제품에도 포함됩니다. 처음 도구를 준비할 때만 다운로드가 필요합니다.
 
 ```powershell
 .\scripts\prepare-media-tests.ps1

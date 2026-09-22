@@ -1,28 +1,30 @@
-param([Parameter(Mandatory)][string]$InstallerPath)
+param([Parameter(Mandatory)][string]$InstallerPath, [string]$PreviousInstallerPath)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+& (Join-Path $taskRoot 'scripts/use-dotnet.ps1')
 $InstallerPath = (Resolve-Path -LiteralPath $InstallerPath).Path
-if ($InstallerPath -notlike '*-verification.exe') { throw 'Only the isolated verification package may be installed by this test.' }
+if ($InstallerPath -notlike '*-verification.exe') { throw 'Only an isolated verification package may be installed.' }
+if ($PreviousInstallerPath) {
+    $PreviousInstallerPath = (Resolve-Path -LiteralPath $PreviousInstallerPath).Path
+    if ($PreviousInstallerPath -notlike '*-verification.exe') { throw 'Previous package must also be a verification package.' }
+}
 $taskRegistry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\IntegratedContro.InstallerVerification_is1'
 if (Test-Path -LiteralPath $taskRegistry) { throw 'A previous verification installation exists; inspect it first.' }
 $taskTest = Join-Path $taskRoot ('artifacts/installer-smoke/' + [guid]::NewGuid().ToString('N'))
 $taskInstall = Join-Path $taskTest '설치 폴더'
-$taskData = Join-Path $taskTest '서버 데이터'
 $taskProfile = Join-Path $taskTest '앱 프로필'
 New-Item -ItemType Directory -Path $taskTest,$taskProfile -Force | Out-Null
 function Assert-Check([bool]$Condition,[string]$Message) { if (-not $Condition) { throw $Message } }
-function Run-Setup([string[]]$Extra=@(),[int]$Expected=0) {
+function Run-Setup([string]$Package=$InstallerPath,[int]$Expected=0,[string[]]$Extra=@()) {
     $log = Join-Path $taskTest ('setup-' + [guid]::NewGuid().ToString('N') + '.log')
-    $arguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/TASKS=',('/DIR="{0}"' -f $taskInstall),('/PROFILEDIR="{0}"' -f $taskProfile),('/LOG="{0}"' -f $log)) + $Extra
-    $process = Start-Process -FilePath $InstallerPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+    $arguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/TASKS=',('/DIR="{0}"' -f $taskInstall),('/LOG="{0}"' -f $log)) + $Extra
+    $process = Start-Process -FilePath $Package -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
     Assert-Check ($process.ExitCode -eq $Expected) "Installer exit $($process.ExitCode), expected $Expected. See $log"
 }
-function Start-Fixture([string]$Executable,[string[]]$Arguments,[bool]$Input=$false) {
+function Start-Fixture([string]$Executable,[string[]]$Arguments) {
     $info = [Diagnostics.ProcessStartInfo]::new($Executable)
-    $info.UseShellExecute = $false
-    $info.CreateNoWindow = $true
+    $info.UseShellExecute = $false; $info.CreateNoWindow = $true
     $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-    $info.RedirectStandardInput = $Input
     $info.WorkingDirectory = $taskTest
     foreach ($argument in $Arguments) { $info.ArgumentList.Add($argument) }
     return [Diagnostics.Process]::Start($info)
@@ -34,87 +36,95 @@ function Assert-Payload {
         Assert-Check (Test-Path -LiteralPath $path -PathType Leaf) "Missing installed file $($file.path)"
         Assert-Check ((Get-FileHash -LiteralPath $path).Hash -eq $file.sha256) "Installed file mismatch $($file.path)"
     }
+    Assert-Check (-not (Test-Path -LiteralPath (Join-Path $taskInstall 'App/server-startup.json'))) 'Site startup settings leaked into installer'
     Write-Output "PASS: $($manifest.files.Count) installed payload hashes"
 }
-$taskApp = $null
-$taskHost = $null
-$taskShutdown = $null
+function Run-Lifecycle([switch]$Media,[switch]$Legacy) {
+    $arguments = @('--setup-lifecycle-only','--installed-root',$taskInstall,'--profile-dir',$taskProfile)
+    if ($Media) { $arguments += '--include-setup-media' }
+    if ($Legacy) { $arguments += '--legacy-password-fixture' }
+    $log = Join-Path $taskTest ('lifecycle-' + [guid]::NewGuid().ToString('N') + '.log')
+    & dotnet run --project (Join-Path $taskRoot 'tests/IntegratedContro.UiSmoke') --no-build --no-restore -- @arguments *> $log
+    Assert-Check ($LASTEXITCODE -eq 0) "Installed setup lifecycle failed. See $log"
+    Get-Content -LiteralPath $log
+}
+function Snapshot-Data {
+    @(Get-ChildItem -LiteralPath $taskProfile -Recurse -File | Where-Object { $_.Extension -notin @('.png','.log') } | ForEach-Object {
+        @{ path=$_.FullName; hash=(Get-FileHash -LiteralPath $_.FullName).Hash }
+    })
+}
+function Assert-Preserved($Files) {
+    foreach ($file in $Files) {
+        Assert-Check ((Test-Path -LiteralPath $file.path) -and (Get-FileHash -LiteralPath $file.path).Hash -eq $file.hash) "Data/profile changed: $($file.path)"
+    }
+}
+$taskApp = $null; $taskHost = $null; $taskShutdown = $null
 try {
-    Run-Setup
+    if ($PreviousInstallerPath) {
+        # The old installer wrote startup settings; keep those writes in this isolated profile.
+        Run-Setup -Package $PreviousInstallerPath -Extra @(('/PROFILEDIR="{0}"' -f (Join-Path $taskTest 'old-installer-profile')))
+        Run-Lifecycle -Legacy
+        $taskPreviousVersion = (Get-Content (Join-Path $taskInstall 'package-manifest.json') -Raw | ConvertFrom-Json).version
+        $taskPreviousData = Snapshot-Data
+        $taskUpgradeHostData = (Get-ChildItem -LiteralPath $taskProfile -Recurse -Filter host.json -File | Select-Object -First 1).DirectoryName
+        Run-Setup
+        $taskCurrentVersion = (Get-Content (Join-Path $taskInstall 'package-manifest.json') -Raw | ConvertFrom-Json).version
+        Assert-Check ([version]$taskCurrentVersion -gt [version]$taskPreviousVersion) 'Upgrade did not advance product version'
+        Assert-Preserved $taskPreviousData
+        Write-Output "PASS: upgrade $taskPreviousVersion -> $taskCurrentVersion preserves all existing fixture data/settings"
+    } else { Run-Setup }
     Assert-Payload
     Assert-Check (Test-Path -LiteralPath $taskRegistry) 'Uninstall registration missing'
-    Assert-Check (-not (Test-Path -LiteralPath (Join-Path $taskInstall 'App/server-startup.json'))) 'Site startup settings leaked into installer'
-    $taskApp = Start-Fixture (Join-Path $taskInstall 'App/IntegratedContro.App.exe') @('--profile-dir',$taskProfile,'--server-startup',(Join-Path $taskTest 'absent.json'))
+    $taskLaunchProfile = Join-Path $taskTest '첫 실행 프로필'
+    Assert-Check (-not (Test-Path -LiteralPath $taskLaunchProfile)) 'Installer created user settings'
+    $taskApp = Start-Fixture (Join-Path $taskInstall 'App/IntegratedContro.App.exe') @('--profile-dir',$taskLaunchProfile,'--server-startup',(Join-Path $taskTest 'absent.json'))
     $taskDeadline = [datetime]::UtcNow.AddSeconds(25)
     do { Start-Sleep -Milliseconds 200; $taskApp.Refresh() } while (-not $taskApp.HasExited -and $taskApp.MainWindowHandle -eq 0 -and [datetime]::UtcNow -lt $taskDeadline)
-    Assert-Check (-not $taskApp.HasExited -and $taskApp.MainWindowHandle -ne 0) 'Installed WPF app did not open its login window'
+    Assert-Check (-not $taskApp.HasExited -and $taskApp.MainWindowHandle -ne 0) 'Installed WPF app did not open'
     Run-Setup -Expected 7
     Assert-Check (-not $taskApp.HasExited) 'Installer terminated the running app'
-    Assert-Payload
     $taskUninstaller = Join-Path $taskInstall 'unins000.exe'
     $taskUninstall = Start-Process -FilePath $taskUninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -PassThru -Wait
     Assert-Check ($taskUninstall.ExitCode -ne 0 -and (Test-Path -LiteralPath (Join-Path $taskInstall 'App/IntegratedContro.App.exe'))) 'Uninstall did not protect the running app'
-    # Only this isolated test process is stopped; the login dialog owns the active window.
-    $taskApp.Kill()
-    Assert-Check ($taskApp.WaitForExit(15000)) 'Test app did not exit'
+    $taskApp.Kill(); Assert-Check ($taskApp.WaitForExit(15000)) 'Test app did not exit'
     $taskApp.Dispose(); $taskApp = $null
-    Write-Output 'PASS: installed WPF launch, running app update/uninstall protection'
-    $taskProfileHash = (Get-FileHash -LiteralPath (Join-Path $taskProfile 'client.json')).Hash
-    $taskListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
-    $taskListener.Start(); $taskPort = $taskListener.LocalEndpoint.Port; $taskListener.Stop()
-    $taskHostExe = Join-Path $taskInstall 'ControlHost/IntegratedContro.ControlHost.exe'
-    $taskInit = Start-Fixture $taskHostExe @('setup','--data',$taskData,'--site','Installer verification','--admin','installer-test','--port',"$taskPort") $true
-    $taskPassword = [guid]::NewGuid().ToString('N')
-    $taskInit.StandardInput.WriteLine($taskPassword)
-    $taskInit.StandardInput.WriteLine($taskPassword)
-    $taskInit.StandardInput.Close()
-    Assert-Check ($taskInit.WaitForExit(20000) -and $taskInit.ExitCode -eq 0) 'Installed host setup failed'
-    $taskInit.Dispose()
-    $taskPassword = $null
+    # Clean installation covers media fault injection. Upgrade focuses on old data reopening and preservation.
+    Run-Lifecycle -Media:([string]::IsNullOrEmpty($PreviousInstallerPath))
+    $taskHostData = if ($taskUpgradeHostData) { $taskUpgradeHostData } else { (Get-ChildItem -LiteralPath $taskProfile -Recurse -Filter host.json -File | Select-Object -First 1).DirectoryName }
+    Assert-Check (-not [string]::IsNullOrEmpty($taskHostData)) 'App setup did not create test host data'
     $taskEventName = 'Local\IntegratedContro.ServerStop.' + [guid]::NewGuid().ToString('N')
     $taskShutdown = [Threading.EventWaitHandle]::new($false,[Threading.EventResetMode]::ManualReset,$taskEventName)
-    $taskHost = Start-Fixture $taskHostExe @('run','--data',$taskData,'--shutdown-event',$taskEventName)
+    $taskHost = Start-Fixture (Join-Path $taskInstall 'ControlHost/IntegratedContro.ControlHost.exe') @('run','--data',$taskHostData,'--shutdown-event',$taskEventName)
+    $taskPort = (Get-Content (Join-Path $taskHostData 'host.json') -Raw | ConvertFrom-Json).port
     $taskReady = $false
     for ($taskAttempt=0; $taskAttempt -lt 60; $taskAttempt++) {
         if ($taskHost.HasExited) { break }
-        try {
-            $taskHealth = Invoke-RestMethod -Uri "https://127.0.0.1:$taskPort/health" -SkipCertificateCheck -TimeoutSec 1
-            $taskReady = $taskHealth.status -eq 'ready'
-            if ($taskReady) { break }
-        } catch { Start-Sleep -Milliseconds 200 }
+        try { $taskHealth = Invoke-RestMethod -Uri "https://127.0.0.1:$taskPort/health" -SkipCertificateCheck -TimeoutSec 1; $taskReady = $taskHealth.status -eq 'ready'; if ($taskReady) { break } }
+        catch { Start-Sleep -Milliseconds 200 }
     }
-    Assert-Check $taskReady 'Installed self-contained host did not become ready'
+    Assert-Check $taskReady 'Installed host did not become ready'
     Run-Setup -Expected 7
     Assert-Check (-not $taskHost.HasExited) 'Installer terminated the running host'
+    $taskUninstall = Start-Process -FilePath $taskUninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -PassThru -Wait
+    Assert-Check ($taskUninstall.ExitCode -ne 0 -and -not $taskHost.HasExited) 'Uninstall did not protect the running host'
     $taskShutdown.Set() | Out-Null
-    Assert-Check ($taskHost.WaitForExit(15000) -and $taskHost.ExitCode -eq 0) 'Installed host failed normal shutdown'
+    Assert-Check ($taskHost.WaitForExit(15000) -and $taskHost.ExitCode -eq 0) 'Host failed normal shutdown'
     $taskHost.Dispose(); $taskHost = $null
-    Write-Output 'PASS: installed host initial setup/HTTPS/normal shutdown and running host update protection'
-    $taskMediaConfig = Join-Path $taskData 'mediamtx.yml'
-    Copy-Item -LiteralPath (Join-Path $taskInstall 'Examples/mediamtx.example.yml') -Destination $taskMediaConfig
-    $taskDataHashes = @(Get-ChildItem -LiteralPath $taskData -Recurse -File | ForEach-Object { @{path=$_.FullName;hash=(Get-FileHash -LiteralPath $_.FullName).Hash} })
-    Run-Setup -Extra @('/CONNECTLOCAL=1',('/HOSTDATA="{0}"' -f $taskData),('/MEDIACONFIG="{0}"' -f $taskMediaConfig),'/MEDIAPORT=19997')
-    $taskStartupPath = Join-Path $taskProfile 'server-startup.json'
-    $taskStartup = Get-Content -LiteralPath $taskStartupPath -Raw | ConvertFrom-Json
-    Assert-Check ($taskStartup.hostDataPath -eq $taskData) 'Korean/space data path did not round trip'
-    Assert-Check ($taskStartup.mediaMtxExecutablePath -eq '../MediaMTX/mediamtx.exe') 'Media binary path incorrect'
-    Assert-Check ($taskStartup.mediaMtxConfigurationPath -eq $taskMediaConfig -and $taskStartup.mediaMtxApiEndpoint -eq 'http://127.0.0.1:19997') 'Media configuration incorrect'
-    $taskSettingsHash = (Get-FileHash -LiteralPath $taskStartupPath).Hash
+    $taskDataHashes = Snapshot-Data
+    Assert-Check ($taskDataHashes.Count -gt 20) 'Data preservation fixture is incomplete'
     Run-Setup
     Assert-Payload
-    Assert-Check ((Get-FileHash -LiteralPath $taskStartupPath).Hash -eq $taskSettingsHash) 'Upgrade replaced startup settings'
-    Run-Setup -Extra @('/CONNECTLOCAL=1',('/HOSTDATA="{0}"' -f $taskInstall),('/MEDIACONFIG="{0}"' -f $taskMediaConfig)) -Expected 7
-    Assert-Check ((Get-FileHash -LiteralPath $taskStartupPath).Hash -eq $taskSettingsHash) 'Rejected configuration changed settings'
+    Assert-Preserved $taskDataHashes
     $taskMediaVersion = & (Join-Path $taskInstall 'MediaMTX/mediamtx.exe') --version
     Assert-Check ($LASTEXITCODE -eq 0 -and $taskMediaVersion -match '1\.21\.0') 'Packaged MediaMTX failed to execute'
     $taskUninstall = Start-Process -FilePath $taskUninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -PassThru -Wait
     Assert-Check ($taskUninstall.ExitCode -eq 0) 'Test uninstall failed'
     Assert-Check (-not (Test-Path -LiteralPath (Join-Path $taskInstall 'App/IntegratedContro.App.exe'))) 'Product binary remained after uninstall'
     Assert-Check (-not (Test-Path -LiteralPath $taskRegistry)) 'Uninstall registration remained'
-    Assert-Check ((Get-FileHash -LiteralPath $taskStartupPath).Hash -eq $taskSettingsHash) 'Uninstall removed startup settings'
-    Assert-Check ((Get-FileHash -LiteralPath (Join-Path $taskProfile 'client.json')).Hash -eq $taskProfileHash) 'Profile was changed'
-    foreach ($file in $taskDataHashes) { Assert-Check ((Get-FileHash -LiteralPath $file.path).Hash -eq $file.hash) 'Operational data changed during installation/uninstallation' }
-    $taskResult = 'PASS: clean install, all payload hashes, WPF/host/MediaMTX execution, active-process protection, local data connection, upgrade, invalid config rejection, uninstall with DB/protected files/profile/settings preservation.'
+    Assert-Preserved $taskDataHashes
+    $taskResult = "PASS: installed payload hashes, WPF/host/MediaMTX, app-driven new/existing/remote setup, interruption/retry, active-process protection, reinstall and uninstall; $($taskDataHashes.Count) data/protected/profile/settings files preserved. Physical second PC and Enterprise not tested."
+    if (-not $PreviousInstallerPath) { $taskResult += " Installed media setup/password/recovery coverage passed." }
+    else { $taskResult += " Previous-version upgrade and new host reopening old data passed; media coverage is in the clean-install run." }
     $taskResult | Set-Content -LiteralPath (Join-Path $taskTest 'result.txt') -Encoding UTF8
     Write-Output $taskResult
     Write-Output "Evidence: $taskTest"
@@ -128,4 +138,3 @@ finally {
     }
     if ($null -ne $taskShutdown) { $taskShutdown.Dispose() }
 }
-

@@ -1,6 +1,7 @@
 param([switch]$SkipUiSmoke, [switch]$IncludeMediaSmoke)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+& (Join-Path $taskRoot 'scripts/use-dotnet.ps1')
 Push-Location -LiteralPath $taskRoot
 try {
     dotnet restore IntegratedContro.sln --locked-mode

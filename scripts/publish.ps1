@@ -1,6 +1,7 @@
 param([switch]$Installer)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+& (Join-Path $taskRoot 'scripts/use-dotnet.ps1')
 $taskPublishRoot = Join-Path $taskRoot 'artifacts/publish'
 $taskStamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
 $taskStaging = Join-Path $taskPublishRoot "Build-$taskStamp"

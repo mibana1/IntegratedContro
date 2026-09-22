@@ -11,7 +11,7 @@
 - 이 폴더가 실제 Git 저장소다. 새 앱 소스는 이 저장소에 작성한다.
 - 작업 공간 ../archive/legacy-reference는 이전 프로젝트의 참고 자료다. 불완전한 Node 배포본을 실행 대상으로 삼지 않는다.
 - C# + WPF + XAML/MVVM과 SQLite 방향을 유지한다. 기존 JS/HTML/Node는 동작·테스트 참고용이다.
-- 초기 공식 지원 OS는 Windows 11 25H2 Pro·Enterprise / x64다. 다른 OS는 필요 시 검증 후 추가한다. .NET 10을 사용하며 개발 PC의 SDK 10.0.400 설치를 확인했다.
+- 초기 공식 지원 OS는 Windows 11 25H2 Pro·Enterprise / x64다. 다른 OS는 필요 시 검증 후 추가한다. .NET 10을 사용하며 SDK 10.0.401·런타임 10.0.12를 고정한다. scripts/use-dotnet.ps1은 설치된 SDK 또는 artifacts의 검증된 휴대형 SDK를 선택한다.
 - Core/Application에 WPF·Win32·COM·레지스트리 직접 의존을 두지 않는다. 장치·영상·보호 저장·OS 기능 탐지·설치 의존은 전용 어댑터와 진입점에 격리하고, 지원 판정과 어댑터 선택을 한곳에서 관리한다. 상세 경계는 PROJECT_GUIDE.md 5절을 따른다.
 - UI·역할·장비 기능·드라이버·연결을 분리하며 장비 모델이나 주소를 화면에 고정하지 않는다.
 - 가상 장비 상태와 실제 장비 관측, 저장과 LIVE, 전송과 물리 동작 완료를 구분한다.

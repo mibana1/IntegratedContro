@@ -48,6 +48,21 @@ public static partial class Program
 
             async Task TypeAcrossPolls(Control input)
             {
+                for (var attempt = 0; ; attempt++)
+                {
+                    var deactivated = false;
+                    EventHandler onDeactivated = (_, _) => deactivated = true;
+                    window.Deactivated += onDeactivated;
+                    try { await TypeDuringActiveWindow(input); return; }
+                    catch (InvalidOperationException) when (deactivated && attempt < 2)
+                    {
+                        Console.WriteLine($"RETRY: {input.Name} test window was deactivated by the desktop; require a fresh uninterrupted input attempt.");
+                    }
+                    finally { window.Deactivated -= onDeactivated; }
+                }
+            }
+            async Task TypeDuringActiveWindow(Control input)
+            {
                 if (input is TextBox textBox) textBox.Clear();
                 else ((PasswordBox)input).Clear();
                 await Wait(() => input.IsLoaded && input.IsVisible && input.IsEnabled);
