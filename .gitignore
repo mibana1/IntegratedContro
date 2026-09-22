@@ -7,7 +7,7 @@ artifacts/
 *.user
 *.suo
 
-# Compiled binaries and debug symbols (source and documentation are tracked)
+# Compiled binaries and debug symbols
 *.dll
 *.exe
 *.pdb

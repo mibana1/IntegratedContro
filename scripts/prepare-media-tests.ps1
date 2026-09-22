@@ -4,7 +4,7 @@ $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskTools = Join-Path $taskRoot 'artifacts/media-tools'
 New-Item -ItemType Directory -Path $taskTools -Force | Out-Null
 
-# These binaries are test tools only. They are never copied into the application distribution.
+# FFmpeg remains test-only. build-installer.ps1 also uses the verified MediaMTX archive, extracting only its executable and license, never the mutable test configuration.
 # The FFmpeg release URL can change; the pinned 9.0.1 SHA-256 must match before extraction.
 # Keep the verified archives for reproducible/offline validation. Never accept a new hash automatically.
 $taskPackages = @(

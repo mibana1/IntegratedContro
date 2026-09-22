@@ -17,6 +17,8 @@
 | 카메라·MediaMTX·LibVLC·프리뷰 검증 | [영상 검증](MEDIA_VALIDATION.md) |
 | 외부 라이브러리 고지·라이선스 | [고지](../THIRD_PARTY_NOTICES.md) |
 
+설치형 EXE 생성·설치·업데이트·제거는 [설치 배포 안내](INSTALLER.md)를 따른다.
+
 ## 과거 기록과 참고 원본
 
 - [구현·검증·배포 이력](history/IMPLEMENTATION_HISTORY.md): 날짜별 작업 당시의 결과와 판단 근거.

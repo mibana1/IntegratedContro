@@ -1,3 +1,4 @@
+param([switch]$Installer)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskPublishRoot = Join-Path $taskRoot 'artifacts/publish'
@@ -35,3 +36,4 @@ try {
     Write-Output "최신 빌드 3개 보관 · 이번 정리 $($taskSync.history.deleted.Count)개 · 실행/잠금 등으로 보류 $($taskSync.history.skipped.Count)개"
 }
 finally { Pop-Location }
+if ($Installer) { & (Join-Path $PSScriptRoot 'build-installer.ps1') -BuildPath $taskStaging }

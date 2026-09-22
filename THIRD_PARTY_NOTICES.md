@@ -14,7 +14,7 @@ LGPL 라이선스 본문은 함께 배포하는 licenses/LGPL-2.1.txt에 있다.
 최종 설치본을 발행할 때는 배포 바이너리에 대응하는 소스 제공 방식과 구성요소별 고지를 함께 제공한다.
 
 별도 영상 서버는 MediaMTX 1.21.0 기준으로 로컬 검증했다.
-MediaMTX(MIT, https://github.com/bluenviron/mediamtx)는 앱 설치물에 자동 포함하거나 자동 실행하지 않는다.
+설치형 EXE에는 MediaMTX 1.21.0(MIT, https://github.com/bluenviron/mediamtx/releases/tag/v1.21.0)을 MediaMTX 폴더에 포함하고 해당 배포의 LICENSE를 함께 제공한다. 원본 소스도 같은 릴리스에서 받을 수 있다. 설치 프로그램은 영상 서버를 실행하거나 운영 설정·비밀번호를 배포하지 않는다. 사용자가 설치 PC의 기존 설정을 연결한 뒤 앱에서 서버 시작에 동의할 때 실행한다.
 
 로컬 테스트에만 FFmpeg 9.0.1 Gyan essentials 빌드(GPLv3, https://www.gyan.dev/ffmpeg/builds/)를 사용한다.
 테스트용 FFmpeg는 artifacts/media-tools에만 두고 제품 배포물에 포함하지 않는다.
