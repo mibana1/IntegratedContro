@@ -98,6 +98,7 @@ internal abstract class CameraStateScope : FeatureStateScope
     private protected CameraStateScope(StateContext context) : base(context) { }
     public abstract Guid SiteId { get; }
     public abstract MediaConfiguration? Media { get; set; }
+    public abstract LocalMediaChange? LocalMediaChange { get; set; }
     public abstract List<CameraRegistration> Cameras { get; set; }
     public abstract List<CameraCleanup> CameraCleanup { get; set; }
     public abstract List<Guid> MediaSecretsToDelete { get; set; }

@@ -7,7 +7,7 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
         try { new MainWindow(prepareServers: () => LocalServerStartup.StartForAppAsync(servers =>
-                Dispatcher.InvokeAsync(() => MessageBox.Show(MainWindow,
+                Dispatcher.InvokeAsync(() => MessageBox.Show(Windows.OfType<Window>().FirstOrDefault(window => window.IsActive) ?? MainWindow,
                     "다음 서버가 꺼져 있습니다. 지금 실행할까요?\n\n" + string.Join("\n", servers) +
                     "\n\n이 앱을 닫으면 이 앱이 시작한 서버도 종료됩니다.", "서버 실행",
                     MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes).Task, _servers), stopServers: _servers.StopAsync).Show(); }

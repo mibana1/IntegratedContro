@@ -26,6 +26,10 @@ public static class AuditPresentation
             "CameraDeleted" => "카메라 삭제 완료", "CameraPathCleaned" => "영상 경로 정리 완료",
             "CameraReconciled" => "영상 경로 준비 결과", "CameraCleanupRequested" => "영상 경로 정리 재시도",
             "MediaSettingsSaved" => "MediaMTX 연결 설정 변경",
+            "LocalMediaChangePrepared" => "로컬 영상 비밀번호 변경 접수",
+            "LocalMediaFilesApplied" => "로컬 영상 설정 파일·접속 정보 적용",
+            "LocalMediaRestoreRequested" => "로컬 영상 이전 설정 복구",
+            "LocalMediaChangeVerified" => "로컬 영상 인증 적용 확인",
             "InitialAdministratorCreated" => "최초 관리자 생성", "HostStarted" => "호스트 시작",
             "Login" => "로그인", "Acquire" => "사용 시작", "ReleasePreservingJobs" => "사용 종료",
             "LogoutPreservingJobs" => "로그아웃", "ConnectionLost" => "연결 이상",
@@ -65,6 +69,10 @@ public static class AuditPresentation
         };
         var message = entry.Action switch
         {
+            "LocalMediaChangePrepared" => "로컬 영상 비밀번호 변경과 복구 정보를 저장했습니다.",
+            "LocalMediaFilesApplied" => $"로컬 영상 설정 파일과 접속 정보 버전 {Field("version")}을 적용했습니다. 인증 확인이 필요합니다.",
+            "LocalMediaRestoreRequested" => "변경 전 로컬 영상 서버 설정 복구를 요청했습니다.",
+            "LocalMediaChangeVerified" => Field("restored") == "True" ? "이전 영상 서버 설정의 API/HLS 인증 복구를 확인했습니다." : "새 영상 서버 설정의 API/HLS 인증 적용을 확인했습니다.",
             "HiperwallSettingsSaved" => $"Hiperwall 연결 설정 버전 {Field("version")}을 저장했습니다. 새 연결 확인이 필요합니다.",
             "HiperwallConnectionTest" => $"적용 설정 버전 {Field("version")}의 읽기 전용 연결 테스트: {(Enum.TryParse<HiperwallConnectionState>(Field("result"), out var status) ? HiperwallLabels.State(status) : "결과 확인 필요")}.",
             "HiperwallEditAccepted" or "HiperwallEditResult" or "HiperwallEditCancelled" => entry.Detail,

@@ -173,6 +173,7 @@ public sealed class HostState
     public List<PcRegistration> Pcs { get; set; } = [];
     public HiperwallConfiguration? Hiperwall { get; set; }
     public MediaConfiguration? Media { get; set; }
+    public LocalMediaChange? LocalMediaChange { get; set; }
     public List<CameraRegistration> Cameras { get; set; } = [];
     public List<CameraCleanup> CameraCleanup { get; set; } = [];
     public List<Guid> MediaSecretsToDelete { get; set; } = [];

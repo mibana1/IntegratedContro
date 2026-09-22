@@ -84,9 +84,11 @@ public static partial class Program
         {
             try
             {
-                await Wait(() => app.MainWindow is MainWindow { LoginDialog.IsVisible: true });
+                await Wait(() => app.MainWindow is MainWindow { LoginDialog.IsVisible: true } or MainWindow { InitialSetupDialog.IsVisible: true });
                 if (requireRecovery) Require(((MainViewModel)app.MainWindow.DataContext).IsEditingConnectionSettings, "Damaged profile did not open settings");
-                ((MainWindow)app.MainWindow).LoginDialog!.Close();
+                var main = (MainWindow)app.MainWindow;
+                if (main.InitialSetupDialog is { } setup) setup.Close();
+                else main.LoginDialog!.Close();
                 await Task.Delay(3000);
                 app.Shutdown(1); // Only reached if the production last-window shutdown failed.
             }

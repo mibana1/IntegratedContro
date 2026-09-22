@@ -90,6 +90,8 @@ public static partial class Program
         await File.WriteAllTextAsync(ClientPreferences.ProfilePath, System.Text.Json.JsonSerializer.Serialize(
             new { pcId = stablePcId, endpoint = "", fingerprint = "" }, JsonDefaults.Options));
         Require(ClientPreferences.ReadForStartup().Preferences.LastLoginName == "", "Legacy profile did not default to an empty recent login");
+        // This regression exercises the login/settings page after the first-run server choice.
+        (ClientPreferences.ReadForStartup().Preferences with { Endpoint = host.Endpoint, Fingerprint = host.Fingerprint }).Save();
         var window = new MainWindow();
         var vm = (MainViewModel)window.DataContext; vm.Endpoint = ""; vm.Fingerprint = "";
         using var bindingLog = new StringWriter(); using var listener = new TextWriterTraceListener(bindingLog);
@@ -109,7 +111,7 @@ public static partial class Program
             ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, host.Fingerprint);
             await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));
             Require(vm.IsEditingConnectionSettings && vm.ConnectionSettingsMessage.Contains("https://") &&
-                ClientPreferences.ReadForStartup().Preferences.Endpoint == "", "Invalid HTTPS settings were accepted");
+                ClientPreferences.ReadForStartup().Preferences.Endpoint == host.Endpoint, "Invalid HTTPS settings were accepted");
             ((TextBox)dialog.FindName("HostEndpoint")).SetCurrentValue(TextBox.TextProperty, host.Endpoint);
             ((TextBox)dialog.FindName("CertificateFingerprint")).SetCurrentValue(TextBox.TextProperty, "invalid");
             await Click(vm, (Button)dialog.FindName("SaveConnectionSettings"));

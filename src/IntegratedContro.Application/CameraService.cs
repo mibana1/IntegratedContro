@@ -9,8 +9,8 @@ internal sealed partial class CameraService
 {
     private readonly ICameraStateAccess _host;
     private readonly ICameraContentCatalog _contents;
-    internal CameraService(ICameraStateAccess host, IMediaMtxClient? media, IMediaSecretStore? secrets, ICameraContentCatalog contents)
-    { _host = host; _media = media; _mediaSecrets = secrets; _contents = contents; }
+    internal CameraService(ICameraStateAccess host, IMediaMtxClient? media, IMediaSecretStore? secrets, ICameraContentCatalog contents, ILocalMediaSettings? localMedia = null)
+    { _host = host; _media = media; _mediaSecrets = secrets; _contents = contents; _localMedia = localMedia; }
     internal bool Supported => _media is not null;
     internal void Stop() => _mediaStopping.Cancel();
     private readonly IMediaMtxClient? _media;
@@ -19,9 +19,10 @@ internal sealed partial class CameraService
     private readonly SemaphoreSlim _mediaReads = new(4, 4);
     private readonly CancellationTokenSource _mediaStopping = new();
 
-    private static MediaSettingsView MediaSettings(MediaConfiguration? c) => c is null
-        ? new(0, "", "", "", "", false)
-        : new(c.Version, c.ApiEndpoint, c.HlsEndpoint, c.ApiUser, c.HlsUser, true);
+    private MediaSettingsView MediaSettings(MediaConfiguration? c) =>
+        (c is null ? new MediaSettingsView(0, "", "", "", "", false)
+            : new(c.Version, c.ApiEndpoint, c.HlsEndpoint, c.ApiUser, c.HlsUser, true))
+        with { LocalServer = LocalMediaStatus(c) };
     private static CameraView CameraInfo(CameraRegistration c) => new(c.Id, c.Version, c.Name, c.Location,
         c.StreamPath, c.Enabled, c.Provisioning, c.Message, c.UpdatedAt, c.ContentSelector, c.ContentValue);
     public CameraCatalog GetCameras(string token)
@@ -50,6 +51,8 @@ internal sealed partial class CameraService
         using (_host.Open())
         {
             _host.Healthy(); _host.CheckConnections(); var session = _host.Owner(_host.Current, token, request.Generation); _host.Admin(_host.Current, token); MediaAvailable();
+            Require(_host.Current.LocalMediaChange is null && _localMedia?.IsManaged != true,
+                "local_media_managed", "이 로컬 서버는 비밀번호 변경에서 설정 파일과 접속 정보를 함께 적용하세요.");
             var api = MediaEndpoint(request.ApiEndpoint); var hls = MediaEndpoint(request.HlsEndpoint);
             Text(request.ApiUser, "API 사용자", 128); Text(request.HlsUser, "HLS 사용자", 128);
             Require(!request.ApiUser.Contains(':') && !request.HlsUser.Contains(':') && request.ApiUser != request.HlsUser,
@@ -74,9 +77,15 @@ internal sealed partial class CameraService
             return MediaSettings(next.Media);
         }
     }
-    private MediaCredentials Credentials(MediaConfiguration c) =>
-        JsonSerializer.Deserialize<MediaCredentials>(_mediaSecrets!.Read(c.CredentialId), JsonDefaults.Options)
-        ?? throw new DomainException("media_secret_unavailable", "영상 전용 계정을 다시 입력하세요.", 503);
+    private MediaCredentials Credentials(MediaConfiguration c)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<MediaCredentials>(_mediaSecrets!.Read(c.CredentialId), JsonDefaults.Options)
+                ?? throw new DomainException("media_secret_unavailable", "영상 보호 계정 정보를 확인하세요.", 503);
+        }
+        catch (JsonException) { throw new DomainException("media_secret_unavailable", "영상 보호 계정 정보를 확인하세요.", 503); }
+    }
     private void TryDeleteUncommittedSecret(Guid reference)
     {
         try { _mediaSecrets!.Delete(reference); } catch (DomainException) { /* Original commit failure stays authoritative. */ }
@@ -182,7 +191,7 @@ internal sealed partial class CameraService
             CameraRegistration? camera; CameraCleanup? cleanup; MediaConfiguration? config;
             using (_host.Open())
             {
-                if (_host.Stopping || _host.StorageFailed || ct.IsCancellationRequested) return;
+                if (_host.Stopping || _host.StorageFailed || ct.IsCancellationRequested || _host.Current.LocalMediaChange is not null) return;
                 cleanup = _host.Current.CameraCleanup.FirstOrDefault(c => c.NextAttemptAt <= _host.Now);
                 camera = cleanup is null ? _host.Current.Cameras.OrderBy(c => c.NextSyncAt).FirstOrDefault(c => c.NextSyncAt <= _host.Now) : null;
                 config = cleanup?.Configuration ?? _host.Current.Media;
@@ -256,7 +265,8 @@ internal sealed partial class CameraService
     {
         var live = _host.Current.Cameras.Select(c => c.SourceCredentialId)
             .Concat(_host.Current.CameraCleanup.SelectMany(c => new[] { c.SourceCredentialId, c.Configuration.CredentialId }))
-            .Concat(_host.Current.Media is { } m ? new[] { m.CredentialId } : []).ToHashSet();
+            .Concat(_host.Current.Media is { } m ? new[] { m.CredentialId } : [])
+            .Concat(_host.Current.LocalMediaChange is { } change ? new[] { change.Before.CredentialId, change.After.CredentialId } : []).ToHashSet();
         var deleted = new List<Guid>();
         foreach (var id in _host.Current.MediaSecretsToDelete.Distinct().Where(id => !live.Contains(id)).Take(20))
         {
@@ -269,6 +279,7 @@ internal sealed partial class CameraService
     private (CameraRegistration Camera, MediaConfiguration Configuration) ReadableCamera(string token, Guid id, int version)
     {
         _host.Healthy(); _host.Authenticate(token); MediaAvailable();
+        Require(_host.Current.LocalMediaChange is null, "media_change_pending", "영상 서버 설정 적용·복구를 확인한 뒤 재생하세요.");
         var camera = _host.Current.Cameras.SingleOrDefault(c => c.Id == id);
         Require(camera is not null && camera.Version == version, "camera_changed", "카메라가 변경·삭제되었습니다. 다시 선택하세요.", 409);
         Require(camera!.Enabled && !camera.DeleteRequested && camera.Provisioning == CameraProvisioning.Ready &&

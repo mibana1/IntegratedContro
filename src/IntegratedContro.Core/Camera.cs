@@ -4,7 +4,17 @@ public enum CameraProvisioning { Pending, Ready, Disabled, Failed, Deleting, Del
 public sealed record MediaConfiguration(int Version, string ApiEndpoint, string HlsEndpoint, string ApiUser,
     string HlsUser, Guid CredentialId);
 public sealed record MediaSettingsView(int Version, string ApiEndpoint, string HlsEndpoint, string ApiUser,
-    string HlsUser, bool HasSecret);
+    string HlsUser, bool HasSecret)
+{
+    public LocalMediaSettingsView? LocalServer { get; init; }
+}
+public enum LocalMediaChangePhase { Prepared, AwaitingVerification, Restoring, AwaitingRestoreVerification }
+public sealed record LocalMediaChange(Guid Id, MediaConfiguration Before, MediaConfiguration After,
+    int RtspPort, LocalMediaChangePhase Phase, string? Failure = null);
+public sealed record LocalMediaSettingsView(bool Managed, bool CanChange, Guid? ChangeId,
+    LocalMediaChangePhase? Phase, string Message);
+public sealed record ChangeLocalMediaPasswordsRequest(long Generation, int ExpectedVersion, string? ApiPassword, string? HlsPassword);
+public sealed record LocalMediaActionRequest(long Generation, int ExpectedVersion, Guid ChangeId);
 public sealed record SaveMediaSettingsRequest(long Generation, int ExpectedVersion, string ApiEndpoint,
     string HlsEndpoint, string ApiUser, string HlsUser, string? ApiPassword = null, string? HlsPassword = null);
 public sealed record CameraRegistration(Guid Id, int Version, string Name, string Location, string StreamPath,

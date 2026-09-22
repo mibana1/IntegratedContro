@@ -52,7 +52,7 @@ try
     var service = new ControlService(store.State, new Pbkdf2PasswordHasher(), new DeviceDriverRegistry(new VirtualDeviceDriver(store.VirtualDevices)),
         heartbeatTimeoutSeconds: config.HeartbeatTimeoutSeconds, hiperwall: hiperwallReader,
         credentials: HostAdapters.HiperwallCredentials(store.DataPath), media: media,
-        mediaSecrets: HostAdapters.MediaCredentials(store.DataPath));
+        mediaSecrets: HostAdapters.MediaCredentials(store.DataPath), localMedia: new LocalMediaSettings(store.DataPath));
     var builder = WebApplication.CreateBuilder(Array.Empty<string>());
     builder.Logging.ClearProviders(); builder.Logging.AddConsole(); builder.Logging.SetMinimumLevel(LogLevel.Warning);
     builder.WebHost.ConfigureKestrel(server =>
@@ -115,6 +115,10 @@ try
     app.MapPost("/api/hiperwall/test", (Func<HttpContext, Task<HiperwallView>>)(c => service.RefreshHiperwallAsync(Token(c), true, c.RequestAborted)));
     app.MapGet("/api/cameras", (HttpContext c) => service.GetCameras(Token(c)));
     app.MapPost("/api/media/settings", (HttpContext c, SaveMediaSettingsRequest r) => service.SaveMediaSettings(Token(c), r));
+    app.MapPost("/api/media/local/passwords", (HttpContext c, ChangeLocalMediaPasswordsRequest r) => service.ChangeLocalMediaPasswords(Token(c), r));
+    app.MapPost("/api/media/local/retry", (HttpContext c, LocalMediaActionRequest r) => service.RetryLocalMediaChange(Token(c), r));
+    app.MapPost("/api/media/local/restore", (HttpContext c, LocalMediaActionRequest r) => service.RestoreLocalMediaSettings(Token(c), r));
+    app.MapPost("/api/media/local/verify", (HttpContext c, LocalMediaActionRequest r) => service.VerifyLocalMediaSettingsAsync(Token(c), r, c.RequestAborted));
     app.MapPost("/api/cameras/save", (HttpContext c, SaveCameraRequest r) => service.SaveCamera(Token(c), r));
     app.MapPost("/api/cameras/sync", (HttpContext c, CameraActionRequest r) => service.SyncCamera(Token(c), r));
     app.MapPost("/api/cameras/delete", (HttpContext c, CameraActionRequest r) => service.DeleteCamera(Token(c), r));

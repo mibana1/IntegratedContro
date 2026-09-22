@@ -18,6 +18,8 @@ public partial class CameraView : UserControl
                 vm.ReadRtspPassword = () => RtspPasswordInput.Password;
                 vm.ReadApiPassword = () => ApiPasswordInput.Password; vm.ReadHlsPassword = () => HlsPasswordInput.Password;
                 vm.ClearSecrets = () => { RtspInput.Clear(); RtspUserInput.Clear(); RtspPasswordInput.Clear(); ApiPasswordInput.Clear(); HlsPasswordInput.Clear(); };
+                vm.ConfirmLocalMediaChange = text => MessageBox.Show(Window.GetWindow(this), text, "로컬 영상 서버 설정",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
                 vm.ConfirmForceDelete = text => MessageBox.Show(Window.GetWindow(this), text, "카메라 강제 삭제",
                     MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
             }

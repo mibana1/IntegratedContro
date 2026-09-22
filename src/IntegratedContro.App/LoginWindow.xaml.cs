@@ -9,6 +9,7 @@ public partial class LoginWindow : Window
     private readonly Func<string> _previousRead;
     private readonly Action _previousClear;
     private readonly Func<Task<string>>? _prepareServers;
+    private bool _settingUp;
     public LoginWindow(MainViewModel viewModel, Func<Task<string>>? prepareServers = null)
     {
         InitializeComponent();
@@ -26,21 +27,23 @@ public partial class LoginWindow : Window
         };
         Loaded += (_, _) => FocusPage();
     }
-    private async void OpenSetup(object sender, RoutedEventArgs e)
+    private void OpenSetup(object sender, RoutedEventArgs e)
     {
         try
         {
+            _settingUp = true;
             var setup = new InitialSetupWindow { Owner = this };
+            setup.Model.ContinueAfterSave = (preferences, password) => _viewModel.CompleteInitialSetupAsync(preferences, password, _prepareServers);
             if (setup.ShowDialog() == true)
             {
-                _viewModel.ReloadPreferencesCommand.Execute(null);
-                var startup = _prepareServers is not null ? await _prepareServers() : "";
-                _viewModel.ReportServerStartup(setup.Model.Message + (startup.Length == 0 ? "" : "\n" + startup));
+                if (_viewModel.IsLoggedIn) DialogResult = true;
+                else FocusPage();
             }
             else _viewModel.RefreshInitialSetup();
         }
         catch (Exception error) when (StartupConfiguration.IsConfigurationFailure(error))
         { _viewModel.ReportServerStartup(StartupConfiguration.FriendlyError(error)); }
+        finally { _settingUp = false; }
     }
     private void FocusPage()
     {
@@ -53,6 +56,6 @@ public partial class LoginWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.IsEditingConnectionSettings))
             Dispatcher.InvokeAsync(FocusPage);
-        if (_viewModel.IsLoggedIn && !_viewModel.IsBusy && IsVisible) DialogResult = true;
+        if (!_settingUp && _viewModel.IsLoggedIn && !_viewModel.IsBusy && IsVisible) DialogResult = true;
     }
 }

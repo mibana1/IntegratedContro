@@ -105,9 +105,9 @@ public sealed partial class MainViewModel : Bindable
         else Message = error.Message;
         Notify();
     }
-    private async Task Login()
+    private Task Login() => Login(ReadLoginPassword());
+    private async Task Login(string password)
     {
-        var password = ReadLoginPassword();
         try
         {
             _client?.Dispose(); _client = new(Endpoint, Fingerprint);

@@ -7,7 +7,7 @@ namespace IntegratedContro.App;
 // The host owns setup and validation; the UI never opens or creates the DB.
 public sealed class InitialSetupService(StartupConfiguration configuration, string profilePath)
 {
-    public async Task SaveLocalAsync(string dataPath, bool create, string site, string administrator,
+    public async Task<ClientPreferences> SaveLocalAsync(string dataPath, bool create, string site, string administrator,
         string password, string confirmation, string bind, string port, bool mediaEnabled, string mediaConfig,
         string mediaApi, ClientPreferences profile, bool initializeMedia = false,
         string mediaApiPort = "9997", string mediaHlsPort = "8888", string mediaRtspPort = "8554")
@@ -63,14 +63,17 @@ public sealed class InitialSetupService(StartupConfiguration configuration, stri
             LastLoginName = create ? administrator.Trim() : profile.LastLoginName };
         configuration.Save(settings);
         updated.Save(profilePath);
+        return updated;
     }
 
-    public void SaveRemote(string endpoint, string fingerprint, ClientPreferences profile)
+    public ClientPreferences SaveRemote(string endpoint, string fingerprint, ClientPreferences profile)
     {
         endpoint = endpoint.Trim(); fingerprint = fingerprint.Replace(" ", "").Replace(":", "").Trim().ToUpperInvariant();
         _ = ClientPreferences.ValidateConnection(endpoint, fingerprint);
         configuration.Save(new("", "", "", "") { Enabled = false, MediaMtxEnabled = false });
-        (profile with { Endpoint = endpoint, Fingerprint = fingerprint }).Save(profilePath);
+        var updated = profile with { Endpoint = endpoint, Fingerprint = fingerprint };
+        updated.Save(profilePath);
+        return updated;
     }
 
     private static void EnsureStopped(string data)

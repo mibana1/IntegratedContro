@@ -3,6 +3,14 @@ using IntegratedContro.Core;
 namespace IntegratedContro.Application;
 
 public interface IMediaSecretStore : ICredentialStore { void Delete(Guid reference); }
+public interface ILocalMediaSettings
+{
+    bool IsManaged { get; }
+    int Validate(MediaConfiguration configuration, MediaCredentials credentials);
+    void Apply(LocalMediaChange change, MediaCredentials before, MediaCredentials after);
+    Task VerifyAsync(MediaConfiguration configuration, MediaCredentials credentials,
+        MediaCredentials rejectedCredentials, Guid changeId, CancellationToken cancellationToken);
+}
 public interface IMediaMtxClient
 {
     Task EnsurePathAsync(MediaConfiguration configuration, MediaCredentials credentials, string path,

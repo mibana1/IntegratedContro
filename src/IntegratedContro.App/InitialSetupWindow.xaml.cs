@@ -7,10 +7,10 @@ namespace IntegratedContro.App;
 public partial class InitialSetupWindow : Window
 {
     public InitialSetupViewModel Model { get; }
-    public InitialSetupWindow(StartupConfiguration? configuration = null, string? profilePath = null)
+    public InitialSetupWindow(StartupConfiguration? configuration = null, string? profilePath = null, bool firstRun = false)
     {
         InitializeComponent();
-        Model = new(configuration ?? StartupConfiguration.ForApp(), profilePath ?? ClientPreferences.ProfilePath);
+        Model = new(configuration ?? StartupConfiguration.ForApp(), profilePath ?? ClientPreferences.ProfilePath, firstRun);
         DataContext = Model;
         Model.ReadPassword = () => AdminPassword.Password;
         Model.ReadConfirmation = () => ConfirmPassword.Password;
@@ -19,6 +19,16 @@ public partial class InitialSetupWindow : Window
         Closing += OnClosing;
         Closed += (_, _) => Model.ClearPasswords();
     }
+    private void ChooseNew(object sender, RoutedEventArgs e) => ChooseMode(0);
+    private void ChooseExisting(object sender, RoutedEventArgs e) => ChooseMode(1);
+    private void ChooseRemote(object sender, RoutedEventArgs e) => ChooseMode(2);
+    private void ChooseMode(int mode)
+    {
+        Model.ChooseMode(mode);
+        SetupScroll.ScrollToTop();
+        Dispatcher.InvokeAsync(() => { if (Model.IsRemote) RemoteEndpoint.Focus(); else DataFolder.Focus(); });
+    }
+    private void BackToChoices(object sender, RoutedEventArgs e) { Model.ShowChoices(); SetupScroll.ScrollToTop(); }
     private void OnClosing(object? sender, CancelEventArgs e) { if (Model.IsBusy) e.Cancel = true; }
     private void BrowseData(object sender, RoutedEventArgs e)
     {

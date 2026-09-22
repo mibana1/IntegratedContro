@@ -11,6 +11,7 @@ public partial class MainWindow : Window
     private readonly Func<Task>? _stopServers;
     private readonly Func<Task<string>>? _prepareServers;
     public LoginWindow? LoginDialog { get; private set; }
+    public InitialSetupWindow? InitialSetupDialog { get; private set; }
     public ThemeManager Appearance { get; } = ThemeManager.Current;
     public MainWindow(bool showLoginOnStart = true, Func<Task<string>>? prepareServers = null, Func<Task>? stopServers = null)
     {
@@ -27,6 +28,21 @@ public partial class MainWindow : Window
         _viewModel.PropertyChanged += ModelChanged;
         if (showLoginOnStart) Loaded += async (_, _) =>
         {
+            if (_viewModel.InitialSetup.State == InitialSetupState.NewInstallation)
+            {
+                // Finish rendering the owner before entering the setup dialog's modal loop.
+                await System.Windows.Threading.Dispatcher.Yield();
+                if (_closed || _closing) return;
+                InitialSetupDialog = new InitialSetupWindow(firstRun: true) { Owner = this };
+                InitialSetupDialog.Model.ContinueAfterSave = (preferences, password) => _viewModel.CompleteInitialSetupAsync(preferences, password, _prepareServers);
+                bool configured;
+                try { configured = InitialSetupDialog.ShowDialog() == true; }
+                finally { InitialSetupDialog = null; }
+                if (_closed || _closing) return;
+                if (!configured) { Close(); return; }
+                ShowLogin();
+                return;
+            }
             if (prepareServers is not null)
             {
                 _preparingServers = true;
@@ -56,7 +72,7 @@ public partial class MainWindow : Window
     private void OpenLogin(object sender, RoutedEventArgs e) => ShowLogin();
     private void ShowLogin()
     {
-        if (_closed || _closing || _preparingServers || _viewModel.IsLoggedIn || LoginDialog is not null) return;
+        if (_closed || _closing || _preparingServers || _viewModel.IsLoggedIn || LoginDialog is not null || InitialSetupDialog is not null) return;
         LoginDialog = new LoginWindow(_viewModel, _prepareServers) { Owner = this };
         bool authenticated;
         try { authenticated = LoginDialog.ShowDialog() == true; }
@@ -67,6 +83,7 @@ public partial class MainWindow : Window
     {
         if (_closed) return;
         e.Cancel = true;
+        if (InitialSetupDialog?.Model.IsBusy == true) return;
         if (_closing) return;
         _closing = true;
         await _viewModel.CloseAsync();

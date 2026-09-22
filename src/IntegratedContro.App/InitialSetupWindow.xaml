@@ -1,51 +1,65 @@
 <Window x:Class="IntegratedContro.App.InitialSetupWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Style="{StaticResource AppWindow}" Title="초기 설정 · 저장 위치" Width="700" Height="800" MinHeight="480" MinWidth="620"
+ Style="{StaticResource AppWindow}" Title="IntegratedContro · 시작 설정" Width="700" Height="800" MinHeight="480" MinWidth="620"
  WindowStartupLocation="CenterOwner" Background="{DynamicResource AppBackground}">
  <Window.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility"/></Window.Resources>
  <Grid Margin="20">
   <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <ScrollViewer VerticalScrollBarVisibility="Auto">
+  <ScrollViewer x:Name="SetupScroll" VerticalScrollBarVisibility="Auto">
    <StackPanel Margin="0,0,12,0">
-    <TextBlock Text="초기 설정 · 저장 위치" FontSize="25" FontWeight="Bold" Margin="0,0,0,16"/>
-    <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,16">
-     <StackPanel>
-      <TextBlock Text="{Binding Status.Title}" FontWeight="Bold"/>
-      <TextBlock Text="{Binding Status.Description}" TextWrapping="Wrap" Margin="0,6,0,12"/>
-      <TextBlock Text="접속·화면 설정 저장 위치" Foreground="{DynamicResource MutedInk}"/>
-      <TextBlock Text="{Binding ProfileLocation}" TextWrapping="Wrap"/>
-      <TextBlock Text="서버 시작 설정 저장 위치" Foreground="{DynamicResource MutedInk}" Margin="0,8,0,0"/>
-      <TextBlock Text="{Binding SettingsLocation}" TextWrapping="Wrap"/>
-      <TextBlock Text="설정과 운영 데이터는 업데이트 후에도 유지됩니다." Foreground="{DynamicResource MutedInk}" Margin="0,8,0,0"/>
-     </StackPanel>
-    </Border>
-    <StackPanel IsEnabled="{Binding CanEdit}">
-     <TextBlock Text="사용 방식" FontWeight="Bold"/>
-     <ComboBox x:Name="SetupMode" SelectedIndex="{Binding ModeIndex}" MinHeight="48" Margin="0,6,0,16">
-      <ComboBoxItem Content="새 로컬 서버 만들기"/>
-      <ComboBoxItem Content="기존 로컬 데이터 연결 · 위치 변경"/>
-      <ComboBoxItem Content="원격 / 별도 서버 접속"/>
-     </ComboBox>
+    <TextBlock Text="IntegratedContro 시작하기" FontSize="25" FontWeight="Bold" Margin="0,0,0,12"/>
+    <StackPanel x:Name="SetupChoices" Visibility="{Binding IsChoosingMode, Converter={StaticResource BoolVisibility}}" IsEnabled="{Binding CanEdit}">
+     <TextBlock Text="이 PC에서 사용할 방식을 선택하세요." FontSize="16" Margin="0,0,0,24" Foreground="{DynamicResource MutedInk}"/>
+     <Button x:Name="StartNew" Click="ChooseNew" HorizontalContentAlignment="Stretch" Padding="20" MinHeight="112" Margin="0,0,0,14">
+      <StackPanel>
+       <TextBlock Text="새로 시작" FontSize="20" FontWeight="Bold"/>
+       <TextBlock Text="저장 위치와 관리자 계정을 설정하고 바로 접속합니다." TextWrapping="Wrap" Margin="0,8,0,0"/>
+      </StackPanel>
+     </Button>
+     <Button x:Name="ConnectExistingServer" Click="ChooseRemote" HorizontalContentAlignment="Stretch" Padding="20" MinHeight="112" Margin="0,0,0,14">
+      <StackPanel>
+       <TextBlock Text="기존 서버 접속" FontSize="20" FontWeight="Bold"/>
+       <TextBlock Text="서버 주소와 인증서 지문을 등록하고 기존 계정으로 로그인합니다." TextWrapping="Wrap" Margin="0,8,0,0"/>
+      </StackPanel>
+     </Button>
+     <Button x:Name="UseExistingData" Click="ChooseExisting" HorizontalContentAlignment="Stretch" Padding="20" MinHeight="112">
+      <StackPanel>
+       <TextBlock Text="기존 데이터 사용" FontSize="20" FontWeight="Bold"/>
+       <TextBlock Text="기존 폴더를 연결해 현장·계정·작업 기록을 이어서 사용합니다." TextWrapping="Wrap" Margin="0,8,0,0"/>
+      </StackPanel>
+     </Button>
+     <TextBlock Text="저장된 접속 설정이 있으면 다음 실행부터 이 과정을 건너뜁니다." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="0,24,0,0"/>
+    </StackPanel>
+    <StackPanel x:Name="SetupEditor" Visibility="{Binding IsEditing, Converter={StaticResource BoolVisibility}}">
+     <StackPanel IsEnabled="{Binding CanEdit}">
+     <DockPanel Margin="0,0,0,16">
+      <Button Content="‹ 사용 방식 다시 선택" Click="BackToChoices" DockPanel.Dock="Right" Margin="12,0,0,0"/>
+      <ComboBox x:Name="SetupMode" SelectedIndex="{Binding ModeIndex}" MinHeight="48" AutomationProperties.Name="사용 방식">
+      <ComboBoxItem Content="새로 시작"/>
+      <ComboBoxItem Content="기존 데이터 사용"/>
+      <ComboBoxItem Content="기존 서버 접속"/>
+      </ComboBox>
+     </DockPanel>
      <StackPanel Visibility="{Binding IsLocal, Converter={StaticResource BoolVisibility}}">
       <TextBlock Text="운영 데이터 폴더" FontWeight="Bold"/>
       <DockPanel Margin="0,6,0,8">
        <Button Content="폴더 선택" DockPanel.Dock="Right" Click="BrowseData" MinHeight="48" Margin="8,0,0,0"/>
-       <TextBox x:Name="DataFolder" Text="{Binding DataPath, UpdateSourceTrigger=PropertyChanged}" MinHeight="48"/>
+       <TextBox x:Name="DataFolder" Text="{Binding DataPath, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" MinHeight="48"/>
       </DockPanel>
-      <TextBlock Text="기본 제안 위치" Foreground="{DynamicResource MutedInk}"/>
-      <TextBlock Text="{Binding DefaultDataLocation}" TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}"/>
-      <TextBlock Text="기존 데이터의 위치를 바꾸려면 서버를 정상 종료하고 폴더 전체를 이전한 뒤 해당 폴더를 선택하세요. 이 화면은 파일을 이동하지 않습니다. 보호된 인증서는 같은 Windows 계정에서 확인합니다." TextWrapping="Wrap" Margin="0,8,0,16" Foreground="{DynamicResource MutedInk}"/>
+      <TextBlock Visibility="{Binding IsExistingData, Converter={StaticResource BoolVisibility}}" Text="기존 데이터는 서버를 정상 종료한 뒤 폴더 전체를 선택하세요. 계정과 작업 기록은 그대로 유지됩니다." TextWrapping="Wrap" Margin="0,8,0,16" Foreground="{DynamicResource MutedInk}"/>
       <StackPanel Visibility="{Binding IsNew, Converter={StaticResource BoolVisibility}}">
-       <TextBlock Text="현장 이름과 관리자 계정을 입력하면 선택한 폴더에 DB·인증서를 생성하고 접속 주소·인증서 지문을 자동 저장합니다." TextWrapping="Wrap" Margin="0,0,0,12"/>
-       <TextBlock Text="현장 이름"/><TextBox x:Name="SiteName" Text="{Binding SiteName}" MinHeight="44" Margin="0,4,0,10"/>
-       <TextBlock Text="최초 관리자 아이디"/><TextBox x:Name="AdminName" Text="{Binding Administrator}" MinHeight="44" Margin="0,4,0,10"/>
+       <TextBlock Text="현장 이름과 관리자 계정을 입력하세요. 서버 실행을 승인하면 이 계정으로 바로 접속합니다." TextWrapping="Wrap" Margin="0,0,0,12"/>
+       <TextBlock Text="현장 이름"/><TextBox x:Name="SiteName" Text="{Binding SiteName, UpdateSourceTrigger=PropertyChanged}" MinHeight="44" Margin="0,4,0,10"/>
+       <TextBlock Text="최초 관리자 아이디"/><TextBox x:Name="AdminName" Text="{Binding Administrator, UpdateSourceTrigger=PropertyChanged}" MinHeight="44" Margin="0,4,0,10"/>
        <TextBlock Text="관리자 비밀번호 · 12자 이상"/><PasswordBox x:Name="AdminPassword" MinHeight="44" Margin="0,4,0,10"/>
        <TextBlock Text="비밀번호 확인"/><PasswordBox x:Name="ConfirmPassword" MinHeight="44" Margin="0,4,0,10"/>
+       <Expander Header="서버 수신 주소 · 고급 설정" Margin="0,0,0,12"><StackPanel Margin="0,8,0,0">
        <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
-        <StackPanel Margin="0,0,12,0"><TextBlock Text="서버 수신 IP"/><TextBox Text="{Binding BindAddress}" MinHeight="44"/></StackPanel>
-        <StackPanel Grid.Column="1"><TextBlock Text="HTTPS 포트"/><TextBox Text="{Binding Port}" MinHeight="44"/></StackPanel>
+        <StackPanel Margin="0,0,12,0"><TextBlock Text="서버 수신 IP"/><TextBox Text="{Binding BindAddress, UpdateSourceTrigger=PropertyChanged}" MinHeight="44"/></StackPanel>
+        <StackPanel Grid.Column="1"><TextBlock Text="HTTPS 포트"/><TextBox Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" MinHeight="44"/></StackPanel>
        </Grid>
        <TextBlock Text="127.0.0.1은 이 PC에서만 접속합니다. 다른 PC에서도 사용할 때는 실제 수신 IP 또는 0.0.0.0을 지정하세요." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="0,0,0,12"/>
+       </StackPanel></Expander>
       </StackPanel>
       <Expander x:Name="MediaSetupSection" Header="영상 서버 최초 설정 · 선택 사항" Margin="0,0,0,12">
        <StackPanel Margin="0,10,0,0">
@@ -76,19 +90,31 @@
       </Expander>
      </StackPanel>
      <StackPanel Visibility="{Binding IsRemote, Converter={StaticResource BoolVisibility}}">
-      <TextBlock Text="호스트 HTTPS 주소"/><TextBox x:Name="RemoteEndpoint" Text="{Binding Endpoint}" MinHeight="48" Margin="0,5,0,12"/>
-      <TextBlock Text="호스트 인증서 SHA-256 지문"/><TextBox Text="{Binding Fingerprint}" TextWrapping="Wrap" MinHeight="60" Margin="0,5,0,12"/>
+      <TextBlock Text="호스트 HTTPS 주소"/><TextBox x:Name="RemoteEndpoint" Text="{Binding Endpoint, UpdateSourceTrigger=PropertyChanged}" MinHeight="48" Margin="0,5,0,12"/>
+      <TextBlock Text="호스트 인증서 SHA-256 지문"/><TextBox Text="{Binding Fingerprint, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" MinHeight="60" Margin="0,5,0,12"/>
       <TextBlock Text="서버 관리자가 제공한 주소와 지문을 입력하세요. 운영 데이터 폴더는 원격 서버에서 관리합니다." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}"/>
      </StackPanel>
+     </StackPanel>
+     <Expander Header="저장 위치 · 설정 상태" Margin="0,16,0,0">
+      <StackPanel Margin="0,10,0,0">
+       <TextBlock Text="{Binding Status.Title}" FontWeight="Bold"/>
+       <TextBlock Text="{Binding Status.Description}" TextWrapping="Wrap" Margin="0,6,0,12"/>
+       <TextBlock Text="접속·화면 설정 저장 위치" Foreground="{DynamicResource MutedInk}"/>
+       <TextBlock Text="{Binding ProfileLocation}" TextWrapping="Wrap"/>
+       <TextBlock Text="서버 시작 설정 저장 위치" Foreground="{DynamicResource MutedInk}" Margin="0,8,0,0"/>
+       <TextBlock Text="{Binding SettingsLocation}" TextWrapping="Wrap"/>
+       <TextBlock Text="설정과 운영 데이터는 업데이트 후에도 유지됩니다." Foreground="{DynamicResource MutedInk}" Margin="0,8,0,0"/>
+      </StackPanel>
+     </Expander>
     </StackPanel>
    </StackPanel>
   </ScrollViewer>
   <StackPanel Grid.Row="1" Margin="0,12,0,0">
    <TextBlock x:Name="SetupMessage" Text="{Binding Message}" TextWrapping="Wrap" Foreground="{DynamicResource WarningInk}" Margin="0,0,0,12"/>
    <WrapPanel HorizontalAlignment="Right">
-    <Button Content="서버 설정 백업 복구" Command="{Binding RestoreBackupCommand}" MinHeight="48" Margin="0,0,8,0"/>
+    <Button Content="서버 설정 백업 복구" Visibility="{Binding IsEditing, Converter={StaticResource BoolVisibility}}" Command="{Binding RestoreBackupCommand}" MinHeight="48" Margin="0,0,8,0"/>
     <Button Content="닫기" IsCancel="True" IsEnabled="{Binding CanEdit}" MinHeight="48" Margin="0,0,8,0"/>
-    <Button x:Name="SaveSetup" Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" Style="{StaticResource Primary}" MinHeight="48"/>
+    <Button x:Name="SaveSetup" Content="{Binding SaveLabel}" Visibility="{Binding IsEditing, Converter={StaticResource BoolVisibility}}" IsDefault="True" Command="{Binding SaveCommand}" Style="{StaticResource Primary}" MinHeight="48"/>
    </WrapPanel>
   </StackPanel>
  </Grid>

@@ -166,6 +166,7 @@ internal sealed partial class HostAuthority
     {
         public override Guid SiteId => state.SiteId;
         public override MediaConfiguration? Media { get => state.Media; set => state.Media = value; }
+        public override LocalMediaChange? LocalMediaChange { get => state.LocalMediaChange; set => state.LocalMediaChange = value; }
         public override List<CameraRegistration> Cameras { get => state.Cameras; set => state.Cameras = value; }
         public override List<CameraCleanup> CameraCleanup { get => state.CameraCleanup; set => state.CameraCleanup = value; }
         public override List<Guid> MediaSecretsToDelete { get => state.MediaSecretsToDelete; set => state.MediaSecretsToDelete = value; }

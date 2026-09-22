@@ -116,6 +116,34 @@ public sealed partial class MainViewModel
         ApplyClientPreferences(initial);
         RefreshInitialSetup();
     }
+    internal async Task CompleteInitialSetupAsync(ClientPreferences preferences, string? administratorPassword, Func<Task<string>>? prepareServers)
+    {
+        await RunCommand(async () =>
+        {
+            // Keep the newly created credentials tied to the server chosen by this setup.
+            ApplyClientPreferences(new(preferences));
+            var startup = "";
+            if (prepareServers is not null)
+            {
+                try { startup = await prepareServers(); }
+                catch (Exception) { startup = "서버 준비를 완료하지 못했습니다. 서버 설정과 실행 상태를 확인한 뒤 접속하세요."; }
+            }
+            ReportServerStartup(startup);
+            if (_closing) return;
+            if (administratorPassword is null)
+                Message = "설정을 저장했습니다. 기존 앱 계정으로 로그인하세요." + (startup.Length == 0 ? "" : "\n" + startup);
+            else
+            {
+                try { await Login(administratorPassword); }
+                catch (Exception error)
+                {
+                    Report(error);
+                    Message = "관리자 계정과 설정은 저장되었습니다. 서버 상태를 확인하고 로그인하세요.\n" +
+                        (startup.Length == 0 ? "" : startup + "\n") + Message;
+                }
+            }
+        });
+    }
     private void ApplyClientPreferences(ClientPreferencesLoadResult result)
     {
         _preferences = result.Preferences;

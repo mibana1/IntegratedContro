@@ -14,20 +14,20 @@ public sealed partial class ControlService
     public ControlService(IStateStore store, IPasswordHasher passwords, IDeviceDriver driver,
         TimeProvider? time = null, int heartbeatTimeoutSeconds = 15,
         IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null,
-        IMediaMtxClient? media = null, IMediaSecretStore? mediaSecrets = null)
-        : this(store, passwords, new DeviceDriverRegistry(driver), time, heartbeatTimeoutSeconds, hiperwall, credentials, media, mediaSecrets) { }
+        IMediaMtxClient? media = null, IMediaSecretStore? mediaSecrets = null, ILocalMediaSettings? localMedia = null)
+        : this(store, passwords, new DeviceDriverRegistry(driver), time, heartbeatTimeoutSeconds, hiperwall, credentials, media, mediaSecrets, localMedia) { }
 
     public ControlService(IStateStore store, IPasswordHasher passwords, DeviceDriverRegistry drivers,
         TimeProvider? time = null, int heartbeatTimeoutSeconds = 15,
         IHiperwallReader? hiperwall = null, ICredentialStore? credentials = null,
-        IMediaMtxClient? media = null, IMediaSecretStore? mediaSecrets = null)
+        IMediaMtxClient? media = null, IMediaSecretStore? mediaSecrets = null, ILocalMediaSettings? localMedia = null)
     {
         _host = new(store, passwords, time, heartbeatTimeoutSeconds);
         var jobs = new ScenarioJobLifecycle(_host.ScenarioAccess(), new HiperwallJobLifecycle(_host.HiperwallAccess()));
         _devices = new(_host.DeviceAccess(), drivers);
         _wall = new(_host.HiperwallAccess(), hiperwall, credentials, jobs);
         _scenarios = new(_host.ScenarioAccess(), _devices, _wall, jobs);
-        _cameras = new(_host.CameraAccess(), media, mediaSecrets, _wall);
+        _cameras = new(_host.CameraAccess(), media, mediaSecrets, _wall, localMedia);
         RecoverStartup();
     }
     private void RecoverStartup() => _host.RecoverStartup(context =>
