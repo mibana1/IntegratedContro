@@ -8,7 +8,8 @@ public sealed class InitialSetupViewModel : Bindable
     private readonly string _profilePath;
     private ClientPreferences _profile;
     private int _mode;
-    private bool _busy;
+    private bool _busy, _mediaEnabled;
+    private int _mediaMode;
     private string _message = "", _dataPath = "", _site = "", _admin = "", _endpoint = "", _fingerprint = "";
     public InitialSetupViewModel(StartupConfiguration configuration, string profilePath)
     {
@@ -32,14 +33,21 @@ public sealed class InitialSetupViewModel : Bindable
     public bool IsLocal => ModeIndex != 2;
     public bool IsRemote => ModeIndex == 2;
     public string SaveLabel => IsNew ? "새 서버 생성 · 설정 저장" : "선택한 설정 저장";
-    public string DataPath { get => _dataPath; set => Set(ref _dataPath, value); }
+    public string DataPath { get => _dataPath; set { if (Set(ref _dataPath, value)) ReloadMediaPorts(); } }
     public string SiteName { get => _site; set => Set(ref _site, value); }
     public string Administrator { get => _admin; set => Set(ref _admin, value); }
     public string Endpoint { get => _endpoint; set => Set(ref _endpoint, value); }
     public string Fingerprint { get => _fingerprint; set => Set(ref _fingerprint, value); }
     public string BindAddress { get; set; } = "127.0.0.1";
     public string Port { get; set; } = "7443";
-    public bool MediaEnabled { get; set; }
+    public bool MediaEnabled { get => _mediaEnabled; set => Set(ref _mediaEnabled, value); }
+    public int MediaModeIndex { get => _mediaMode; set { if (Set(ref _mediaMode, value)) { Changed(nameof(IsAutomaticMedia)); Changed(nameof(IsExistingMedia)); } } }
+    public bool IsAutomaticMedia => MediaModeIndex == 0;
+    public bool IsExistingMedia => !IsAutomaticMedia;
+    public string MediaApiPort { get; set; } = "9997";
+    public string MediaHlsPort { get; set; } = "8888";
+    public string MediaRtspPort { get; set; } = "8554";
+    private sealed record MediaSetupPorts(int ApiPort, int HlsPort, int RtspPort);
     public string MediaConfiguration { get; set; } = "";
     public string MediaApi { get; set; } = "http://127.0.0.1:9997";
     public bool IsBusy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanEdit)); SaveCommand?.Raise(); RestoreBackupCommand?.Raise(); } } }
@@ -51,6 +59,19 @@ public sealed class InitialSetupViewModel : Bindable
     public event Action? Saved;
     public AsyncCommand SaveCommand { get; }
     public AsyncCommand RestoreBackupCommand { get; }
+    private void ReloadMediaPorts()
+    {
+        if (string.IsNullOrWhiteSpace(DataPath) || !Path.IsPathFullyQualified(DataPath)) return;
+        try
+        {
+            if (StartupConfiguration.ReadFile<MediaSetupPorts>(Path.Combine(DataPath, "MediaMTX", "setup.json")) is not { } ports) return;
+            if (new[] { ports.ApiPort, ports.HlsPort, ports.RtspPort }.Any(p => p is < 1024 or > 65535))
+                throw new InvalidDataException("저장된 영상 서버 포트를 확인하세요.");
+            MediaApiPort = ports.ApiPort.ToString(); MediaHlsPort = ports.HlsPort.ToString(); MediaRtspPort = ports.RtspPort.ToString();
+            Changed(nameof(MediaApiPort)); Changed(nameof(MediaHlsPort)); Changed(nameof(MediaRtspPort));
+        }
+        catch (Exception e) when (StartupConfiguration.IsConfigurationFailure(e)) { Message = StartupConfiguration.FriendlyError(e); }
+    }
     private void Reload()
     {
         var profile = ClientPreferences.ReadForStartup(_profilePath); _profile = profile.Preferences;
@@ -62,8 +83,14 @@ public sealed class InitialSetupViewModel : Bindable
         {
             if (_configuration.Read() is { Enabled: true } settings)
             {
+                StartupConfiguration.ValidateSettings(settings);
                 DataPath = settings.HostDataPath; MediaEnabled = settings.MediaMtxEnabled;
                 MediaConfiguration = settings.MediaMtxConfigurationPath; MediaApi = settings.MediaMtxApiEndpoint;
+                MediaModeIndex = settings.MediaMtxEnabled ? 1 : 0;
+                var managed = Path.Combine(DataPath, "MediaMTX", "mediamtx.yml");
+                if (Path.GetFullPath(string.IsNullOrWhiteSpace(MediaConfiguration) ? managed : MediaConfiguration).Equals(managed, StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(Path.Combine(DataPath, "MediaMTX", "setup.json")))
+                    MediaModeIndex = 0;
                 foreach (var name in new[] { nameof(MediaEnabled), nameof(MediaConfiguration), nameof(MediaApi) }) Changed(name);
             }
         }
@@ -71,14 +98,18 @@ public sealed class InitialSetupViewModel : Bindable
     }
     private async Task Save()
     {
-        IsBusy = true; Message = "선택한 설정과 데이터 폴더를 확인하고 있습니다…";
+        IsBusy = true;
+        var automaticMedia = IsLocal && MediaEnabled && IsAutomaticMedia;
+        Message = automaticMedia ? "영상 서버 설정을 생성하고 API/HLS 인증 연결을 확인하고 있습니다…" : "선택한 설정과 데이터 폴더를 확인하고 있습니다…";
         try
         {
             var service = new InitialSetupService(_configuration, _profilePath);
             if (IsRemote) service.SaveRemote(Endpoint, Fingerprint, _profile);
             else await service.SaveLocalAsync(DataPath, IsNew, SiteName, Administrator, ReadPassword(), ReadConfirmation(),
-                BindAddress.Trim(), Port.Trim(), MediaEnabled, MediaConfiguration, MediaApi, _profile);
-            Message = "설정을 저장했습니다."; Saved?.Invoke();
+                BindAddress.Trim(), Port.Trim(), MediaEnabled, MediaConfiguration, MediaApi, _profile, automaticMedia,
+                MediaApiPort.Trim(), MediaHlsPort.Trim(), MediaRtspPort.Trim());
+            Message = automaticMedia ? "영상 서버 설정·전용 계정 등록 및 API/HLS 인증 연결 확인을 완료했습니다. 카메라 영상은 등록 후 확인하세요." : "설정을 저장했습니다.";
+            Saved?.Invoke();
         }
         catch (Exception e) when (StartupConfiguration.IsConfigurationFailure(e))
         {

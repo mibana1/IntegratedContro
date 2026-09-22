@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 
 namespace IntegratedContro.App;
 
@@ -8,7 +9,8 @@ public sealed class InitialSetupService(StartupConfiguration configuration, stri
 {
     public async Task SaveLocalAsync(string dataPath, bool create, string site, string administrator,
         string password, string confirmation, string bind, string port, bool mediaEnabled, string mediaConfig,
-        string mediaApi, ClientPreferences profile)
+        string mediaApi, ClientPreferences profile, bool initializeMedia = false,
+        string mediaApiPort = "9997", string mediaHlsPort = "8888", string mediaRtspPort = "8554")
     {
         var data = configuration.ValidateDataPath(dataPath.Trim(), create);
         var settings = new LocalServerStartupSettings(data, "../MediaMTX/mediamtx.exe", mediaConfig.Trim(), mediaApi.Trim())
@@ -22,8 +24,20 @@ public sealed class InitialSetupService(StartupConfiguration configuration, stri
             settings = settings with { ControlHostExecutablePath = current.ControlHostExecutablePath,
                 MediaMtxExecutablePath = string.IsNullOrWhiteSpace(current.MediaMtxExecutablePath) ? settings.MediaMtxExecutablePath : current.MediaMtxExecutablePath };
         }
+        initializeMedia &= mediaEnabled;
+        if (initializeMedia)
+        {
+            var ports = new[] { mediaApiPort, mediaHlsPort, mediaRtspPort };
+            if (ports.Any(p => !int.TryParse(p, out var n) || n is < 1024 or > 65535) ||
+                ports.Select(int.Parse).Distinct().Count() != 3)
+                throw new ArgumentException("API·HLS·RTSP 포트는 1024~65535 사이의 서로 다른 정수로 입력하세요.");
+            var mediaExecutable = Path.GetFullPath(settings.MediaMtxExecutablePath, configuration.AppDirectory);
+            if (!File.Exists(mediaExecutable)) throw new FileNotFoundException("MediaMTX 실행 파일이 없습니다. MediaMTX가 포함된 배포본을 사용하세요.");
+            settings = settings with { MediaMtxConfigurationPath = Path.Combine(data, "MediaMTX", "mediamtx.yml"),
+                MediaMtxApiEndpoint = $"http://127.0.0.1:{int.Parse(mediaApiPort)}" };
+        }
         StartupConfiguration.ValidateSettings(settings);
-        if (mediaEnabled && !File.Exists(settings.MediaMtxConfigurationPath)) throw new InvalidDataException("선택한 MediaMTX 설정 파일이 없습니다.");
+        if (mediaEnabled && !initializeMedia && !File.Exists(settings.MediaMtxConfigurationPath)) throw new InvalidDataException("선택한 MediaMTX 설정 파일이 없습니다.");
         var executable = Path.GetFullPath(settings.ControlHostExecutablePath, configuration.AppDirectory);
         if (create)
         {
@@ -40,6 +54,10 @@ public sealed class InitialSetupService(StartupConfiguration configuration, stri
             EnsureStopped(data);
             await RunHost(executable, ["inspect", "--data", data]);
         }
+        if (initializeMedia)
+            await RunHost(executable, ["setup-media", "--data", data,
+                "--media-exe", Path.GetFullPath(settings.MediaMtxExecutablePath, configuration.AppDirectory),
+                "--api-port", mediaApiPort, "--hls-port", mediaHlsPort, "--rtsp-port", mediaRtspPort]);
         var metadata = StartupConfiguration.ReadHost(data);
         var updated = profile with { Endpoint = metadata.Endpoint, Fingerprint = metadata.CertificateSha256,
             LastLoginName = create ? administrator.Trim() : profile.LastLoginName };
@@ -64,8 +82,10 @@ public sealed class InitialSetupService(StartupConfiguration configuration, stri
     {
         if (!File.Exists(executable)) throw new FileNotFoundException("제어 서버 실행 파일이 없습니다. App과 ControlHost가 함께 있는 배포본을 사용하세요.");
         var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            WindowStyle = ProcessWindowStyle.Hidden, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = new UTF8Encoding(false), StandardErrorEncoding = new UTF8Encoding(false) };
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        info.ArgumentList.Add("--utf8");
         using var process = Process.Start(info) ?? throw new InvalidOperationException("제어 서버 설정을 시작하지 못했습니다.");
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
@@ -76,7 +96,7 @@ public sealed class InitialSetupService(StartupConfiguration configuration, stri
         try { await process.WaitForExitAsync(deadline.Token); }
         catch (OperationCanceledException)
         {
-            if (!process.HasExited) process.Kill(); // Only our setup child, never an operational host.
+            if (!process.HasExited) process.Kill(entireProcessTree: true); // Our setup child and its temporary media check only.
             await process.WaitForExitAsync();
             throw new InvalidOperationException("호스트 설정 시간이 초과됐습니다. 선택한 폴더를 점검하세요. 자동으로 다시 초기화하지 않습니다.");
         }

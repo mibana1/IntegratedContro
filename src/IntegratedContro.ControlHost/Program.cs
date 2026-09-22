@@ -6,6 +6,9 @@ using IntegratedContro.ControlHost;
 using IntegratedContro.Core;
 using IntegratedContro.Infrastructure;
 
+// App-launched setup uses explicit UTF-8 for passwords and Korean diagnostics over redirected pipes.
+if (args.Contains("--utf8")) { Console.InputEncoding = new System.Text.UTF8Encoding(false); Console.OutputEncoding = new System.Text.UTF8Encoding(false); }
+
 if (!OperatingSystem.IsWindows())
 {
     Console.Error.WriteLine("초기 호스트는 Windows x64용입니다."); return 1;
@@ -13,7 +16,7 @@ if (!OperatingSystem.IsWindows())
 var dataPath = HostSetup.Option(args, "--data");
 if (string.IsNullOrWhiteSpace(dataPath))
 {
-    Console.Error.WriteLine("사용법: IntegratedContro.ControlHost.exe setup|inspect|run --data <로컬 절대 폴더>");
+    Console.Error.WriteLine("사용법: IntegratedContro.ControlHost.exe setup|setup-media|inspect|run --data <로컬 절대 폴더>");
     Console.Error.WriteLine("setup 옵션: --site <현장> --admin <계정> --bind <수신 IP> --port <포트> --heartbeat-timeout <초>");
     return 2;
 }
@@ -23,7 +26,11 @@ try
     {
         HostSetup.Initialize(args, dataPath); return 0;
     }
-    if (args.FirstOrDefault() is not ("run" or "inspect")) throw new ArgumentException("setup, inspect 또는 run을 명시하세요.");
+    if (args.FirstOrDefault() == "setup-media")
+    {
+        await MediaSetup.InitializeAsync(args, dataPath); return 0;
+    }
+    if (args.FirstOrDefault() is not ("run" or "inspect")) throw new ArgumentException("setup, setup-media, inspect 또는 run을 명시하세요.");
     using var store = HostAdapters.OpenStorage(dataPath);
     var config = JsonSerializer.Deserialize<HostConfiguration>(
         File.ReadAllText(Path.Combine(store.DataPath, "host.json")), JsonDefaults.Options)

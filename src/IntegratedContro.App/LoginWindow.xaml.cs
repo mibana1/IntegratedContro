@@ -34,7 +34,8 @@ public partial class LoginWindow : Window
             if (setup.ShowDialog() == true)
             {
                 _viewModel.ReloadPreferencesCommand.Execute(null);
-                if (_prepareServers is not null) _viewModel.ReportServerStartup(await _prepareServers());
+                var startup = _prepareServers is not null ? await _prepareServers() : "";
+                _viewModel.ReportServerStartup(setup.Model.Message + (startup.Length == 0 ? "" : "\n" + startup));
             }
             else _viewModel.RefreshInitialSetup();
         }
