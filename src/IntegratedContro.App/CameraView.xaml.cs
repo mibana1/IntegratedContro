@@ -11,14 +11,15 @@ public partial class CameraView : UserControl
         InitializeComponent();
         DataContextChanged += (_, e) =>
         {
-            if (e.OldValue is CameraViewModel old) { old.SetVisible(false); old.ClearSecrets = () => { }; }
+            if (e.OldValue is CameraViewModel old) { old.SetVisible(false); old.ClearSecrets = () => { }; old.ClearMediaSecrets = () => { }; }
             if (e.NewValue is CameraViewModel vm)
             {
                 vm.ReadRtsp = () => RtspInput.Password; vm.ReadRtspUser = () => RtspUserInput.Password;
                 vm.ReadRtspPassword = () => RtspPasswordInput.Password;
                 vm.ReadApiPassword = () => ApiPasswordInput.Password; vm.ReadHlsPassword = () => HlsPasswordInput.Password;
-                vm.ClearSecrets = () => { RtspInput.Clear(); RtspUserInput.Clear(); RtspPasswordInput.Clear(); ApiPasswordInput.Clear(); HlsPasswordInput.Clear(); };
-                vm.ConfirmLocalMediaChange = text => MessageBox.Show(Window.GetWindow(this), text, "로컬 영상 서버 설정",
+                vm.ClearMediaSecrets = () => { ApiPasswordInput.Clear(); HlsPasswordInput.Clear(); };
+                vm.ClearSecrets = () => { RtspInput.Clear(); RtspUserInput.Clear(); RtspPasswordInput.Clear(); vm.ClearMediaSecrets(); };
+                vm.ConfirmLocalMediaChange = text => MessageBox.Show(Window.GetWindow(this), text, "호스트 영상 서버 설정",
                     MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
                 vm.ConfirmForceDelete = text => MessageBox.Show(Window.GetWindow(this), text, "카메라 강제 삭제",
                     MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;

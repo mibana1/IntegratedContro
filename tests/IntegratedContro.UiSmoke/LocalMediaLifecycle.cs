@@ -84,7 +84,9 @@ internal static class LocalMediaLifecycle
             window = main;
             ((TabControl)view.FindName("CameraEditorTabs")).SelectedIndex = 1;
             vm.Cameras.ConfirmLocalMediaChange = _ => true;
-            await Execute(vm.Cameras, vm.Cameras.LoadSettingsCommand);
+            await Wait(() => vm.Cameras.HasMediaSettings && !vm.Cameras.IsBusy);
+            Need(!vm.Cameras.IsMediaEditorOpen, "Advanced editor should start closed");
+            ((Expander)view.FindName("MediaSettingsEditor")).SetCurrentValue(Expander.IsExpandedProperty, true);
             Need(vm.Cameras.IsLocalMedia, vm.Cameras.LocalMediaMessage);
             return (vm, vm.Cameras, view);
         }
@@ -198,7 +200,7 @@ internal static class LocalMediaLifecycle
             Console.WriteLine("PASS partial file failure, host restart durability, retry, stopped-server verification failure and previous-settings restoration");
             var healthy = File.ReadAllText(yaml);
             File.AppendAllText(yaml, "# external edit\n");
-            await Execute(camera, camera.LoadSettingsCommand);
+            await Execute(camera, camera.RefreshCommand);
             Need(!camera.CanEditMediaPasswords && File.ReadAllText(yaml).EndsWith("# external edit\n"), "External changes overwritten");
             File.WriteAllText(yaml, healthy);
             Need(bindingLog.ToString().Length == 0, "WPF binding errors: " + bindingLog);

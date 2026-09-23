@@ -50,7 +50,8 @@ public static partial class Program
             var layoutVersion = h.DraftVersionLabel;
 
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("CameraTab");
-            await Wait(() => !camera.IsBusy && camera.CanConfigure);
+            await Wait(() => !camera.IsBusy && camera.CanManageMedia);
+            camera.IsMediaEditorOpen = true;
             camera.ApiEndpoint = media.Endpoint; camera.HlsEndpoint = media.Endpoint;
             camera.ApiUser = "api"; camera.HlsUser = "reader";
             camera.ReadApiPassword = () => "fixture-api"; camera.ReadHlsPassword = () => "fixture-hls";

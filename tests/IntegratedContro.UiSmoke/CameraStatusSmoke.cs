@@ -44,6 +44,8 @@ public static partial class Program
             await CameraExecute(camera, camera.SaveCommand);
             await Expect("MediaMTX 설정을 먼저 저장하세요.");
 
+            await Wait(() => camera.CanManageMedia);
+            camera.IsMediaEditorOpen = true;
             camera.ApiEndpoint = media.Endpoint; camera.HlsEndpoint = media.Endpoint;
             camera.ApiUser = "api"; camera.HlsUser = "reader";
             camera.ReadApiPassword = () => secret; camera.ReadHlsPassword = () => secret;

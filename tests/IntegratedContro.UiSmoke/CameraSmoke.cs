@@ -65,6 +65,17 @@ public static partial class Program
     {
         await using var host = new HostProcess(); await host.Initialize(60);
         await using var media = new NativeMediaFixture(host.Root); await media.StartAsync();
+        // Prepare the shared host once; the app must play using its automatically loaded settings.
+        var (_, setupLogin) = await host.Login();
+        using (var setup = new HostClient(host.Endpoint, host.Fingerprint))
+        {
+            setup.SetToken(setupLogin.Token);
+            var setupLease = await setup.Post<Lease>("/api/lease/acquire");
+            await setup.Post<MediaSettingsView>("/api/media/settings", new SaveMediaSettingsRequest(setupLease.Generation, 0,
+                media.ApiEndpoint, media.HlsEndpoint, "api", "reader", NativeMediaFixture.ApiPassword, NativeMediaFixture.HlsPassword));
+            await setup.Post<Lease>("/api/lease/release", new LeaseRequest(setupLease.Generation));
+            await setup.Post<bool>("/api/logout");
+        }
         var output = Path.Combine(host.Root, "artifacts", "ui-smoke"); Directory.CreateDirectory(output);
         var window = new MainWindow(false) { Width = 1180, Height = 860 };
         var vm = (MainViewModel)window.DataContext; var camera = vm.Cameras;
@@ -77,11 +88,9 @@ public static partial class Program
             window.Show(); vm.Endpoint = host.Endpoint; vm.Fingerprint = host.Fingerprint; vm.LoginName = "admin"; vm.ReadLoginPassword = () => host.Password;
             await Execute(vm, vm.LoginCommand); await Execute(vm, vm.AcquireCommand);
             ((TabControl)window.FindName("MainTabs")).SelectedItem = window.FindName("CameraTab");
-            await Wait(() => camera.CanConfigure);
-            camera.ApiEndpoint = media.ApiEndpoint; camera.HlsEndpoint = media.HlsEndpoint; camera.ApiUser = "api"; camera.HlsUser = "reader";
-            camera.ReadApiPassword = () => NativeMediaFixture.ApiPassword; camera.ReadHlsPassword = () => NativeMediaFixture.HlsPassword;
-            await CameraExecute(camera, camera.SaveSettingsCommand);
-            Require(!camera.AppliedMedia.Contains("설정 전"), camera.Message + "\n" + media.Diagnostics);
+            await Wait(() => camera.CanConfigure && camera.HasMediaSettings && !camera.IsBusy);
+            Require(camera.ApiEndpoint == media.ApiEndpoint && camera.HlsEndpoint == media.HlsEndpoint && !camera.IsMediaEditorOpen,
+                "Saved media configuration was not loaded automatically");
             camera.CameraName = "로컬 테스트 카메라"; camera.Location = "생성 영상 · 640 × 360 · H.264 / AAC";
             camera.ReadRtsp = () => media.Source; camera.ReadRtspUser = () => "camera"; camera.ReadRtspPassword = () => NativeMediaFixture.RtspPassword;
             await CameraExecute(camera, camera.SaveCommand);

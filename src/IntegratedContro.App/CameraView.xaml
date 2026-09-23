@@ -41,31 +41,40 @@
      </StackPanel>
      <Button x:Name="SaveCamera" Content="카메라 저장 · 경로 준비" Command="{Binding SaveCommand}" Style="{StaticResource Primary}"/>
     </StackPanel></ScrollViewer></TabItem>
-    <TabItem Header="MediaMTX"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="8">
-     <TextBlock Text="{Binding AppliedMedia}" TextWrapping="Wrap" FontSize="12"/>
+    <TabItem Header="영상 서버"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="8">
+     <TextBlock x:Name="MediaStatusText" Text="{Binding MediaStatus}" FontWeight="Bold" TextWrapping="Wrap"/>
+     <TextBlock Text="{Binding MediaDescription}" TextWrapping="Wrap" Margin="0,8"/>
+     <TextBlock Text="{Binding AppliedMedia}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource MutedInk}"/>
      <Border Visibility="{Binding IsLocalMedia, Converter={StaticResource LocalBoolVisibility}}" Background="{DynamicResource WarningSoft}" Padding="10" Margin="0,8">
       <StackPanel>
-       <TextBlock Text="로컬 영상 서버 설정" FontWeight="Bold"/>
+       <TextBlock Text="호스트가 관리하는 영상 서버" FontWeight="Bold"/>
        <TextBlock Text="{Binding LocalMediaMessage}" TextWrapping="Wrap" Margin="0,6"/>
        <StackPanel Visibility="{Binding HasLocalMediaChange, Converter={StaticResource LocalBoolVisibility}}">
         <Button x:Name="VerifyLocalMedia" Content="적용 확인 · API/HLS 인증" Command="{Binding VerifyLocalMediaCommand}" Style="{StaticResource Primary}"/>
         <Button x:Name="RetryLocalMedia" Content="파일 적용 다시 시도" Command="{Binding RetryLocalMediaCommand}"/>
         <Button x:Name="RestoreLocalMedia" Content="이전 설정 복구" Command="{Binding RestoreLocalMediaCommand}"/>
+        <TextBlock Text="재시작이 필요하면 호스트 PC에서 진행하세요. 서버를 시작한 앱을 정상 종료한 뒤 다시 열거나, 수동 실행 서버는 관리자가 재시작합니다." TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource MutedInk}" Margin="0,6,0,0"/>
        </StackPanel>
-       <TextBlock Text="재시작이 필요하면 영상을 사용 중인 운영자에게 알리세요. 앱이 시작한 서버는 해당 앱을 정상 종료한 뒤 다시 열어 실행합니다. 수동 실행 서버는 관리자가 MediaMTX만 재시작합니다." TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource MutedInk}" Margin="0,6,0,0"/>
       </StackPanel>
      </Border>
-     <Button Content="적용 설정 불러오기" Command="{Binding LoadSettingsCommand}"/>
-     <StackPanel IsEnabled="{Binding CanConfigure}">
-      <TextBlock Text="제어 API 주소"/><TextBox x:Name="ApiEndpointInput" IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding ApiEndpoint, UpdateSourceTrigger=PropertyChanged}" ToolTip="http(s)://주소:9997"/>
-      <TextBlock Text="HLS 주소 · 호스트에서 접근"/><TextBox IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding HlsEndpoint, UpdateSourceTrigger=PropertyChanged}" ToolTip="http(s)://주소:8888"/>
-      <TextBlock Text="API 전용 사용자"/><TextBox IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding ApiUser, UpdateSourceTrigger=PropertyChanged}"/>
-      <TextBlock Text="API 비밀번호"/><PasswordBox x:Name="ApiPasswordInput" IsEnabled="{Binding CanEditMediaPasswords}" MaxLength="512"/>
-      <TextBlock Text="HLS 읽기 전용 사용자"/><TextBox IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding HlsUser, UpdateSourceTrigger=PropertyChanged}"/>
-      <TextBlock Text="HLS 비밀번호"/><PasswordBox x:Name="HlsPasswordInput" IsEnabled="{Binding CanEditMediaPasswords}" MaxLength="512"/>
-     </StackPanel>
-     <Button x:Name="SaveMediaSettings" Content="{Binding SaveMediaLabel}" Command="{Binding SaveSettingsCommand}" Style="{StaticResource Primary}"/>
-     <TextBlock Text="비밀번호를 비워 두면 해당 계정의 기존 값을 유지합니다. 로컬 서버의 새 비밀번호는 각각 12자 이상이며 서로 달라야 합니다. 카메라·정리 큐가 남아 있으면 서버 대상을 변경할 수 없습니다." TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource MutedInk}"/>
+     <TextBlock Text="설정 변경은 관리자가 사용 시작 후 진행할 수 있습니다." TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource MutedInk}" Margin="0,8"/>
+     <Expander x:Name="MediaSettingsEditor" Header="{Binding MediaEditorLabel}" IsEnabled="{Binding CanManageMedia}" IsExpanded="{Binding IsMediaEditorOpen, Mode=TwoWay}" Margin="0,6">
+      <StackPanel>
+       <TextBlock Text="{Binding MediaEditorMessage}" TextWrapping="Wrap" Margin="0,6" Foreground="{DynamicResource Accent}"/>
+       <StackPanel IsEnabled="{Binding CanManageMedia}">
+        <StackPanel><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding IsLocalMedia}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
+         <TextBlock Text="제어 API 주소 · 호스트에서 접근"/><TextBox x:Name="ApiEndpointInput" IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding ApiEndpoint, UpdateSourceTrigger=PropertyChanged}" ToolTip="http(s)://주소:9997"/>
+         <TextBlock Text="HLS 주소 · 호스트에서 접근"/><TextBox IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding HlsEndpoint, UpdateSourceTrigger=PropertyChanged}" ToolTip="http(s)://주소:8888"/>
+         <TextBlock Text="API 전용 사용자"/><TextBox IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding ApiUser, UpdateSourceTrigger=PropertyChanged}"/>
+         <TextBlock Text="HLS 읽기 전용 사용자"/><TextBox IsEnabled="{Binding CanEditMediaTarget}" Text="{Binding HlsUser, UpdateSourceTrigger=PropertyChanged}"/>
+        </StackPanel>
+        <TextBlock Text="API 비밀번호 · 변경할 때만 입력"/><PasswordBox x:Name="ApiPasswordInput" IsEnabled="{Binding CanEditMediaPasswords}" MaxLength="512"/>
+        <TextBlock Text="HLS 비밀번호 · 변경할 때만 입력"/><PasswordBox x:Name="HlsPasswordInput" IsEnabled="{Binding CanEditMediaPasswords}" MaxLength="512"/>
+       </StackPanel>
+       <Button x:Name="SaveMediaSettings" Content="{Binding SaveMediaLabel}" Command="{Binding SaveSettingsCommand}" Style="{StaticResource Primary}"/>
+       <TextBlock Text="같은 서버·계정을 수정할 때 비밀번호를 비워 두면 기존 값을 유지합니다. 최초 등록이나 서버·계정 변경 시에는 두 비밀번호가 필요합니다. 호스트가 자동 생성한 서버의 새 비밀번호는 각각 12자 이상이며 서로 달라야 합니다. 카메라·정리 큐가 남아 있으면 서버 대상을 변경할 수 없습니다." TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource MutedInk}"/>
+      </StackPanel>
+     </Expander>
     </StackPanel></ScrollViewer></TabItem>
    </TabControl>
   </Grid>

@@ -65,8 +65,6 @@ public sealed partial class CameraViewModel : Bindable
     public string PlaybackMessage { get => _playbackMessage; private set => Set(ref _playbackMessage, value); }
     public string CleanupSummary { get; private set; } = "경로 정리 대기 0건";
     public string DraftSummary => $"카메라 {_draftId.ToString()[..8]} · 저장 버전 {_draftVersion} · RTSP 빈 입력은 기존 보호 정보 유지";
-    public string AppliedMedia => _settings.Version == 0 ? "MediaMTX 설정 전" :
-        $"적용 v{_settings.Version} · API {_settings.ApiEndpoint} · HLS {_settings.HlsEndpoint}";
     public ObservableCollection<CameraSnapshot> Cameras { get; } = [];
     public ObservableCollection<CameraSnapshot> FilteredCameras { get; } = [];
     public ReadOnlyObservableCollection<HiperwallItemRow> MappingContents => _contentLookup.Contents;
@@ -115,8 +113,6 @@ public sealed partial class CameraViewModel : Bindable
     public AsyncCommand NewCommand { get; }
     public AsyncCommand LoadCommand { get; }
     public AsyncCommand SaveCommand { get; }
-    public AsyncCommand SaveSettingsCommand { get; }
-    public AsyncCommand LoadSettingsCommand { get; }
     public AsyncCommand SyncCommand { get; }
     public AsyncCommand DeleteCommand { get; }
     public AsyncCommand ForceDeleteCommand { get; }
@@ -153,28 +149,7 @@ public sealed partial class CameraViewModel : Bindable
             }
             finally { if (!ct.IsCancellationRequested) ClearSecrets(); }
         }, () => CanConfigure, "카메라 저장 오류");
-        LoadSettingsCommand = Command(async ct => { await Refresh(ct); ct.ThrowIfCancellationRequested(); LoadSettings(); }, () => CanConfigure);
-        SaveSettingsCommand = Command(async ct =>
-        {
-            try
-            {
-                MediaSettingsView settings;
-                if (IsLocalMedia)
-                {
-                    if (!ConfirmLocalMediaChange("로컬 영상 서버의 비밀번호를 변경합니다.\n설정 파일과 접속 정보를 함께 갱신하고 적용 확인 전까지 영상 처리를 잠시 중지합니다.\n서버가 새 설정을 읽지 못하면 MediaMTX 재시작이 필요합니다. 계속할까요?")) return;
-                    _playEpoch++; await StopPlaybackAsync();
-                    settings = await _client!.Post<MediaSettingsView>("/api/media/local/passwords",
-                        new ChangeLocalMediaPasswordsRequest(Generation, _settings.Version, ReadApiPassword(), ReadHlsPassword()), ct);
-                }
-                else settings = await _client!.Post<MediaSettingsView>("/api/media/settings",
-                    new SaveMediaSettingsRequest(Generation, _settings.Version, ApiEndpoint, HlsEndpoint, ApiUser, HlsUser,
-                        ReadApiPassword(), ReadHlsPassword()), ct);
-                ct.ThrowIfCancellationRequested(); _settings = settings;
-                PublishStatus(IsLocalMedia ? LocalMediaMessage : "MediaMTX 설정 저장 완료 · 등록 카메라는 호스트에서 재동기화됩니다."); Changed(nameof(AppliedMedia)); Raise();
-            }
-            finally { if (!ct.IsCancellationRequested) ClearSecrets(); }
-        }, () => CanEditMediaPasswords);
-        InitializeLocalMediaCommands();
+        InitializeMediaCommands();
         SyncCommand = Command(async ct =>
         {
             await _client!.Post<bool>("/api/cameras/sync", Action(), ct); ct.ThrowIfCancellationRequested(); PublishStatus("재동기화 접수 완료."); await Refresh(ct);
@@ -211,11 +186,6 @@ public sealed partial class CameraViewModel : Bindable
     {
         _draftId = Guid.NewGuid(); _draftVersion = 0; _editing = null; CameraName = ""; Location = "";
         Enabled = true; SelectedMapping = null; ClearMapping = false; ClearSecrets(); Changed(nameof(DraftSummary));
-    }
-    private void LoadSettings()
-    {
-        ApiEndpoint = _settings.ApiEndpoint; HlsEndpoint = _settings.HlsEndpoint;
-        ApiUser = _settings.ApiUser; HlsUser = _settings.HlsUser; ClearSecrets();
     }
     private AsyncCommand Command(Func<CancellationToken, Task> action, Func<bool> enabled, string failureTitle = "카메라 작업 오류")
     {
@@ -278,12 +248,11 @@ public sealed partial class CameraViewModel : Bindable
         {
             CancelRequests();
             _playEpoch++; _ = StopPlaybackAsync();
-            _client = client; _session = session; _settings = new(0, "", "", "", "", false);
+            _client = client; _session = session; ResetMediaSettings();
             _pendingRegistrations.Clear();
             Cameras.Clear(); FilteredCameras.Clear(); Selected = null; NewDraft();
-            ApiEndpoint = ""; HlsEndpoint = ""; ApiUser = ""; HlsUser = "";
             CleanupSummary = "경로 정리 대기 0건"; Changed(nameof(CleanupSummary)); Changed(nameof(AppliedMedia));
-            Message = client is null ? "로그인 후 카메라 목록을 조회하세요." : "목록 새로 고침으로 등록 카메라를 확인하세요.";
+            Message = client is null ? "로그인 후 카메라 목록을 조회하세요." : "호스트의 영상 설정과 카메라 목록을 자동으로 불러옵니다.";
             if (_connected && _visible && supported) _ = Run(Refresh, backgroundRefresh: true);
         }
         else if (connectionChanged && !_connected)
@@ -319,11 +288,18 @@ public sealed partial class CameraViewModel : Bindable
     private async Task Refresh(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var epoch = _epoch; var result = await _client!.Get<CameraCatalog>("/api/cameras", ct);
+        var epoch = _epoch;
+        CameraCatalog result;
+        try { result = await _client!.Get<CameraCatalog>("/api/cameras", ct); }
+        catch
+        {
+            if (epoch == _epoch && !ct.IsCancellationRequested) { _mediaReadFailed = true; Raise(); }
+            throw;
+        }
         if (epoch != _epoch || ct.IsCancellationRequested) return;
         if (result.Settings.LocalServer?.ChangeId is not null && result.Settings.LocalServer.ChangeId != _settings.LocalServer?.ChangeId)
         { _playEpoch++; _ = StopPlaybackAsync(); }
-        _settings = result.Settings; Raise();
+        ApplyMediaSettings(result.Settings); Raise();
         MergeCameras(Cameras, result.Cameras);
         Filter();
         foreach (var pending in _pendingRegistrations.ToArray())
@@ -438,7 +414,7 @@ public sealed partial class CameraViewModel : Bindable
     private void Raise()
     {
         Changed(nameof(IsBusy)); Changed(nameof(CanConfigure)); Changed(nameof(CanPlay)); Changed(nameof(IsPlaying));
-        NotifyLocalMedia();
+        NotifyMediaSettings();
         foreach (var command in _commands) command.Raise();
     }
 }

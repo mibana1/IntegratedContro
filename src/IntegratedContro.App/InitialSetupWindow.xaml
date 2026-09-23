@@ -83,7 +83,7 @@
          <StackPanel Visibility="{Binding IsExistingMedia, Converter={StaticResource BoolVisibility}}">
           <TextBlock Text="기존 MediaMTX 설정 파일의 절대 경로"/><TextBox Text="{Binding MediaConfiguration}" MinHeight="44" Margin="0,4,0,10"/>
           <TextBlock Text="MediaMTX API 주소"/><TextBox Text="{Binding MediaApi}" MinHeight="44" Margin="0,4,0,10"/>
-          <TextBlock Text="기존 파일과 계정을 유지합니다. ControlHost의 영상 접속 정보는 관리자 로그인 후 카메라 · 영상 → MediaMTX에서 확인하세요." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}"/>
+          <TextBlock Text="기존 파일과 계정을 유지합니다. 로그인 후 카메라 · 영상 → 영상 서버에서 호스트의 영상 설정을 자동으로 사용합니다." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}"/>
          </StackPanel>
         </StackPanel>
        </StackPanel>

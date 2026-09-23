@@ -112,6 +112,7 @@ public static partial class Program
             await TypeAcrossPolls(name); await TypeAcrossPolls(rtsp);
             var tabs = (TabControl)view.FindName("CameraEditorTabs");
             tabs.SelectedIndex = 1;
+            ((Expander)view.FindName("MediaSettingsEditor")).SetCurrentValue(Expander.IsExpandedProperty, true);
             var api = (TextBox)view.FindName("ApiEndpointInput");
             var password = (PasswordBox)view.FindName("HlsPasswordInput");
             await TypeAcrossPolls(api); await TypeAcrossPolls(password);
