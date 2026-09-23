@@ -79,7 +79,7 @@ public sealed class InitialSetupService(StartupConfiguration configuration, stri
     private static void EnsureStopped(string data)
     {
         if (Directory.Exists(data) && WindowsServerProcesses.HostIsLocked(data))
-            throw new InvalidOperationException("로컬 서버가 실행 중입니다. 진행 작업을 확인하고 서버를 정상 종료한 뒤 데이터 위치를 변경하세요.");
+            throw new InvalidOperationException("로컬 서버가 실행 중입니다. 진행 작업을 확인하고 서버를 정상 종료한 뒤 시작 설정을 저장하세요. 앱이 시작한 서버는 앱을 정상 종료한 후 다시 실행해 서버 시작 질문에 ‘아니요’를 선택하면 설정할 수 있습니다.");
     }
     private static async Task RunHost(string executable, string[] arguments, string? password = null)
     {

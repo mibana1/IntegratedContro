@@ -88,6 +88,7 @@ internal static class FirstRunLifecycle
                 var data = scenario == "existing" ? fixture.DataPath : config.DefaultDataPath;
                 config.Save(new LocalServerStartupSettings(data, "", "", "") { MediaMtxEnabled = false, ControlHostExecutablePath = exe });
                 setup.Model.DataPath = data;
+                setup.Model.MediaEnabled = false; // These lifecycle cases deliberately cover a host without video.
                 if (scenario != "existing")
                 {
                     using var tcp = new TcpListener(IPAddress.Loopback, 0); tcp.Start();

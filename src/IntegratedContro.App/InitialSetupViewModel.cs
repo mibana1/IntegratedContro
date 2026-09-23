@@ -62,10 +62,13 @@ public sealed class InitialSetupViewModel : Bindable
     public string Fingerprint { get => _fingerprint; set => Set(ref _fingerprint, value); }
     public string BindAddress { get; set; } = "127.0.0.1";
     public string Port { get; set; } = "7443";
-    public bool MediaEnabled { get => _mediaEnabled; set => Set(ref _mediaEnabled, value); }
-    public int MediaModeIndex { get => _mediaMode; set { if (Set(ref _mediaMode, value)) { Changed(nameof(IsAutomaticMedia)); Changed(nameof(IsExistingMedia)); } } }
+    public bool MediaEnabled { get => _mediaEnabled; set { if (Set(ref _mediaEnabled, value)) Changed(nameof(MediaSetupSummary)); } }
+    public int MediaModeIndex { get => _mediaMode; set { if (Set(ref _mediaMode, value)) { Changed(nameof(IsAutomaticMedia)); Changed(nameof(IsExistingMedia)); Changed(nameof(MediaSetupSummary)); } } }
     public bool IsAutomaticMedia => MediaModeIndex == 0;
     public bool IsExistingMedia => !IsAutomaticMedia;
+    public string MediaSetupSummary => !MediaEnabled ? "영상 서버 사용이 꺼져 있습니다. 카메라 영상을 사용하려면 위 항목을 켜세요." :
+        IsAutomaticMedia ? "저장 시 영상 서버 주소·계정·비밀번호를 자동 설정합니다. 로그인 후 영상 서버 화면에서 다시 입력할 필요가 없습니다." :
+        "기존 영상 서버 파일을 사용합니다. 고급 설정에서 파일 경로와 접속 주소를 확인하세요.";
     public string MediaApiPort { get; set; } = "9997";
     public string MediaHlsPort { get; set; } = "8888";
     public string MediaRtspPort { get; set; } = "8554";
@@ -102,6 +105,8 @@ public sealed class InitialSetupViewModel : Bindable
         Status = _configuration.Inspect(profile); Changed(nameof(Status));
         Endpoint = _profile.Endpoint; Fingerprint = _profile.Fingerprint;
         DataPath = _configuration.DefaultDataPath;
+        // Default only for a fresh installation; saved local choices below remain authoritative.
+        MediaEnabled = Status.State == InitialSetupState.NewInstallation;
         ModeIndex = Status.State == InitialSetupState.NewInstallation ? 0 : Status.State == InitialSetupState.RemoteServer ? 2 : 1;
         try
         {

@@ -61,9 +61,10 @@
        <TextBlock Text="127.0.0.1은 이 PC에서만 접속합니다. 다른 PC에서도 사용할 때는 실제 수신 IP 또는 0.0.0.0을 지정하세요." TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="0,0,0,12"/>
        </StackPanel></Expander>
       </StackPanel>
-      <Expander x:Name="MediaSetupSection" Header="영상 서버 최초 설정 · 선택 사항" Margin="0,0,0,12">
+      <CheckBox x:Name="EnableMedia" Content="영상 서버 사용 · 앱 시작 시 실행 여부 확인" IsChecked="{Binding MediaEnabled}" Margin="0,0,0,8"/>
+      <TextBlock Text="{Binding MediaSetupSummary}" TextWrapping="Wrap" Foreground="{DynamicResource MutedInk}" Margin="0,0,0,12"/>
+      <Expander x:Name="MediaSetupSection" Header="영상 서버 · 고급 설정" Margin="0,0,0,12">
        <StackPanel Margin="0,10,0,0">
-        <CheckBox x:Name="EnableMedia" Content="MediaMTX 사용 · 앱 시작 시 실행 여부 확인" IsChecked="{Binding MediaEnabled}" Margin="0,0,0,10"/>
         <StackPanel IsEnabled="{Binding MediaEnabled}">
          <ComboBox x:Name="MediaSetupMode" SelectedIndex="{Binding MediaModeIndex}" MinHeight="48" Margin="0,0,0,12">
           <ComboBoxItem Content="자동 생성 · 연결 확인 (이 PC)"/>

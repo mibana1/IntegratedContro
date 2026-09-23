@@ -32,7 +32,7 @@ public sealed partial class CameraViewModel
         !_supported ? "영상 기능을 지원하는 ControlHost에 접속하세요." :
         _mediaReadFailed ? "서버 실행 상태와 네트워크를 확인하세요. 연결이 복구되면 다시 자동 조회합니다." :
         !_mediaLoaded ? "접속한 호스트의 설정을 확인하고 있습니다." :
-        !HasMediaSettings ? "호스트 PC의 초기 설정에서 영상 서버를 구성하세요. 별도 서버는 관리자 고급 설정에서 등록할 수 있습니다." :
+        !HasMediaSettings ? "호스트에 등록된 영상 설정이 없습니다. 호스트 PC에서 앱을 정상 종료한 뒤 다시 실행하고 서버 시작 질문에 ‘아니요’를 선택하세요. 로그인 화면의 ‘초기 설정 · 저장 위치’ → ‘기존 데이터 사용’에서 ‘영상 서버 사용’을 켜고 ‘자동 생성 · 연결 확인 (이 PC)’으로 저장하면 주소·계정·비밀번호가 자동 설정됩니다. 별도 영상 서버는 아래 관리자 고급 설정에서 등록하세요." :
         HasLocalMediaChange ? "관리자가 아래 안내에 따라 적용 확인 또는 복구를 마쳐야 합니다." :
         "이 PC에서는 MediaMTX 정보를 입력할 필요가 없습니다. 영상은 접속한 호스트를 통해 받으며 실제 재생 여부는 카메라를 선택해 확인하세요.";
     public string AppliedMedia => !HasMediaSettings ? "" :

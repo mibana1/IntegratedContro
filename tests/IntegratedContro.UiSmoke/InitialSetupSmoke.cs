@@ -26,8 +26,12 @@ public static partial class Program
             Require(model.Status.State == InitialSetupState.NewInstallation && model.IsNew, "Fresh setup state not visible");
             Require(((TextBox)window.FindName("DataFolder")).IsVisible && ((PasswordBox)window.FindName("AdminPassword")).IsVisible, "New host controls missing");
             Require(!Directory.Exists(config.DefaultDataPath), "Opening setup created host data");
+            Require(model.MediaEnabled && model.IsAutomaticMedia && ((CheckBox)window.FindName("EnableMedia")).IsVisible &&
+                ((CheckBox)window.FindName("EnableMedia")).IsChecked == true, "Fresh host did not visibly default to automatic video setup");
             window.UpdateLayout();
             Capture(window, Path.Combine(root, "initial-setup-new.png"));
+            // This validation fixture has no bundled executables and deliberately omits video.
+            ((CheckBox)window.FindName("EnableMedia")).IsChecked = false;
             ((ComboBox)window.FindName("SetupMode")).SelectedIndex = 1;
             window.UpdateLayout();
             Require(model.IsLocal && !model.IsNew && !((PasswordBox)window.FindName("AdminPassword")).IsVisible, "Existing data offered administrator creation");

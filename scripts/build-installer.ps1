@@ -35,13 +35,6 @@ if (-not $CompilerPath) {
     }
 }
 if (-not (Test-Path -LiteralPath $CompilerPath -PathType Leaf)) { throw 'Inno Setup compiler not found.' }
-# Use only the pinned clean archive, never a site's mutable MediaMTX configuration.
-$taskMediaArchive = Join-Path $taskRoot 'artifacts/media-tools/mediamtx.zip'
-if (-not (Test-Path -LiteralPath $taskMediaArchive)) {
-    New-Item -ItemType Directory -Path (Split-Path -Parent $taskMediaArchive) -Force | Out-Null
-    Invoke-WebRequest -Uri 'https://github.com/bluenviron/mediamtx/releases/download/v1.21.0/mediamtx_v1.21.0_windows_amd64.zip' -OutFile $taskMediaArchive
-}
-if ((Get-FileHash -LiteralPath $taskMediaArchive).Hash -ne '8A58A9B8C25EE99A96C23DC0A17F39ACE3072C01D2E148329073C64DDF83493D') { throw 'MediaMTX checksum mismatch.' }
 $taskPayload = Join-Path $taskRoot ('artifacts/installer-staging/' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $taskPayload | Out-Null
 foreach ($taskProduct in @('App','ControlHost')) {
@@ -60,18 +53,7 @@ foreach ($taskProduct in @('App','ControlHost')) {
         Copy-Item -LiteralPath $taskEntry.FullName -Destination $taskDestination
     }
 }
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$taskZip = [IO.Compression.ZipFile]::OpenRead($taskMediaArchive)
-try {
-    $taskMediaDir = Join-Path $taskPayload 'MediaMTX'
-    New-Item -ItemType Directory -Path $taskMediaDir | Out-Null
-    foreach ($taskName in @('mediamtx.exe','LICENSE')) {
-        $taskEntry = $taskZip.GetEntry($taskName)
-        if (-not $taskEntry) { throw "Missing MediaMTX archive entry: $taskName" }
-        [IO.Compression.ZipFileExtensions]::ExtractToFile($taskEntry, (Join-Path $taskMediaDir $taskName))
-    }
-}
-finally { $taskZip.Dispose() }
+& (Join-Path $PSScriptRoot 'stage-mediamtx.ps1') -DestinationPath (Join-Path $taskPayload 'MediaMTX')
 New-Item -ItemType Directory -Path (Join-Path $taskPayload 'Examples') | Out-Null
 Copy-Item -LiteralPath (Join-Path $taskRoot 'config/mediamtx.example.yml'),(Join-Path $taskRoot 'config/server-startup.example.json') -Destination (Join-Path $taskPayload 'Examples')
 Copy-Item -LiteralPath (Join-Path $taskRoot 'THIRD_PARTY_NOTICES.md') -Destination (Join-Path $taskPayload 'App/THIRD_PARTY_NOTICES.md')

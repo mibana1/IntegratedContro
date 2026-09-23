@@ -44,14 +44,18 @@ internal static class MediaSetupLifecycle
         var hostExe = Path.Combine(repo, "src", "IntegratedContro.ControlHost", "bin", "Debug", "net10.0", "win-x64", "IntegratedContro.ControlHost.exe");
         var mediaExe = Path.Combine(repo, "artifacts", "media-tools", "mediamtx", "mediamtx.exe");
         hostExe = SetupTestPaths.Host(hostExe); mediaExe = SetupTestPaths.Media(mediaExe);
-        config.Save(new(data, mediaExe, "", "") { ControlHostExecutablePath = hostExe, MediaMtxEnabled = false });
+
         var ports = Ports();
         var password = "한글-" + Guid.NewGuid().ToString("N");
         var window = new InitialSetupWindow(config, profilePath);
         var vm = window.Model;
+        Require(vm.MediaEnabled && vm.IsAutomaticMedia, "Fresh host did not default to automatic video setup");
+        // Supply isolated executable paths after reading the same defaults a fresh installation sees.
+        config.Save(new(data, mediaExe, "", "") { ControlHostExecutablePath = hostExe, MediaMtxEnabled = false });
+        Require(!new InitialSetupViewModel(config, profilePath).MediaEnabled, "Saved disabled video preference was silently enabled");
         vm.ModeIndex = 0; vm.DataPath = data; vm.SiteName = "영상 자동 설정 확인"; vm.Administrator = "media-admin";
         vm.Port = ports[0].ToString();
-        vm.MediaEnabled = true; vm.MediaModeIndex = 0;
+
         vm.MediaApiPort = ports[1].ToString(); vm.MediaHlsPort = ports[2].ToString(); vm.MediaRtspPort = ports[3].ToString();
         ((PasswordBox)window.FindName("AdminPassword")).Password = password;
         ((PasswordBox)window.FindName("ConfirmPassword")).Password = password;
@@ -141,6 +145,37 @@ internal static class MediaSetupLifecycle
         var reload = new InitialSetupViewModel(config, profilePath);
         Require(reload.IsAutomaticMedia && reload.MediaApiPort == ports[1].ToString() &&
             reload.MediaHlsPort == ports[2].ToString(), "Saved automatic ports not restored");
+        // Upgrade an existing host created with video disabled, matching the reported user path.
+        var existingConfig = new StartupConfiguration(Path.Combine(root, "existing-profile"), config.AppDirectory);
+        var existingProfilePath = Path.Combine(root, "existing-profile", "client.json");
+        var existingData = existingConfig.DefaultDataPath;
+        existingConfig.Save(new(existingData, mediaExe, "", "") { ControlHostExecutablePath = hostExe, MediaMtxEnabled = false });
+        var existingService = new InitialSetupService(existingConfig, existingProfilePath);
+        await existingService.SaveLocalAsync(existingData, true, "기존 영상 미설정", "existing-admin", password, password,
+            "127.0.0.1", ports[0].ToString(), false, "", "", ClientPreferences.ReadForStartup(existingProfilePath).Preferences);
+        HostState existingBefore;
+        using (var storage = SqliteHostStorage.Open(existingData)) existingBefore = storage.State.Load();
+        Require(existingBefore.Media is null, "Existing fixture already had media");
+        var existingProfile = ClientPreferences.ReadForStartup(existingProfilePath).Preferences;
+        var existingModel = new InitialSetupViewModel(existingConfig, existingProfilePath);
+        Require(existingModel.IsExistingData && !existingModel.MediaEnabled && existingModel.IsAutomaticMedia,
+            "Existing disabled host was changed or required manual configuration");
+        existingModel.MediaEnabled = true;
+        existingModel.MediaApiPort = ports[1].ToString(); existingModel.MediaHlsPort = ports[2].ToString(); existingModel.MediaRtspPort = ports[3].ToString();
+        var existingSaved = false; existingModel.Saved += () => existingSaved = true;
+        existingModel.SaveCommand.Execute(null); await Wait(() => !existingModel.IsBusy);
+        Require(existingSaved && existingConfig.Read()!.MediaMtxEnabled, existingModel.Message);
+        using (var storage = SqliteHostStorage.Open(existingData))
+        {
+            var after = storage.State.Load();
+            Require(after.Media is not null && after.SiteId == existingBefore.SiteId &&
+                JsonSerializer.Serialize(after.Accounts, JsonDefaults.Options) == JsonSerializer.Serialize(existingBefore.Accounts, JsonDefaults.Options) &&
+                JsonSerializer.Serialize(after.Cameras, JsonDefaults.Options) == JsonSerializer.Serialize(existingBefore.Cameras, JsonDefaults.Options),
+                "Adding media lost the existing site, accounts or camera catalog");
+        }
+        Require(ClientPreferences.ReadForStartup(existingProfilePath).Preferences == existingProfile,
+            "Adding media changed the connection, PC identity or recent login");
+        Console.WriteLine("PASS existing disabled host gains automatic media configuration without re-entering addresses/passwords or replacing site/accounts/cameras/client identity");
         var failureConfig = new StartupConfiguration(Path.Combine(root, "failure-profile"), SetupTestPaths.App(Path.Combine(root, "install", "App")));
         var failureProfile = Path.Combine(root, "failure-profile", "client.json");
         var failureData = Path.Combine(root, "실패 복구 데이터");

@@ -142,7 +142,10 @@ public sealed class InitialSetupTests
         var profile = Empty();
         var service = new InitialSetupService(config, path);
         var password = Guid.NewGuid().ToString("N");
-        await service.SaveLocalAsync(config.DefaultDataPath, true, "새 현장", "setup-admin", password, password, "127.0.0.1", "7443", false, "", "", profile);
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString();
+        await service.SaveLocalAsync(config.DefaultDataPath, true, "새 현장", "setup-admin", password, password, "127.0.0.1", port, false, "", "", profile);
         var saved = ClientPreferences.ReadForStartup(path);
         Assert.Equal(profile.PcId, saved.Preferences.PcId);
         Assert.Equal("setup-admin", saved.Preferences.LastLoginName);
@@ -154,6 +157,7 @@ public sealed class InitialSetupTests
             Assert.True(state.Initialized); Assert.Single(state.Accounts);
         }
         await Assert.ThrowsAsync<InvalidDataException>(() => service.SaveLocalAsync(config.DefaultDataPath, true, "replace", "other", password, password, "127.0.0.1", "7443", false, "", "", profile));
+        listener.Stop();
         IReadOnlyList<string>? requested = null;
         await LocalServerStartup.StartAsync(config.SettingsPath, config.AppDirectory, saved, names =>
         { requested = names; return Task.FromResult(false); });

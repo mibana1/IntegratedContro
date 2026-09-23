@@ -22,6 +22,7 @@ try {
         Get-Content -LiteralPath $taskStartupSettings -Raw | ConvertFrom-Json -ErrorAction Stop | Out-Null
         Copy-Item -LiteralPath $taskStartupSettings -Destination (Join-Path $taskStaging 'App/server-startup.json')
     }
+    & (Join-Path $PSScriptRoot 'stage-mediamtx.ps1') -DestinationPath (Join-Path $taskStaging 'MediaMTX')
     Remove-Item -LiteralPath $taskMarker
     $taskSync = & (Join-Path $PSScriptRoot 'sync-published-app.ps1') -BuildPath $taskStaging
     [ordered]@{
